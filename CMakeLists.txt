@@ -94,7 +94,7 @@ IF (CMAKE_CROSSCOMPILING)
 else ()
 endif ()
 
-add_library(system-stm32 STATIC ${PROJECT_SOURCES})
+add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 
 # Select device macro for CMSIS headers so sources compile
 IF (CMAKE_CROSSCOMPILING)
