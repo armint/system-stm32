@@ -33,8 +33,8 @@ static inline void _memberThunk(void *arg) {
 }
 
 template <typename T, void (T::*Method)()>
-static inline void connectMemberHandler(IRQn_Type IRQn, T *instance) {
-   connectHandler(IRQn, &_memberThunk<T, Method>, static_cast<void *>(instance));
+static inline void connectMemberHandler(IRQn_Type IRQn, T &instance) {
+   connectHandler(IRQn, &_memberThunk<T, Method>, static_cast<void *>(&instance));
 }
 
 class BlockingSection {
