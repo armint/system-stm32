@@ -20,19 +20,27 @@ static inline void prepareVectorTable(void) {
    SCB->VTOR = VTOR_ADDRESS;
 }
 
-static inline AdvancedHandler_t& getAdvancedHandler(unsigned int index) {
-   static AdvancedHandler_t _advancedHandlers[VECTOR_TABLE_SIZE - 16]; // We only don't support object handlers for system interrupts
+struct AdvancedHandler {
+   AdvancedHandler_t handler;
+   void *argument;
+};
+
+static inline AdvancedHandler &getAdvancedHandler(unsigned int index) {
+   static AdvancedHandler _advancedHandlers[VECTOR_TABLE_SIZE - 16]; // We only don't support object handlers for system interrupts
    return _advancedHandlers[index];
 }
 
 
 inline void handlerWithArgument() {
-   getAdvancedHandler(__get_IPSR() - 16)();
+   auto &advanced_handler = getAdvancedHandler(__get_IPSR() - 16);
+   advanced_handler.handler(advanced_handler.argument);
 }
 
-void connectHandler(IRQn_Type IRQn, AdvancedHandler_t handler) {
+void connectHandler(IRQn_Type IRQn, AdvancedHandler_t handler, void *arg) {
    assert(static_cast<int>(IRQn) >= 0);
-   getAdvancedHandler(static_cast<int>(IRQn)) = std::move(handler);
+   auto &advanced_handler = getAdvancedHandler(static_cast<int>(IRQn));
+   advanced_handler.handler = handler;
+   advanced_handler.argument = arg;
    connectHandler(IRQn, &handlerWithArgument);
 }
 
@@ -51,10 +59,10 @@ void releaseHandler(IRQn_Type IRQn) {
    connectHandler(IRQn, vTableOrig[IRQn + 16]);
 }
 
-AdvancedHandler_t getObjectHandler(IRQn_Type irq) {
+AdvancedHandler getObjectHandler(IRQn_Type irq) {
    int i = static_cast<int>(irq);
    if(i < 0 || i >= VECTOR_TABLE_SIZE) {
-      return nullptr;
+      return {};
    }
    return getAdvancedHandler(i);
 }
