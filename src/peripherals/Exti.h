@@ -73,12 +73,12 @@ void setPortForExtiLine(uint8_t line, Port port);
 void setTriggerEdge(uint32_t mask, TriggerEdge trigger);
 TriggerEdge getTriggerEdge(uint32_t mask);
 
-inline void setTriggerEdgeForLine(int8_t line, TriggerEdge trigger) {
-   setTriggerEdge(1 << line, trigger);
+inline void setTriggerEdgeForLine(uint8_t line, TriggerEdge trigger) {
+   setTriggerEdge(1UL << line, trigger);
 }
 
-inline TriggerEdge getTriggerEdgeForLine(int8_t line) {
-   return getTriggerEdge(1 << line);
+inline TriggerEdge getTriggerEdgeForLine(uint8_t line) {
+   return getTriggerEdge(1UL << line);
 }
 
 void configureExtiInterrupt(uint8_t line, Port port, TriggerEdge edge);
