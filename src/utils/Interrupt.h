@@ -9,7 +9,7 @@
 
 namespace Interrupt {
 
-typedef void (*Handler_t)(void);
+typedef void (*Handler_t)();
 
 using AdvancedHandler_t = void (*)(void *);
 

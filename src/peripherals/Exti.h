@@ -11,7 +11,7 @@ enum class TriggerEdge : uint8_t {
 
 };
 
-enum class Port {
+enum class Port : uint8_t {
 #ifdef GPIOA
    A = 0,
 #endif
@@ -33,7 +33,7 @@ enum class Port {
    Undefined = 255,
 };
 
-enum Line {
+enum Line : uint8_t {
    GPIOLine0 = 0,
    GPIOLine1,
    GPIOLine2,
