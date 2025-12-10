@@ -3,7 +3,7 @@
 void Uart::setBaudRate(uint32_t baud_rate) const {
    // Note: Ensure this matches your actual peripheral clock (PCLK1/PCLK2)
    uint32_t fclk = SystemCoreClock;
-   uint64_t brr = fclk;
+   uint32_t brr = fclk;
    const bool over8 = (usart.CR1 & USART_CR1_OVER8);
    if(over8) {
       brr *= 2;
