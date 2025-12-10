@@ -1,53 +1,22 @@
 #include "Uart.h"
 
-void Uart::setBaudRate(uint32_t baudRate) const {
+void Uart::setBaudRate(uint32_t baud_rate) const {
    // Note: Ensure this matches your actual peripheral clock (PCLK1/PCLK2)
    uint32_t fclk = SystemCoreClock;
-   uint32_t brr = 0;
-
-   // 1. Check if Over8 mode is enabled in Control Register 1 (CR1)
-   const bool over8 = (usart.CR1 & USART_CR1_OVER8) != 0;
-
-   // N = Oversampling factor (16 or 8)
-   const uint32_t N = over8 ? 8 : 16;
-
-   // Use uint64_t to prevent overflow during the intermediate calculation
-   // formula: DIV = (fCLK * 1000) / (N * BaudRate)
-   uint64_t div_base = (uint64_t)fclk * 1000 / (N * baudRate);
-
-   // 2. Calculate Mantissa (Integer part)
-   uint32_t mantissa = (uint32_t)(div_base / 1000);
-
-   // 3. Calculate Fraction
-   // We get the remainder (0-999) and scale it to the number of sampling steps (8 or 16)
-   uint32_t fraction_scaled = (uint32_t)(div_base % 1000);
-   uint32_t fraction;
-
+   uint64_t brr = fclk;
+   const bool over8 = (usart.CR1 & USART_CR1_OVER8);
    if(over8) {
-      // 8x Oversampling: 3 bits for fraction
-      // We multiply by 8 to map 0-1000 to 0-8.
-      // Adding 500 provides rounding to the nearest integer.
-      fraction = (fraction_scaled * 8 + 500) / 1000;
-
-      // In Over8 mode, bits [2:0] are shifted right by 1 bit in the BRR,
-      // or effectively we map them to bits [3:0] where bit 3 must be 0.
-      // However, the easier mental model for STM32 BRR in Over8 is:
-      // BRR[3] must be 0.
-      // BRR[2:0] = fraction.
-      // Mantissa goes to BRR[15:4].
-
-      // Mask to ensure 3 bits, then combined with mantissa
-      brr = (mantissa << 4) | (fraction & 0x7);
-
-   } else {
-      // 16x Oversampling: 4 bits for fraction
-      // Map 0-1000 to 0-16.
-      fraction = (fraction_scaled * 16 + 500) / 1000;
-
-      // Standard layout: Mantissa in [15:4], Fraction in [3:0]
-      brr = (mantissa << 4) | (fraction & 0xF);
+      brr *= 2;
    }
-
+   brr /= baud_rate;
+   /* Make sure we round properly */
+   if((fclk % baud_rate) > baud_rate / 2) {
+      brr++;
+   }
+   if(over8) {
+      uint16_t temp = (brr & 0x000F) >> 1;
+      brr = (brr & 0xFFF0) | temp;
+   }
    usart.BRR = brr;
 }
 

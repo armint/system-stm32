@@ -279,7 +279,7 @@ class Uart {
    }
 
    // Configuration
-   void setBaudRate(uint32_t baudRate) const;
+   void setBaudRate(uint32_t baud_rate) const;
    void setParity(USARTParity parity) const;
    void setStopBits(UsartStopBits stopBits) const;
    void configure(uint32_t baudRate = 115200, USARTParity parity = USARTParity::None, UsartStopBits stopBits = UsartStopBits::StopBits_1) const;
