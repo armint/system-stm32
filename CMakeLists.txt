@@ -127,6 +127,13 @@ target_include_directories(system-stm32
 
 target_compile_features(system-stm32 PUBLIC cxx_std_23)
 
+# If a central build configuration target exists in the superproject,
+# link it so this OBJECT library is compiled with the same flags/defines.
+if (TARGET art-build-config)
+    # Only affect this target's compilation in the build tree; do not appear in installed export
+    target_link_libraries(system-stm32 PRIVATE $<BUILD_INTERFACE:art-build-config>)
+endif ()
+
 # Ensure the exported interface does not pull non-exported targets.
 set_property(TARGET system-stm32 PROPERTY INTERFACE_LINK_LIBRARIES "")
 
