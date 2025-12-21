@@ -66,69 +66,116 @@ enum Line : uint8_t {
    LPTimer1,
 };
 
-extern const IRQn_Type gpioIRQs[16];
+constexpr IRQn_Type gpioIRQs[16] = {
+   EXTI0_1_IRQn,  EXTI0_1_IRQn,  EXTI2_3_IRQn,  EXTI2_3_IRQn,  EXTI4_15_IRQn, EXTI4_15_IRQn,
+   EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn,
+   EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn,
+};
 
-void setPortForExtiLine(uint8_t line, Port port);
+void setPortForExtiLine(const uint8_t line, const Port port);
 
-void setTriggerEdge(uint32_t mask, TriggerEdge trigger);
-TriggerEdge getTriggerEdge(uint32_t mask);
+void setTriggerEdge(const uint32_t mask, const TriggerEdge trigger);
+TriggerEdge getTriggerEdge(const uint32_t mask);
 
-inline void setTriggerEdgeForLine(uint8_t line, TriggerEdge trigger) {
+inline void setTriggerEdgeForLine(const uint8_t line, const TriggerEdge trigger) {
    setTriggerEdge(1UL << line, trigger);
 }
 
-inline TriggerEdge getTriggerEdgeForLine(uint8_t line) {
+inline TriggerEdge getTriggerEdgeForLine(const uint8_t line) {
    return getTriggerEdge(1UL << line);
 }
 
-void configureExtiInterrupt(uint8_t line, Port port, TriggerEdge edge);
+void configureExtiInterrupt(const uint8_t line, const Port port, const TriggerEdge edge);
 
-inline void enableInterruptMask(uint32_t mask) {
+inline void enableInterruptMask(const uint32_t mask) {
    EXTI->IMR |= mask;
 }
 
-inline void disableInterruptMask(uint32_t mask) {
+inline void disableInterruptMask(const uint32_t mask) {
    EXTI->IMR &= ~mask;
 }
 
-inline void enableEventMask(uint32_t mask) {
+inline void enableEventMask(const uint32_t mask) {
    EXTI->EMR |= mask;
 }
 
-inline void disableEventMask(uint32_t mask) {
+inline void disableEventMask(const uint32_t mask) {
    EXTI->EMR &= ~mask;
 }
 
-inline void enableInterrupt(uint8_t line) {
+inline void enableInterrupt(const uint8_t line) {
    enableInterruptMask(1 << line);
 }
 
-inline void disableInterrupt(uint8_t line) {
+inline void disableInterrupt(const uint8_t line) {
    disableInterruptMask(1 << line);
 }
 
-inline void enableEvent(uint8_t line) {
+inline void enableEvent(const uint8_t line) {
    enableEventMask(1 << line);
 }
 
-inline void disableEvent(uint8_t line) {
+inline void disableEvent(const uint8_t line) {
    disableEventMask(1 << line);
 }
 
 
-inline bool isInterruptMasked(uint8_t line) {
+inline bool isInterruptMasked(const uint8_t line) {
    return !(EXTI->IMR & (1 << line));
 }
 
-inline bool isInterruptPending(uint8_t line) {
+inline bool isInterruptPending(const uint8_t line) {
    return EXTI->PR & (1 << line);
 }
 
-inline void clearInterrruptPending(uint8_t line) {
+inline void clearInterrruptPending(const uint8_t line) {
    EXTI->PR = (1 << line);
 }
 
-Port getPortFromGPIO(GPIO_TypeDef *gpio);
+constexpr Port getPortFromGPIO(GPIO_TypeDef *const gpio) {
+   Port p;
+   switch(reinterpret_cast<uint32_t>(gpio)) {
+#ifdef GPIOA
+   case GPIOA_BASE:
+      p = Port::A;
+      break;
+#endif
+#ifdef GPIOB
+   case GPIOB_BASE:
+      p = Port::B;
+      break;
+#endif
+#ifdef GPIOC
+   case GPIOC_BASE:
+      p = Port::C;
+      break;
+#endif
+#ifdef GPIOD
+   case GPIOD_BASE:
+      p = Port::D;
+      break;
+#endif
+#ifdef GPIOE
+   case GPIOE_BASE:
+      p = Port::E;
+      break;
+#endif
+#ifdef GPIOH
+   case GPIOH_BASE:
+      p = Port::H;
+      break;
+#endif
+   default:
+      p = Port::Undefined;
+   }
+   return p;
+}
 
-IRQn_Type getExtiIRQnForGPIOLine(uint8_t line);
+constexpr IRQn_Type getExtiIRQnForGPIOLine(uint8_t line) {
+   if(line > 15) {
+      return static_cast<IRQn_Type>(-15); // undefined IRQn
+   }
+   return gpioIRQs[line];
+}
+
 } // namespace Exti
