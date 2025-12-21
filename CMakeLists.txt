@@ -16,14 +16,14 @@ if (NOT cmsis_device_l0_POPULATED)
 endif ()
 
 FetchContent_Declare(
-        cmsis5
+        cmsis54st
         GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_core.git
         GIT_TAG v5.4.0_cm0
 )
 
-FetchContent_GetProperties(cmsis5)
-if (NOT cmsis5_POPULATED)
-    FetchContent_MakeAvailable(cmsis5)
+FetchContent_GetProperties(cmsis54st)
+if (NOT cmsis54st_POPULATED)
+    FetchContent_MakeAvailable(cmsis54st)
 endif ()
 
 
@@ -66,7 +66,7 @@ file(GLOB PROJECT_INCLUDE_DIRS
 
 file(GLOB ADDITIONAL_INCLUDE_DIRS
         ${cmsis_device_l0_SOURCE_DIR}/Include
-        ${cmsis5_SOURCE_DIR}/Core/Include
+        ${cmsis54st_SOURCE_DIR}/Core/Include
 )
 
 # Detect if we are crosscompiling, or compiling for our native system.
@@ -120,7 +120,7 @@ target_include_directories(system-stm32
 target_include_directories(system-stm32
         PUBLIC
             $<BUILD_INTERFACE:${cmsis_device_l0_SOURCE_DIR}/Include>
-            $<BUILD_INTERFACE:${cmsis5_SOURCE_DIR}/Core/Include>
+            $<BUILD_INTERFACE:${cmsis54st_SOURCE_DIR}/Core/Include>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cmsis_device_l0/Include>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cmsis_core/Core/Include>
 )
@@ -148,7 +148,7 @@ install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 # Install the CMSIS headers so consumers can include them from the installed package
 install(DIRECTORY ${cmsis_device_l0_SOURCE_DIR}/Include/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cmsis_device_l0/Include)
-install(DIRECTORY ${cmsis5_SOURCE_DIR}/Core/Include/
+install(DIRECTORY ${cmsis54st_SOURCE_DIR}/Core/Include/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cmsis_core/Core/Include)
 
 install(EXPORT system-stm32-targets
