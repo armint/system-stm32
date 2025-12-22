@@ -4,7 +4,6 @@
 #include <cstdint>
 
 // Lightweight peripheral access wrapper for general-purpose/advanced STM32 timers
-// Mirrors the style and intent of Uart.h: thin, constexpr-free, direct register access.
 
 class Timer {
  public:
