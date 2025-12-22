@@ -34,7 +34,7 @@ void Adc::disable() const {
       ;
 }
 
-void Adc::setClockMode(AdcClockMode mode) const {
+void Adc::setClockMode(ClockMode mode) const {
    bool wasEnabled = (adc.CR & ADC_CR_ADEN);
    if(wasEnabled)
       disable();
@@ -48,7 +48,7 @@ void Adc::setClockMode(AdcClockMode mode) const {
       enable();
 }
 
-void Adc::setResolution(AdcResolution resolution) const {
+void Adc::setResolution(Resolution resolution) const {
    bool wasEnabled = (adc.CR & ADC_CR_ADEN);
    if(wasEnabled)
       disable();
@@ -62,7 +62,7 @@ void Adc::setResolution(AdcResolution resolution) const {
       enable();
 }
 
-void Adc::setSamplingTime(AdcSamplingTime cycles) const {
+void Adc::setSamplingTime(SamplingTime cycles) const {
    bool wasEnabled = (adc.CR & ADC_CR_ADEN);
    if(wasEnabled)
       disable();
@@ -96,7 +96,7 @@ void Adc::setSequence(uint32_t channelMask) const {
 
    adc.CHSELR = channelMask;
 }
-void Adc::enableOversampling(AdcOversamplingRatio ratio, AdcOversamplingShift shift) const {
+void Adc::enableOversampling(OversamplingRatio ratio, OversamplingShift shift) const {
    // Configuration bits can only be modified when ADEN=0
    bool wasEnabled = (adc.CR & ADC_CR_ADEN);
    if(wasEnabled) {
