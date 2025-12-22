@@ -147,7 +147,7 @@ struct Usart {
       return usart_.CR1 & USART_CR1_UE;
    }
 
-   inline void setParity(Parity parity) const;
+   void setParity(Parity parity) const;
 
    inline void setStopBits(StopBits bits) const {
       usart_.CR2 = (usart_.CR2 & ~USART_CR2_STOP) | static_cast<uint32_t>(bits);
