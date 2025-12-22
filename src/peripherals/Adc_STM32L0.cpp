@@ -1,4 +1,5 @@
 #include "Adc.h"
+#if defined(STM32L0)
 
 void Adc::calibrate() const {
    if(adc.CR & ADC_CR_ADEN) {
@@ -151,3 +152,4 @@ void Adc::enableTempSensor() {
 void Adc::disableTempSensor() {
    ADC1_COMMON->CCR &= ~ADC_CCR_TSEN;
 }
+#endif
