@@ -4,34 +4,43 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake")
 
 Include(FetchContent)
 
-FetchContent_Declare(
-        cmsis_device_l0
-        GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_l0.git
-        GIT_TAG v1.9.4
-)
+# Default to STM32L0 if not specified
+set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0)")
 
-FetchContent_GetProperties(cmsis_device_l0)
-if (NOT cmsis_device_l0_POPULATED)
-    FetchContent_MakeAvailable(cmsis_device_l0)
+if (STM32_FAMILY STREQUAL "STM32L0")
+    FetchContent_Declare(
+            cmsis_device
+            GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_l0.git
+            GIT_TAG v1.9.4
+    )
+elseif (STM32_FAMILY STREQUAL "STM32C0")
+    FetchContent_Declare(
+            cmsis_device
+            GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_c0.git
+            GIT_TAG v1.0.1
+    )
+endif()
+
+FetchContent_GetProperties(cmsis_device)
+if (NOT cmsis_device_POPULATED)
+    FetchContent_MakeAvailable(cmsis_device)
 endif ()
 
 FetchContent_Declare(
-        cmsis54st
+        cmsis_core
         GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_core.git
         GIT_TAG v5.4.0_cm0
 )
 
-FetchContent_GetProperties(cmsis54st)
-if (NOT cmsis54st_POPULATED)
-    FetchContent_MakeAvailable(cmsis54st)
+FetchContent_GetProperties(cmsis_core)
+if (NOT cmsis_core_POPULATED)
+    FetchContent_MakeAvailable(cmsis_core)
 endif ()
-
 
 project(system-stm32
         LANGUAGES C CXX ASM
         VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_BUILD}"
 )
-
 
 # Add our CMAKE modules folder
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
@@ -46,14 +55,30 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED True)
 set(CMAKE_C_DIALECT gnu)
 
-file(GLOB_RECURSE STM32_SOURCES
-        "${cmsis_device_l0_SOURCE_DIR}/Source/Templates/system_stm32l0xx.c")
+if (STM32_FAMILY STREQUAL "STM32L0")
+    file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32l0xx.c")
+elseif (STM32_FAMILY STREQUAL "STM32C0")
+    file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32c0xx.c")
+endif()
 
+# Gather all project sources
 file(GLOB_RECURSE PROJECT_SOURCES
         "${PROJECT_SOURCE_DIR}/src/*.c"
         "${PROJECT_SOURCE_DIR}/src/*.cpp"
 )
 
+# Exclude family-specific files from the general GLOB
+file(GLOB_RECURSE ALL_FAMILY_SOURCES "${PROJECT_SOURCE_DIR}/src/families/*.c" "${PROJECT_SOURCE_DIR}/src/families/*.cpp")
+if(ALL_FAMILY_SOURCES)
+    list(REMOVE_ITEM PROJECT_SOURCES ${ALL_FAMILY_SOURCES})
+endif()
+
+# Re-add only the selected family sources
+string(TOLOWER ${STM32_FAMILY} FAMILY_LOWER)
+file(GLOB_RECURSE ACTIVE_FAMILY_SOURCES "${PROJECT_SOURCE_DIR}/src/families/${FAMILY_LOWER}/*.c" "${PROJECT_SOURCE_DIR}/src/families/${FAMILY_LOWER}/*.cpp")
+if(ACTIVE_FAMILY_SOURCES)
+    list(APPEND PROJECT_SOURCES ${ACTIVE_FAMILY_SOURCES})
+endif()
 
 file(GLOB_RECURSE PROJECT_HEADERS
         "src/*.h"
@@ -62,11 +87,7 @@ file(GLOB_RECURSE PROJECT_HEADERS
 file(GLOB PROJECT_INCLUDE_DIRS
         ${CMAKE_CURRENT_BINARY_DIR}
         src
-)
-
-file(GLOB ADDITIONAL_INCLUDE_DIRS
-        ${cmsis_device_l0_SOURCE_DIR}/Include
-        ${cmsis54st_SOURCE_DIR}/Core/Include
+        src/families/${FAMILY_LOWER}
 )
 
 # Detect if we are crosscompiling, or compiling for our native system.
@@ -81,22 +102,13 @@ IF (CMAKE_CROSSCOMPILING)
     ENDIF ()
 
     MESSAGE(STATUS "Building system-stm32 version " ${FIRMWARE_VERSION} " (" ${CMAKE_BUILD_TYPE} ") for board: " ${BOARD})
-
-    file(GLOB_RECURSE PROJECT_SOURCES
-            "${PROJECT_SOURCE_DIR}/src/*.c"
-            "${PROJECT_SOURCE_DIR}/src/*.cpp"
-    )
-
-    file(GLOB_RECURSE PROJECT_HEADERS
-            "src/*.h"
-            "src/*.hpp"
-    )
-else ()
 endif ()
 
 add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 
 # Select device macro for CMSIS headers so sources compile
+target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY})
+
 IF (CMAKE_CROSSCOMPILING)
     if (BOARD MATCHES NucleoL073)
         target_compile_definitions(system-stm32 PUBLIC STM32L073xx)
@@ -108,8 +120,8 @@ ENDIF ()
 target_include_directories(
         system-stm32
         PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/families/${FAMILY_LOWER}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
-
 
 target_include_directories(system-stm32
         PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
@@ -119,9 +131,9 @@ target_include_directories(system-stm32
 # Export CMSIS headers to dependents as part of the public interface
 target_include_directories(system-stm32
         PUBLIC
-            $<BUILD_INTERFACE:${cmsis_device_l0_SOURCE_DIR}/Include>
-            $<BUILD_INTERFACE:${cmsis54st_SOURCE_DIR}/Core/Include>
-            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cmsis_device_l0/Include>
+            $<BUILD_INTERFACE:${cmsis_device_SOURCE_DIR}/Include>
+            $<BUILD_INTERFACE:${cmsis_core_SOURCE_DIR}/Core/Include>
+            $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cmsis_device/Include>
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cmsis_core/Core/Include>
 )
 
@@ -146,9 +158,9 @@ install(TARGETS system-stm32
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
 # Install the CMSIS headers so consumers can include them from the installed package
-install(DIRECTORY ${cmsis_device_l0_SOURCE_DIR}/Include/
-        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cmsis_device_l0/Include)
-install(DIRECTORY ${cmsis54st_SOURCE_DIR}/Core/Include/
+install(DIRECTORY ${cmsis_device_SOURCE_DIR}/Include/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cmsis_device/Include)
+install(DIRECTORY ${cmsis_core_SOURCE_DIR}/Core/Include/
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/cmsis_core/Core/Include)
 
 install(EXPORT system-stm32-targets
@@ -171,4 +183,3 @@ install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/system-stm32Config.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/system-stm32ConfigVersion.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/system-stm32)
-
