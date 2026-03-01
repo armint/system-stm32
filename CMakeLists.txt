@@ -19,6 +19,12 @@ elseif (STM32_FAMILY STREQUAL "STM32C0")
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_c0.git
             GIT_TAG v1.0.1
     )
+elseif (STM32_FAMILY STREQUAL "STM32G0")
+    FetchContent_Declare(
+            cmsis_device
+            GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_g0.git
+            GIT_TAG v1.4.4
+    )
 endif()
 
 FetchContent_GetProperties(cmsis_device)
@@ -59,6 +65,8 @@ if (STM32_FAMILY STREQUAL "STM32L0")
     file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32l0xx.c")
 elseif (STM32_FAMILY STREQUAL "STM32C0")
     file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32c0xx.c")
+elseif (STM32_FAMILY STREQUAL "STM32G0")
+    file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32g0xx.c")
 endif()
 
 # Gather all project sources
@@ -114,6 +122,10 @@ IF (CMAKE_CROSSCOMPILING)
         target_compile_definitions(system-stm32 PUBLIC STM32L073xx)
     elseif (BOARD MATCHES NucleoL053)
         target_compile_definitions(system-stm32 PUBLIC STM32L053xx)
+    elseif (BOARD MATCHES NucleoG071)
+        target_compile_definitions(system-stm32 PUBLIC STM32G071xx)
+    elseif (STM32_FAMILY STREQUAL "STM32G0")
+        target_compile_definitions(system-stm32 PUBLIC STM32G071xx)
     endif ()
 ENDIF ()
 

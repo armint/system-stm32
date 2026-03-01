@@ -88,19 +88,35 @@ inline TriggerEdge getTriggerEdgeForLine(const uint8_t line) {
 void configureExtiInterrupt(const uint8_t line, const Port port, const TriggerEdge edge);
 
 inline void enableInterruptMask(const uint32_t mask) {
+#if defined(EXTI_IMR1_IM0)
+   EXTI->IMR1 |= mask;
+#else
    EXTI->IMR |= mask;
+#endif
 }
 
 inline void disableInterruptMask(const uint32_t mask) {
+#if defined(EXTI_IMR1_IM0)
+   EXTI->IMR1 &= ~mask;
+#else
    EXTI->IMR &= ~mask;
+#endif
 }
 
 inline void enableEventMask(const uint32_t mask) {
+#if defined(EXTI_IMR1_IM0)
+   EXTI->EMR1 |= mask;
+#else
    EXTI->EMR |= mask;
+#endif
 }
 
 inline void disableEventMask(const uint32_t mask) {
+#if defined(EXTI_IMR1_IM0)
+   EXTI->EMR1 &= ~mask;
+#else
    EXTI->EMR &= ~mask;
+#endif
 }
 
 inline void enableInterrupt(const uint8_t line) {
@@ -121,15 +137,28 @@ inline void disableEvent(const uint8_t line) {
 
 
 inline bool isInterruptMasked(const uint8_t line) {
+#if defined(EXTI_IMR1_IM0)
+   return !(EXTI->IMR1 & (1 << line));
+#else
    return !(EXTI->IMR & (1 << line));
+#endif
 }
 
 inline bool isInterruptPending(const uint8_t line) {
+#if defined(EXTI_IMR1_IM0)
+   return (EXTI->RPR1 | EXTI->FPR1) & (1 << line);
+#else
    return EXTI->PR & (1 << line);
+#endif
 }
 
 inline void clearInterrruptPending(const uint8_t line) {
+#if defined(EXTI_IMR1_IM0)
+   EXTI->RPR1 = (1 << line);
+   EXTI->FPR1 = (1 << line);
+#else
    EXTI->PR = (1 << line);
+#endif
 }
 
 constexpr Port getPortFromGPIO(GPIO_TypeDef *const gpio) {

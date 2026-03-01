@@ -25,7 +25,11 @@ enum class SystemClockSource : uint32_t {
 #if defined(RCC_CFGR_SWS_MSI)
    MSI = RCC_CFGR_SWS_MSI,
 #endif
+#if defined(RCC_CFGR_SWS_HSISYS)
+   HSI = RCC_CFGR_SWS_HSISYS,
+#else
    HSI = RCC_CFGR_SWS_HSI,
+#endif
    HSE = RCC_CFGR_SWS_HSE,
 #if defined(RCC_CFGR_SWS_PLL)
    PLL = RCC_CFGR_SWS_PLL,
@@ -171,7 +175,9 @@ uint32_t getHSI16Clock();
 uint32_t getAHBClock();
 #if defined(RCC_CR_HSIKERDIV)
 uint32_t getHSIKerClock();
-#elif defined(RCC_CR_HSION) && !defined(RCC_CR_HSIDIV)
+#elif defined(RCC_CR_HSIDIV)
+uint32_t getHSIKerClock();
+#elif defined(RCC_CR_HSION)
 inline uint32_t getHSIKerClock() {
    return getHSI16Clock();
 }

@@ -125,11 +125,19 @@ struct Usart {
    }
 
    inline bool isRxRegisterNotEmpty() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return usart_.ISR & USART_ISR_RXNE_RXFNE;
+#else
       return usart_.ISR & USART_ISR_RXNE;
+#endif
    }
 
    inline bool isTxRegisterEmpty() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return usart_.ISR & USART_ISR_TXE_TXFNF;
+#else
       return usart_.ISR & USART_ISR_TXE;
+#endif
    }
 
    inline bool isTransferComplete() const {
@@ -158,24 +166,48 @@ struct Usart {
    // =============================================================
    // RXNE: Receive Data Register Not Empty (Byte received)
    void enableRxNotEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 |= USART_CR1_RXNEIE_RXFNEIE;
+#else
       usart_.CR1 |= USART_CR1_RXNEIE;
+#endif
    }
    void disableRxNotEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
+#else
       usart_.CR1 &= ~USART_CR1_RXNEIE;
+#endif
    }
    bool isRxNotEmptyInterruptEnabled() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return (usart_.CR1 & USART_CR1_RXNEIE_RXFNEIE) != 0;
+#else
       return (usart_.CR1 & USART_CR1_RXNEIE) != 0;
+#endif
    }
 
    // TXE: Transmit Data Register Empty (Ready for next byte)
    void enableTxEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 |= USART_CR1_TXEIE_TXFNFIE;
+#else
       usart_.CR1 |= USART_CR1_TXEIE;
+#endif
    }
    void disableTxEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
+#else
       usart_.CR1 &= ~USART_CR1_TXEIE;
+#endif
    }
    bool isTxEmptyInterruptEnabled() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return (usart_.CR1 & USART_CR1_TXEIE_TXFNFIE) != 0;
+#else
       return (usart_.CR1 & USART_CR1_TXEIE) != 0;
+#endif
    }
 
    // TC: Transmission Complete (All data shifted out)

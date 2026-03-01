@@ -2,8 +2,8 @@
 
 #include <cmsis_device.h>
 
-#if defined(STM32L0)
-// STM32L0 processors have 32 interrupt vectors + 16 cortex-m vectors
+#if defined(STM32L0) || defined(STM32G0)
+// STM32L0 and STM32G0 processors have 32 interrupt vectors + 16 cortex-m vectors
 #define VECTOR_TABLE_SIZE 48
 #endif
 
