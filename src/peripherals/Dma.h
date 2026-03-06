@@ -60,6 +60,11 @@ struct Channel {
 
    Channel(DMA_TypeDef *dma, uint8_t channelNumber);
 
+   Channel(const Channel &) = default;
+   Channel(Channel &&) = default;
+   Channel &operator=(const Channel &) = delete;
+   Channel &operator=(Channel &&) = delete;
+
    void configure(void *peripheralAddress,
                   void *memoryAddress,
                   DataSize peripheralSize,

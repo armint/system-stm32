@@ -208,3 +208,4 @@ constexpr IRQn_Type getExtiIRQnForGPIOLine(uint8_t line) {
 }
 
 } // namespace Exti
+

@@ -55,6 +55,11 @@ class GpioPin {
       : port(port)
       , pin(pin) {}
 
+   GpioPin(const GpioPin &) = default;
+   GpioPin(GpioPin &&) = default;
+   GpioPin &operator=(const GpioPin &) = delete;
+   GpioPin &operator=(GpioPin &&) = delete;
+
    // =============================================================
    // Configuration
    // =============================================================

@@ -86,6 +86,15 @@ struct Adc {
    enum class ScanDirection : uint32_t { Forward = 0, Backward = ADC_CFGR1_SCANDIR };
    enum class OverrunMode : uint32_t { Preserve = 0, Overwrite = ADC_CFGR1_OVRMOD };
 
+   struct TemperatureSensorCalibration {
+      // Factory calibration data addresses (Vref+ = 3.0V)
+      static uint16_t cal1() { return *reinterpret_cast<const volatile uint16_t*>(0x1FFF75A8UL); } // 30 °C
+      static uint16_t cal2() { return *reinterpret_cast<const volatile uint16_t*>(0x1FFF75CAUL); } // 130 °C
+      static constexpr int32_t temp1 = 30;
+      static constexpr int32_t temp2 = 130;
+      static constexpr uint32_t vrefAnalog = 3000; // mV
+   };
+
    static inline void enableTemperatureSensor() {
       ADC1_COMMON->CCR |= ADC_CCR_TSEN;
    }
@@ -124,6 +133,11 @@ struct Adc {
 
    explicit Adc(ADC_TypeDef *adc)
       : _adc(*adc) {}
+
+   Adc(const Adc &) = default;
+   Adc(Adc &&) = default;
+   Adc &operator=(const Adc &) = delete;
+   Adc &operator=(Adc &&) = delete;
 
 
    void enable() const;

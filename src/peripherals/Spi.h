@@ -71,6 +71,11 @@ struct Spi {
    explicit Spi(SPI_TypeDef *spiBase)
       : spi_(*spiBase) {}
 
+   Spi(const Spi &) = default;
+   Spi(Spi &&) = default;
+   Spi &operator=(const Spi &) = delete;
+   Spi &operator=(Spi &&) = delete;
+
    /**
     * @brief Configures the SPI peripheral.
     * @note SPI should be disabled before calling this, or it will be disabled automatically during configuration.

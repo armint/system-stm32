@@ -60,6 +60,11 @@ struct Usart {
    Usart(USART_TypeDef *uartBase)
       : usart_(*uartBase) {}
 
+   Usart(const Usart &) = default;
+   Usart(Usart &&) = default;
+   Usart &operator=(const Usart &) = delete;
+   Usart &operator=(Usart &&) = delete;
+
    void configure(uint32_t baudRate = 115200, Parity parity = Parity::None, StopBits stopBits = StopBits::StopBits_1) const;
 
    /**
