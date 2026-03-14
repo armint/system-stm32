@@ -89,6 +89,26 @@ struct Usart {
       usart_.CR2 &= ~USART_CR2_RTOEN;
    }
 
+   void enableReceiverTimeoutInterrupt() const {
+      usart_.CR1 |= USART_CR1_RTOIE;
+   }
+   void disableReceiverTimeoutInterrupt() const {
+      usart_.CR1 &= ~USART_CR1_RTOIE;
+   }
+   bool isReceiverTimeoutInterruptEnabled() const {
+      return (usart_.CR1 & USART_CR1_RTOIE) != 0;
+   }
+
+   inline bool isReceiverTimeoutFlag() const {
+      return usart_.ISR & USART_ISR_RTOF;
+   }
+
+   inline void clearReceiverTimeoutFlag() const {
+#ifdef USART_ICR_RTOCF
+      usart_.ICR = USART_ICR_RTOCF;
+#endif
+   }
+
    inline void enableTx() const {
       usart_.CR1 |= USART_CR1_TE;
    }
@@ -307,6 +327,16 @@ struct Usart {
 
    inline void sendBreak() const {
       usart_.RQR |= USART_RQR_SBKRQ;
+   }
+
+   inline bool isFramingError() const {
+      return usart_.ISR & USART_ISR_FE;
+   }
+
+   inline void clearFramingError() const {
+#ifdef USART_ICR_FECF
+      usart_.ICR = USART_ICR_FECF;
+#endif
    }
 
 #if defined(USART_PRESC_PRESCALER)
