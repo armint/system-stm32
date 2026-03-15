@@ -169,6 +169,50 @@ class Timer {
       tim.SR &= ~flags;
    }
 
+   // Output Compare mode configuration
+   enum class OcMode : uint32_t {
+      Frozen = 0,
+      ActiveOnMatch = TIM_CCMR1_OC1M_0,
+      InactiveOnMatch = TIM_CCMR1_OC1M_1,
+      Toggle = TIM_CCMR1_OC1M_0 | TIM_CCMR1_OC1M_1,
+      ForceInactive = TIM_CCMR1_OC1M_2,
+      ForceActive = TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_0,
+      Pwm1 = TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1,
+      Pwm2 = TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_0,
+   };
+
+   void setOcMode(Channel channel, OcMode mode) const {
+      auto ch = static_cast<uint8_t>(channel);
+      // OC1M bits are at [6:4] in CCMR1 for Ch1, [14:12] for Ch2
+      // CCMR2 holds Ch3 and Ch4
+      volatile uint32_t &ccmr = (ch < 2) ? tim.CCMR1 : tim.CCMR2;
+      uint32_t shift = (ch & 1) ? 8 : 0;
+      uint32_t mask = TIM_CCMR1_OC1M << shift;
+      ccmr = (ccmr & ~mask) | (static_cast<uint32_t>(mode) << shift);
+   }
+
+   void enableOcPreload(Channel channel) const {
+      auto ch = static_cast<uint8_t>(channel);
+      volatile uint32_t &ccmr = (ch < 2) ? tim.CCMR1 : tim.CCMR2;
+      uint32_t shift = (ch & 1) ? 8 : 0;
+      ccmr |= (TIM_CCMR1_OC1PE << shift);
+   }
+
+   void disableOcPreload(Channel channel) const {
+      auto ch = static_cast<uint8_t>(channel);
+      volatile uint32_t &ccmr = (ch < 2) ? tim.CCMR1 : tim.CCMR2;
+      uint32_t shift = (ch & 1) ? 8 : 0;
+      ccmr &= ~(TIM_CCMR1_OC1PE << shift);
+   }
+
+   void setTriggerOutput(uint32_t trgo) const {
+      tim.CR2 = (tim.CR2 & ~TIM_CR2_MMS) | trgo;
+   }
+
+   void disableMasterSlaveMode() const {
+      tim.SMCR &= ~TIM_SMCR_MSM;
+   }
+
    void enableChannel(Channel channel) const {
       tim.CCER |= (TIM_CCER_CC1E << (static_cast<uint8_t>(channel) * 4));
    }
