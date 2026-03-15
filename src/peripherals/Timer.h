@@ -30,38 +30,38 @@ class Timer {
       return getStatusFlag(TIM_SR_UIF);
    }
 
-   // Individual flag clearing methods (write 1 to clear)
+   // Individual flag clearing methods (rc_w0: write 0 to clear)
    void clearUpdateFlag() const {
-      tim.SR = TIM_SR_UIF;
+      tim.SR = ~TIM_SR_UIF;
    }
    void clearCaptureCompare1Flag() const {
-      tim.SR = TIM_SR_CC1IF;
+      tim.SR = ~TIM_SR_CC1IF;
    }
    void clearCaptureCompare2Flag() const {
-      tim.SR = TIM_SR_CC2IF;
+      tim.SR = ~TIM_SR_CC2IF;
    }
    void clearCaptureCompare3Flag() const {
-      tim.SR = TIM_SR_CC3IF;
+      tim.SR = ~TIM_SR_CC3IF;
    }
    void clearCaptureCompare4Flag() const {
-      tim.SR = TIM_SR_CC4IF;
+      tim.SR = ~TIM_SR_CC4IF;
    }
 
 #if defined(TIM_SR_TIF)
    void clearOverflowFlag() const {
-      tim.SR = TIM_SR_TIF;
+      tim.SR = ~TIM_SR_TIF;
    }
 #endif
 
 #if defined(TIM_SR_COMIF)
    void clearControlUpdateFlag() const {
-      tim.SR = TIM_SR_COMIF;
+      tim.SR = ~TIM_SR_COMIF;
    }
 #endif
 
 #if defined(TIM_SR_BIF)
    void clearBreakFlag() const {
-      tim.SR = TIM_SR_BIF;
+      tim.SR = ~TIM_SR_BIF;
    }
 #endif
 
@@ -157,18 +157,11 @@ class Timer {
       return (tim.SR & flag) == flag;
    }
    void clearStatusFlag(uint32_t flag) const {
-      tim.SR &= ~flag;
+      tim.SR = ~flag;
    }
 
    void clearAllStatusFlags() const {
-      uint32_t flags = TIM_SR_UIF | TIM_SR_CC1IF | TIM_SR_CC2IF | TIM_SR_CC3IF | TIM_SR_CC4IF | TIM_SR_TIF;
-#if defined(TIM_SR_COMIF)
-      flags |= TIM_SR_COMIF;
-#endif
-#if defined(TIM_SR_BIF)
-      flags |= TIM_SR_BIF;
-#endif
-      tim.SR &= ~flags;
+      tim.SR = 0;
    }
 
    // Output Compare mode configuration
