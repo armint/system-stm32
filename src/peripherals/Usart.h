@@ -9,6 +9,8 @@
 #define USART_ISR_TXE USART_ISR_TXE_TXFNF
 #endif
 
+namespace hw {
+
 struct Usart {
    enum class StopBits {
       StopBits_1 = 0,
@@ -449,7 +451,6 @@ struct Usart {
       usart_.CR1 &= ~USART_CR1_OVER8;
    }
 
-
    // Clears all known status flags that are cleared by writing 1 to USART_ICR
    void clearAllStatusFlags() const {
       uint32_t mask = 0;
@@ -491,3 +492,5 @@ struct Usart {
       }
    }
 };
+
+} // namespace hw

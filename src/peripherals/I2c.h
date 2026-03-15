@@ -11,6 +11,8 @@
  *
  * Supports STM32L0, STM32G0, and other series with the I2Cv2 peripheral.
  */
+namespace hw {
+
 struct I2c {
    enum class Mode {
       Standard,
@@ -420,3 +422,5 @@ struct I2c {
     */
    uint32_t getClockFrequency() const;
 };
+
+} // namespace hw

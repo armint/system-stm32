@@ -3,6 +3,8 @@
 #include <cmsis_device.h>
 #include <cstdint>
 
+namespace hw {
+
 class Timer {
    public:
    TIM_TypeDef &tim;
@@ -229,3 +231,5 @@ class Timer {
       return (&tim.CCR1)[static_cast<uint8_t>(channel)];
    }
 };
+
+} // namespace hw

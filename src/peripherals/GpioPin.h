@@ -4,6 +4,8 @@
 #include <cmsis_device.h>
 #include <cstdint>
 
+namespace hw {
+
 class GpioPin {
    public:
    // GPIO_MODER
@@ -108,3 +110,5 @@ class GpioPin {
       return (port->IDR & (1UL << pin)) != 0;
    }
 };
+
+} // namespace hw

@@ -1,6 +1,8 @@
 #include "Usart.h"
 #include "Rcc.h"
 
+namespace hw {
+
 void Usart::setBaudRate(uint32_t baud_rate) const {
    uint32_t fclk;
 
@@ -111,3 +113,5 @@ void Usart::setReceiverTimeout(uint32_t bitDuration) const {
    // Note: You must manually call enableReceiverTimeout() (sets RTOEN in CR2)
    // for this to take effect.
 }
+
+} // namespace hw

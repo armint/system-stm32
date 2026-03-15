@@ -9,6 +9,8 @@
  * This class provides a thin wrapper around the STM32 SPI peripheral registers.
  * It follows the pattern used for other peripheral classes in this project.
  */
+namespace hw {
+
 struct Spi {
    enum class Mode : uint32_t { Slave = 0, Master = SPI_CR1_MSTR };
 
@@ -266,3 +268,5 @@ struct Spi {
     */
    uint32_t getClockFrequency() const;
 };
+
+} // namespace hw

@@ -1,6 +1,8 @@
 #include "I2c.h"
 #include "Rcc.h"
 
+namespace hw {
+
 // Fallback definitions for I2Cv2 bits if missing in CMSIS headers
 #ifndef I2C_OAR1_OA1MODE
 #define I2C_OAR1_OA1MODE (1UL << 10)
@@ -220,3 +222,5 @@ uint32_t I2c::getClockFrequency() const {
 #endif
    return Rcc::getAPBClock();
 }
+
+} // namespace hw

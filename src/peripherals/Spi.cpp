@@ -1,6 +1,8 @@
 #include "Spi.h"
 #include "Rcc.h"
 
+namespace hw {
+
 void Spi::configure(BaudRatePrescaler prescaler, Mode mode, ClockPolarity cpol, ClockPhase cpha, DataSize dataSize,
                     FirstBit firstBit, NssMode nss, Direction direction) const {
    bool wasEnabled = isEnabled();
@@ -49,3 +51,5 @@ uint32_t Spi::getClockFrequency() const {
 #endif
    return Rcc::getAPBClock();
 }
+
+} // namespace hw
