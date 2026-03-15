@@ -144,6 +144,22 @@ class Adc {
       adc.CFGR1 |= ADC_CFGR1_DMAEN;
    }
 
+   void enableDmaCircular() const {
+      adc.CFGR1 |= ADC_CFGR1_DMACFG;
+   }
+
+   void disableDmaCircular() const {
+      adc.CFGR1 &= ~ADC_CFGR1_DMACFG;
+   }
+
+   void enableInternalRegulator() const {
+      adc.CR |= ADC_CR_ADVREGEN;
+   }
+
+   void disableInternalRegulator() const {
+      adc.CR &= ~ADC_CR_ADVREGEN;
+   }
+
    void enableOverrun() const {
       adc.CFGR1 |= ADC_CFGR1_OVRMOD;
    }
