@@ -1114,6 +1114,63 @@ inline void disableTSCClockInSleepMode() {
 }
 #endif
 
+// DAC
+#if defined(RCC_APB1ENR_DACEN) && defined(RCC_APB1SMENR_DACSMEN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+   detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_DACSMEN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+   detail::clearBit(RCC->APB1SMENR, RCC_APB1SMENR_DACSMEN);
+}
+inline void enableDACClockInSleepMode() {
+   enableDACClock();
+}
+inline void disableDACClockInSleepMode() {
+   disableDACClock();
+}
+#elif defined(RCC_APB1ENR_DACEN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+}
+#elif defined(RCC_APB1ENR_DAC1EN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_DAC1EN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_DAC1EN);
+}
+#endif
+
+// LSI (Low-Speed Internal oscillator)
+#if defined(RCC_CSR_LSION) && defined(RCC_CSR_LSIRDY)
+inline void enableLSI() {
+   detail::setBit(RCC->CSR, RCC_CSR_LSION);
+   while(!(RCC->CSR & RCC_CSR_LSIRDY)) {
+   }
+}
+inline void disableLSI() {
+   detail::clearBit(RCC->CSR, RCC_CSR_LSION);
+}
+inline bool isLSIReady() {
+   return (RCC->CSR & RCC_CSR_LSIRDY) != 0;
+}
+#endif
+
+// MIF (NVM interface)
+#if defined(RCC_AHBENR_MIFEN)
+inline void enableMIFClock() {
+   detail::setBit(RCC->AHBENR, RCC_AHBENR_MIFEN);
+}
+inline void disableMIFClock() {
+   detail::clearBit(RCC->AHBENR, RCC_AHBENR_MIFEN);
+}
+#endif
+
 // -----------------
 // System clock helpers (guarded for STM32 series that support these bits)
 // -----------------
