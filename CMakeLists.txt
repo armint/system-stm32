@@ -98,38 +98,10 @@ file(GLOB PROJECT_INCLUDE_DIRS
         src/families/${FAMILY_LOWER}
 )
 
-# Detect if we are crosscompiling, or compiling for our native system.
-IF (CMAKE_CROSSCOMPILING)
-    IF (NOT CMAKE_BUILD_TYPE)
-        SET(CMAKE_BUILD_TYPE Release)
-        MESSAGE(STATUS "CMAKE_BUILD_TYPE not set, using default: " ${CMAKE_BUILD_TYPE})
-    ENDIF ()
-    IF (NOT BOARD)
-        SET(BOARD "NucleoL073")
-        MESSAGE(STATUS "No BOARD specified, using default: " ${BOARD})
-    ENDIF ()
-
-    MESSAGE(STATUS "Building system-stm32 version " ${FIRMWARE_VERSION} " (" ${CMAKE_BUILD_TYPE} ") for board: " ${BOARD})
-endif ()
-
 add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 
 # Select device macro for CMSIS headers so sources compile
 target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY})
-
-IF (CMAKE_CROSSCOMPILING)
-    if (BOARD MATCHES NucleoL073 OR BOARD MATCHES oven-controller-board-v1)
-        target_compile_definitions(system-stm32 PUBLIC STM32L073xx)
-    elseif (BOARD MATCHES NucleoL053)
-        target_compile_definitions(system-stm32 PUBLIC STM32L053xx)
-    elseif (BOARD MATCHES NucleoG071 OR BOARD MATCHES maiew)
-        target_compile_definitions(system-stm32 PUBLIC STM32G071xx)
-    elseif (STM32_FAMILY STREQUAL "STM32G0")
-        target_compile_definitions(system-stm32 PUBLIC STM32G071xx)
-    elseif (STM32_FAMILY STREQUAL "STM32L0")
-        target_compile_definitions(system-stm32 PUBLIC STM32L073xx)
-    endif ()
-ENDIF ()
 
 target_include_directories(
         system-stm32
