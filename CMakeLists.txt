@@ -6,6 +6,7 @@ Include(FetchContent)
 
 # Default to STM32L0 if not specified
 set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0)")
+set(STM32_DEVICE "STM32L073xx" CACHE STRING "STM32 device define for CMSIS (e.g., STM32L073xx, STM32G071xx, STM32G0B1xx)")
 
 if (STM32_FAMILY STREQUAL "STM32L0")
     FetchContent_Declare(
@@ -100,8 +101,8 @@ file(GLOB PROJECT_INCLUDE_DIRS
 
 add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 
-# Select device macro for CMSIS headers so sources compile
-target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY})
+# Select device and family macros for CMSIS headers so sources compile
+target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY} ${STM32_DEVICE})
 
 target_include_directories(
         system-stm32
