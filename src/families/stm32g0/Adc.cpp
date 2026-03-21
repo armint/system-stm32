@@ -78,7 +78,7 @@ void Adc::disableChannel(Adc::Channel channel) const {
 void Adc::setChannelSequence(int sequenceNo, Adc::Channel channel) const {
    assert(getChannelSequenceMode() == ChannelSequenceMode::Configurable);
    assert(sequenceNo < 8);
-   assert(channel <= Channel::VSSA);
+   assert(channel <= Channel::Vbat);
    _adc.ISR |= ADC_ISR_CCRDY;
    _adc.CHSELR = (_adc.CHSELR & ~(0xF << sequenceNo * 4)) | (static_cast<uint32_t>(channel) << sequenceNo * 4);
    while(!(_adc.ISR & ADC_ISR_CCRDY)) {

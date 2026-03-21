@@ -50,15 +50,15 @@ struct Adc {
       PA5 = 5,
       PA6 = 6,
       PA7 = 7,
-      PA8 = 8,
-      Vsense = 9,
-      Vrefint = 10,
-      PA11 = 11,
-      PA12 = 12,
-      PA14 = 13,
-      PA14_ALT = 14,
-      VDDA = 15,
-      VSSA = 16,
+      PB0 = 8,
+      PB1 = 9,
+#if defined(STM32G0B1xx)
+      PB2 = 10,
+      PB7 = 11,
+#endif
+      Vsense = 12,
+      Vrefint = 13,
+      Vbat = 14,
    };
 
    enum class OversamplingRatio : uint32_t {
