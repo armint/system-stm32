@@ -38,4 +38,11 @@ void setMuxChannelInput(uint32_t muxChannel, MuxInput muxInput) {
    (dmaMuxChannel->CCR & ~(DMAMUX_CxCR_DMAREQ_ID_Msk)) | (static_cast<uint32_t>(muxInput) << DMAMUX_CxCR_DMAREQ_ID_Pos);
 }
 #endif
+
+#if defined(DMA1_CSELR_BASE)
+void setChannelRequest(uint8_t channelNumber, uint8_t request) {
+   uint32_t pos = (channelNumber - 1) * 4;
+   DMA1_CSELR->CSELR = (DMA1_CSELR->CSELR & ~(0xFUL << pos)) | (static_cast<uint32_t>(request) << pos);
+}
+#endif
 } // namespace Dma
