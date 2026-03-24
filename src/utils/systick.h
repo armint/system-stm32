@@ -29,6 +29,7 @@ timestamp_t getSysTick();
 timestamp_t getMicroTicks();
 
 void sysTickUpdateHook(timestamp_t sysTick);
+
 #if defined(__cplusplus)
 }
 #endif /* __cplusplus */
