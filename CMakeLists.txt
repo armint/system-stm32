@@ -8,30 +8,39 @@ Include(FetchContent)
 set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0)")
 set(STM32_DEVICE "STM32L073xx" CACHE STRING "STM32 device define for CMSIS (e.g., STM32L073xx, STM32G071xx, STM32G0B1xx)")
 
+# Use a family-specific FetchContent name so different STM32 families
+# can coexist in a shared FETCHCONTENT_BASE_DIR.
+string(TOLOWER ${STM32_FAMILY} _stm32_family_lower)
+string(REPLACE "stm32" "" _stm32_family_suffix "${_stm32_family_lower}")
+set(_cmsis_device_name "cmsis_device_${_stm32_family_suffix}")
+
 if (STM32_FAMILY STREQUAL "STM32L0")
     FetchContent_Declare(
-            cmsis_device
+            ${_cmsis_device_name}
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_l0.git
             GIT_TAG v1.9.4
     )
 elseif (STM32_FAMILY STREQUAL "STM32C0")
     FetchContent_Declare(
-            cmsis_device
+            ${_cmsis_device_name}
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_c0.git
             GIT_TAG v1.0.1
     )
 elseif (STM32_FAMILY STREQUAL "STM32G0")
     FetchContent_Declare(
-            cmsis_device
+            ${_cmsis_device_name}
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_g0.git
             GIT_TAG v1.4.4
     )
 endif()
 
-FetchContent_GetProperties(cmsis_device)
-if (NOT cmsis_device_POPULATED)
-    FetchContent_MakeAvailable(cmsis_device)
+FetchContent_GetProperties(${_cmsis_device_name})
+if (NOT ${_cmsis_device_name}_POPULATED)
+    FetchContent_MakeAvailable(${_cmsis_device_name})
 endif ()
+
+# Alias for the rest of this file
+set(cmsis_device_SOURCE_DIR "${${_cmsis_device_name}_SOURCE_DIR}")
 
 FetchContent_Declare(
         cmsis_core
