@@ -237,22 +237,19 @@ HardFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uint
    // There is no semihosting support for Cortex-M0, since on ARMv6-M
    // faults are fatal and it is not possible to return from the handler.
 
+#if defined(DEBUG)
+   __BKPT(0);
+#endif /* defined(DEBUG) */
+
+   // Try to output diagnostics. These calls are placed after the breakpoint
+   // so a debugger can catch the fault first, and any secondary fault caused
+   // by an uninitialised trace subsystem won't mask the original crash.
    trace_flush();
    trace_printf("[CHardFault]\n");
    dump_exception_stack(frame, lr);
    trace_flush();
+
    NVIC_SystemReset();
-
-
-#if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
-   if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
-      __BKPT(0);
-   }
-#else
-   __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
-#endif /* defined(DEBUG) */
 
    while(true) {
       __NOP();
