@@ -9,6 +9,8 @@
 #define USART_ISR_TXE USART_ISR_TXE_TXFNF
 #endif
 
+namespace hw {
+
 struct Usart {
    enum class StopBits {
       StopBits_1 = 0,
@@ -60,6 +62,11 @@ struct Usart {
    Usart(USART_TypeDef *uartBase)
       : usart_(*uartBase) {}
 
+   Usart(const Usart &) = default;
+   Usart(Usart &&) = default;
+   Usart &operator=(const Usart &) = delete;
+   Usart &operator=(Usart &&) = delete;
+
    void configure(uint32_t baudRate = 115200, Parity parity = Parity::None, StopBits stopBits = StopBits::StopBits_1) const;
 
    /**
@@ -82,6 +89,26 @@ struct Usart {
    }
    void disableReceiverTimeout() const {
       usart_.CR2 &= ~USART_CR2_RTOEN;
+   }
+
+   void enableReceiverTimeoutInterrupt() const {
+      usart_.CR1 |= USART_CR1_RTOIE;
+   }
+   void disableReceiverTimeoutInterrupt() const {
+      usart_.CR1 &= ~USART_CR1_RTOIE;
+   }
+   bool isReceiverTimeoutInterruptEnabled() const {
+      return (usart_.CR1 & USART_CR1_RTOIE) != 0;
+   }
+
+   inline bool isReceiverTimeoutFlag() const {
+      return usart_.ISR & USART_ISR_RTOF;
+   }
+
+   inline void clearReceiverTimeoutFlag() const {
+#ifdef USART_ICR_RTOCF
+      usart_.ICR = USART_ICR_RTOCF;
+#endif
    }
 
    inline void enableTx() const {
@@ -125,11 +152,19 @@ struct Usart {
    }
 
    inline bool isRxRegisterNotEmpty() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return usart_.ISR & USART_ISR_RXNE_RXFNE;
+#else
       return usart_.ISR & USART_ISR_RXNE;
+#endif
    }
 
    inline bool isTxRegisterEmpty() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return usart_.ISR & USART_ISR_TXE_TXFNF;
+#else
       return usart_.ISR & USART_ISR_TXE;
+#endif
    }
 
    inline bool isTransferComplete() const {
@@ -158,24 +193,48 @@ struct Usart {
    // =============================================================
    // RXNE: Receive Data Register Not Empty (Byte received)
    void enableRxNotEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 |= USART_CR1_RXNEIE_RXFNEIE;
+#else
       usart_.CR1 |= USART_CR1_RXNEIE;
+#endif
    }
    void disableRxNotEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 &= ~USART_CR1_RXNEIE_RXFNEIE;
+#else
       usart_.CR1 &= ~USART_CR1_RXNEIE;
+#endif
    }
    bool isRxNotEmptyInterruptEnabled() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return (usart_.CR1 & USART_CR1_RXNEIE_RXFNEIE) != 0;
+#else
       return (usart_.CR1 & USART_CR1_RXNEIE) != 0;
+#endif
    }
 
    // TXE: Transmit Data Register Empty (Ready for next byte)
    void enableTxEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 |= USART_CR1_TXEIE_TXFNFIE;
+#else
       usart_.CR1 |= USART_CR1_TXEIE;
+#endif
    }
    void disableTxEmptyInterrupt() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      usart_.CR1 &= ~USART_CR1_TXEIE_TXFNFIE;
+#else
       usart_.CR1 &= ~USART_CR1_TXEIE;
+#endif
    }
    bool isTxEmptyInterruptEnabled() const {
+#if defined(USART_ISR_RXNE_RXFNE)
+      return (usart_.CR1 & USART_CR1_TXEIE_TXFNFIE) != 0;
+#else
       return (usart_.CR1 & USART_CR1_TXEIE) != 0;
+#endif
    }
 
    // TC: Transmission Complete (All data shifted out)
@@ -270,6 +329,16 @@ struct Usart {
 
    inline void sendBreak() const {
       usart_.RQR |= USART_RQR_SBKRQ;
+   }
+
+   inline bool isFramingError() const {
+      return usart_.ISR & USART_ISR_FE;
+   }
+
+   inline void clearFramingError() const {
+#ifdef USART_ICR_FECF
+      usart_.ICR = USART_ICR_FECF;
+#endif
    }
 
 #if defined(USART_PRESC_PRESCALER)
@@ -382,7 +451,6 @@ struct Usart {
       usart_.CR1 &= ~USART_CR1_OVER8;
    }
 
-
    // Clears all known status flags that are cleared by writing 1 to USART_ICR
    void clearAllStatusFlags() const {
       uint32_t mask = 0;
@@ -424,3 +492,5 @@ struct Usart {
       }
    }
 };
+
+} // namespace hw

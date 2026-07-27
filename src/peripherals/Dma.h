@@ -52,6 +52,15 @@ enum class MuxInput {
 void setMuxChannelInput(uint32_t muxChannel, MuxInput muxInput);
 #endif
 
+#if defined(DMA1_CSELR_BASE)
+/**
+ * @brief Sets the DMA channel request selection via CSELR (STM32L0).
+ * @param channelNumber 1-based DMA channel number.
+ * @param request Peripheral request number (see reference manual DMA request mapping table).
+ */
+void setChannelRequest(uint8_t channelNumber, uint8_t request);
+#endif
+
 struct Channel {
    const uint8_t _channelPosition;
    DMA_TypeDef &_dma;
@@ -59,6 +68,11 @@ struct Channel {
    DMA_Channel_TypeDef &getChannelTypedef() const;
 
    Channel(DMA_TypeDef *dma, uint8_t channelNumber);
+
+   Channel(const Channel &) = default;
+   Channel(Channel &&) = default;
+   Channel &operator=(const Channel &) = delete;
+   Channel &operator=(Channel &&) = delete;
 
    void configure(void *peripheralAddress,
                   void *memoryAddress,

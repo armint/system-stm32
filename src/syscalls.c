@@ -1,4 +1,5 @@
 #include <sys/stat.h>
+#include <sys/types.h>
 /* These stubs are here to prevent compiler warnings:
  *
  * warning: _close is not implemented and will always fail

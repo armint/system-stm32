@@ -66,5 +66,10 @@ uint32_t getAHBClock() {
 uint32_t getHSIKerClock() {
    return HSI_VALUE / ((static_cast<uint32_t>(getHSIKerDivider()) >> RCC_CR_HSIKERDIV_Pos) + 1);
 }
+#elif defined(RCC_CR_HSIDIV)
+uint32_t getHSIKerClock() {
+   uint32_t pre = (RCC->CR & RCC_CR_HSIDIV) >> RCC_CR_HSIDIV_Pos;
+   return HSI_VALUE / (1 << pre);
+}
 #endif
 } // namespace Rcc

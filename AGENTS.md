@@ -1,15 +1,23 @@
 # Agent Instructions for system-stm32
 
 ## Purpose
-This library provides the Hardware Abstraction Layer (HAL), startup code, and peripheral drivers for STM32L0 microcontrollers.
+This library provides the Hardware Abstraction Layer (HAL), startup code, and peripheral drivers for STM32 microcontrollers. It uses a single-repository, build-time separation architecture to support multiple STM32 families (e.g., STM32L0, STM32C0) without relying on `#ifdef` macros for hardware variations.
 
 ## Key Features
+- **Multi-Family Support**: Uses the `STM32_FAMILY` CMake variable to automatically select correct CMSIS headers and family-specific source files.
 - **Startup**: Linker scripts and startup code (`startup.cpp`, `vectors_*.c`).
 - **Peripherals**: Drivers for ADC, DMA, EXTI, GPIO, USART, Clock control and Timers.
 - **System**: Delay functions, interrupt handling, and hardware initialization.
 
 ## Guidelines
-- Peripheral drivers are located in `src/peripherals/`.
-- When modifying or adding peripheral support, ensure it matches the hardware specification of the targeted STM32L0 MCUs.
-- Use the `Interrupt` and `GpioInterrupt` utilities in `src/utils/` for managing runtime interrupt connections.
+- **Peripheral Drivers**: Shared or general peripheral interfaces are located in `src/peripherals/`.
+- **Family-Specific Code**: Highly hardware-dependent code (like `Adc`, `Rcc`, etc.) must be placed in `src/families/stm32<family>/` (e.g., `src/families/stm32l0/`). Ensure that the class implementations expose the same generic interface (e.g., `#include "Adc.h"`). CMake automatically adds the active family's directory to the target's include directories, so `#include "Adc.h"` seamlessly resolves to the correct hardware-specific header.
+- **Avoid `#ifdef` for Families**: Do not use `#ifdef STM32L0` inside common `.cpp` files to handle whole family differences. Instead, rely on CMake-driven file selection and place family-specific files in the `src/families/` directory. However, using `#ifdef` to check for the availability of specific peripheral features (e.g., `#if defined(USART_PRESC_PRESCALER)`) is perfectly acceptable and encouraged for maintaining shared peripheral drivers.
+- When modifying or adding peripheral support, ensure it matches the hardware specification of the targeted STM32 MCUs.
 - Be mindful of the limited resources (Flash/RAM) on these microcontrollers.
+- **Coding Style**: Adhere strictly to the project's `.clang-format` rules. When adding new files, match the naming conventions (e.g., PascalCase for classes, specific prefixing for members) found in surrounding files.
+- Document any new functions or changes with clear comments.
+- **Memory & Error Handling**: Heap memory usage is strictly not allowed. Avoid exceptions. Handle errors gracefully using boolean status codes for fallible initializations or `assert()` for unrecoverable state errors.
+
+## Verification
+- To verify compilation, build the library using the standard CMake workflow targeting an ARM toolchain, or verify it compiles when linked against dependent projects (e.g., `universal-oven-controller`).

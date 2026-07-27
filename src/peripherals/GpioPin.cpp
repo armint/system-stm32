@@ -1,6 +1,8 @@
 
 #include "GpioPin.h"
 
+namespace hw {
+
 void GpioPin::setMode(Mode mode) const {
    uint32_t pos = pin * 2;
    uint32_t mask = 3UL << pos;
@@ -66,3 +68,5 @@ void GpioPin::configure(Mode mode, OutputType type, Pull pull, Speed speed) cons
    setPull(pull);
    setSpeed(speed);
 }
+
+} // namespace hw

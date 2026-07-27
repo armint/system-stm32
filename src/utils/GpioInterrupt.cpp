@@ -17,7 +17,7 @@ void GpioHandler();
 template <uint8_t first, uint8_t last, IRQn_Type irq>
 void GpioHandler();
 
-#if defined(STM32L0)
+#if defined(STM32L0) || defined(STM32G0)
 constexpr Interrupt::Handler_t gpioHandlers[16] = {
    GpioHandler<0, 1, EXTI0_1_IRQn>,   GpioHandler<0, 1, EXTI0_1_IRQn>,   GpioHandler<2, 3, EXTI2_3_IRQn>,
    GpioHandler<2, 3, EXTI2_3_IRQn>,   GpioHandler<4, 15, EXTI4_15_IRQn>, GpioHandler<4, 15, EXTI4_15_IRQn>,

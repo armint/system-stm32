@@ -237,22 +237,20 @@ HardFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uint
    // There is no semihosting support for Cortex-M0, since on ARMv6-M
    // faults are fatal and it is not possible to return from the handler.
 
+   // Emit diagnostics BEFORE any BKPT. On Cortex-M0+ the DCB registers are
+   // not accessible from the CPU (see core_cm0plus.h), so we cannot detect
+   // whether a debugger is attached. With no debugger, BKPT escalates into
+   // another fault and locks up the core, which would suppress this output.
    trace_flush();
    trace_printf("[CHardFault]\n");
    dump_exception_stack(frame, lr);
    trace_flush();
-   NVIC_SystemReset();
-
 
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
-   if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
-      __BKPT(0);
-   }
-#else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
 #endif /* defined(DEBUG) */
+
+   NVIC_SystemReset();
 
    while(true) {
       __NOP();

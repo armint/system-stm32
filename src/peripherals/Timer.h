@@ -3,187 +3,226 @@
 #include <cmsis_device.h>
 #include <cstdint>
 
-// Lightweight peripheral access wrapper for general-purpose/advanced STM32 timers
+namespace hw {
 
 class Timer {
- public:
-  TIM_TypeDef &tim;
+   public:
+   TIM_TypeDef &tim;
 
-  // Capture/Compare channel selector
-  enum class Channel : uint8_t { Ch1 = 0, Ch2 = 1, Ch3 = 2, Ch4 = 3 };
+   enum class Channel : uint8_t { Ch1 = 0, Ch2 = 1, Ch3 = 2, Ch4 = 3 };
 
-  explicit Timer(TIM_TypeDef *base)
-      : tim(*base) {}
+   explicit Timer(TIM_TypeDef *base)
+      : tim(*base) {
+   }
 
-  // =============================================================
-  // Basic control
-  // =============================================================
-  void enableCounter() const { tim.CR1 |= TIM_CR1_CEN; }
-  void disableCounter() const { tim.CR1 &= ~TIM_CR1_CEN; }
+   Timer(const Timer &) = default;
+   Timer(Timer &&) = default;
+   Timer &operator=(const Timer &) = delete;
+   Timer &operator=(Timer &&) = delete;
 
-  void setUpdateRequestSourceOnlyOverflow(bool enable) const {
-#ifdef TIM_CR1_URS
-    if (enable) {
-      tim.CR1 |= TIM_CR1_URS; // Only counter overflow/underflow generates update
-    } else {
-      tim.CR1 &= ~TIM_CR1_URS; // Any UG or setting generates update
-    }
+   void enableCounter() const {
+      tim.CR1 |= TIM_CR1_CEN;
+   }
+   void disableCounter() const {
+      tim.CR1 &= ~TIM_CR1_CEN;
+   }
+   bool isUpdateFlag() const {
+      return getStatusFlag(TIM_SR_UIF);
+   }
+
+   // Individual flag clearing methods (rc_w0: write 0 to clear)
+   void clearUpdateFlag() const {
+      tim.SR = ~TIM_SR_UIF;
+   }
+   void clearCaptureCompare1Flag() const {
+      tim.SR = ~TIM_SR_CC1IF;
+   }
+   void clearCaptureCompare2Flag() const {
+      tim.SR = ~TIM_SR_CC2IF;
+   }
+   void clearCaptureCompare3Flag() const {
+      tim.SR = ~TIM_SR_CC3IF;
+   }
+   void clearCaptureCompare4Flag() const {
+      tim.SR = ~TIM_SR_CC4IF;
+   }
+
+#if defined(TIM_SR_TIF)
+   void clearOverflowFlag() const {
+      tim.SR = ~TIM_SR_TIF;
+   }
 #endif
-  }
 
-  void setOnePulseMode(bool single) const {
-#ifdef TIM_CR1_OPM
-    if (single) {
-      tim.CR1 |= TIM_CR1_OPM;
-    } else {
-      tim.CR1 &= ~TIM_CR1_OPM;
-    }
+#if defined(TIM_SR_COMIF)
+   void clearControlUpdateFlag() const {
+      tim.SR = ~TIM_SR_COMIF;
+   }
 #endif
-  }
 
-  void setAutoReloadPreload(bool enable) const {
-#ifdef TIM_CR1_ARPE
-    if (enable) {
-      tim.CR1 |= TIM_CR1_ARPE;
-    } else {
-      tim.CR1 &= ~TIM_CR1_ARPE;
-    }
+#if defined(TIM_SR_BIF)
+   void clearBreakFlag() const {
+      tim.SR = ~TIM_SR_BIF;
+   }
 #endif
-  }
 
-  void setDirectionDown(bool down) const {
-#ifdef TIM_CR1_DIR
-    if (down) {
-      tim.CR1 |= TIM_CR1_DIR;
-    } else {
-      tim.CR1 &= ~TIM_CR1_DIR;
-    }
-#endif
-  }
+   void setUpdateRequestSourceOnlyOverflow(bool enable) const {
+      if(enable) {
+         tim.CR1 |= TIM_CR1_URS;
+      } else {
+         tim.CR1 &= ~TIM_CR1_URS;
+      }
+   }
 
-  // Generate update event (load PSC/ARR when ARPE is set)
-  void generateUpdate() const { tim.EGR = TIM_EGR_UG; }
+   void setOnePulseMode(bool single) const {
+      if(single) {
+         tim.CR1 |= TIM_CR1_OPM;
+      } else {
+         tim.CR1 &= ~TIM_CR1_OPM;
+      }
+   }
 
-  // =============================================================
-  // Timing configuration
-  // =============================================================
-  void setPrescaler(uint16_t psc) const { tim.PSC = psc; }
-  uint16_t getPrescaler() const { return static_cast<uint16_t>(tim.PSC); }
+   void setAutoReloadPreload(bool enable) const {
+      if(enable) {
+         tim.CR1 |= TIM_CR1_ARPE;
+      } else {
+         tim.CR1 &= ~TIM_CR1_ARPE;
+      }
+   }
 
-  void setAutoReload(uint32_t arr) const { tim.ARR = arr; }
-  uint32_t getAutoReload() const { return tim.ARR; }
+   void setDirectionDown(bool down) const {
+      if(down) {
+         tim.CR1 |= TIM_CR1_DIR;
+      } else {
+         tim.CR1 &= ~TIM_CR1_DIR;
+      }
+   }
 
-  void setCounter(uint32_t cnt) const { tim.CNT = cnt; }
-  uint32_t getCounter() const { return tim.CNT; }
+   void generateUpdate() const {
+      tim.EGR = TIM_EGR_UG;
+   }
 
-  // =============================================================
-  // DMA enables (if available)
-  // =============================================================
-  void enableUpdateDma() const {
-#ifdef TIM_DIER_UDE
-    tim.DIER |= TIM_DIER_UDE;
-#endif
-  }
-  void disableUpdateDma() const {
-#ifdef TIM_DIER_UDE
-    tim.DIER &= ~TIM_DIER_UDE;
-#endif
-  }
+   void setPrescaler(uint16_t psc) const {
+      tim.PSC = psc;
+   }
+   uint16_t getPrescaler() const {
+      return static_cast<uint16_t>(tim.PSC);
+   }
 
-  void enableCcDma(Channel channel) const {
-#ifdef TIM_DIER_CC1DE
-    tim.DIER |= (TIM_DIER_CC1DE << static_cast<uint8_t>(channel));
-#endif
-  }
-  void disableCcDma(Channel channel) const {
-#ifdef TIM_DIER_CC1DE
-    tim.DIER &= ~(TIM_DIER_CC1DE << static_cast<uint8_t>(channel));
-#endif
-  }
+   void setAutoReload(uint32_t arr) const {
+      tim.ARR = arr;
+   }
+   uint32_t getAutoReload() const {
+      return tim.ARR;
+   }
 
-  // =============================================================
-  // Interrupts
-  // =============================================================
-  void enableUpdateInterrupt() const { tim.DIER |= TIM_DIER_UIE; }
-  void disableUpdateInterrupt() const { tim.DIER &= ~TIM_DIER_UIE; }
-  bool isUpdateInterruptEnabled() const { return (tim.DIER & TIM_DIER_UIE) != 0; }
+   void setCounter(uint32_t cnt) const {
+      tim.CNT = cnt;
+   }
+   uint32_t getCounter() const {
+      return tim.CNT;
+   }
 
-  void enableCcInterrupt(Channel channel) const {
-#ifdef TIM_DIER_CC1IE
-    tim.DIER |= (TIM_DIER_CC1IE << static_cast<uint8_t>(channel));
-#endif
-  }
-  void disableCcInterrupt(Channel channel) const {
-#ifdef TIM_DIER_CC1IE
-    tim.DIER &= ~(TIM_DIER_CC1IE << static_cast<uint8_t>(channel));
-#endif
-  }
+   void enableUpdateDma() const {
+      tim.DIER |= TIM_DIER_UDE;
+   }
+   void disableUpdateDma() const {
+      tim.DIER &= ~TIM_DIER_UDE;
+   }
 
-  // =============================================================
-  // Status flags
-  // =============================================================
-  bool getStatusFlag(uint32_t flag) const { return (tim.SR & flag) == flag; }
-  void clearStatusFlag(uint32_t flag) const { tim.SR &= ~flag; }
+   void enableCcDma(Channel channel) const {
+      tim.DIER |= (TIM_DIER_CC1DE << static_cast<uint8_t>(channel));
+   }
+   void disableCcDma(Channel channel) const {
+      tim.DIER &= ~(TIM_DIER_CC1DE << static_cast<uint8_t>(channel));
+   }
 
-  void clearAllStatusFlags() const {
-    // Clear common flags present on most timers
-    uint32_t mask = 0;
-#ifdef TIM_SR_UIF
-    mask |= TIM_SR_UIF;
-#endif
-#ifdef TIM_SR_CC1IF
-    mask |= TIM_SR_CC1IF;
-#endif
-#ifdef TIM_SR_CC2IF
-    mask |= TIM_SR_CC2IF;
-#endif
-#ifdef TIM_SR_CC3IF
-    mask |= TIM_SR_CC3IF;
-#endif
-#ifdef TIM_SR_CC4IF
-    mask |= TIM_SR_CC4IF;
-#endif
-#ifdef TIM_SR_TIF
-    mask |= TIM_SR_TIF; // Trigger interrupt flag
-#endif
-#ifdef TIM_SR_COMIF
-    mask |= TIM_SR_COMIF; // Commutation flag (advanced timers)
-#endif
-#ifdef TIM_SR_BIF
-    mask |= TIM_SR_BIF; // Break flag (advanced timers)
-#endif
-    if (mask)
-      tim.SR &= ~mask;
-  }
+   void enableUpdateInterrupt() const {
+      tim.DIER |= TIM_DIER_UIE;
+   }
+   void disableUpdateInterrupt() const {
+      tim.DIER &= ~TIM_DIER_UIE;
+   }
+   bool isUpdateInterruptEnabled() const {
+      return (tim.DIER & TIM_DIER_UIE) != 0;
+   }
 
-  bool isUpdateFlag() const {
-#ifdef TIM_SR_UIF
-    return getStatusFlag(TIM_SR_UIF);
-#else
-    return false;
-#endif
-  }
+   void enableCcInterrupt(Channel channel) const {
+      tim.DIER |= (TIM_DIER_CC1IE << static_cast<uint8_t>(channel));
+   }
+   void disableCcInterrupt(Channel channel) const {
+      tim.DIER &= ~(TIM_DIER_CC1IE << static_cast<uint8_t>(channel));
+   }
 
-  // =============================================================
-  // Capture/Compare channels
-  // =============================================================
-  void enableChannel(Channel channel) const {
-#ifdef TIM_CCER_CC1E
-    tim.CCER |= (TIM_CCER_CC1E << (static_cast<uint8_t>(channel) * 4));
-#endif
-  }
+   bool getStatusFlag(uint32_t flag) const {
+      return (tim.SR & flag) == flag;
+   }
+   void clearStatusFlag(uint32_t flag) const {
+      tim.SR = ~flag;
+   }
 
-  void disableChannel(Channel channel) const {
-#ifdef TIM_CCER_CC1E
-    tim.CCER &= ~(TIM_CCER_CC1E << (static_cast<uint8_t>(channel) * 4));
-#endif
-  }
+   void clearAllStatusFlags() const {
+      tim.SR = 0;
+   }
 
-  void setCompare(Channel channel, uint32_t value) const {
-    (&tim.CCR1)[static_cast<uint8_t>(channel)] = value;
-  }
+   // Output Compare mode configuration
+   enum class OcMode : uint32_t {
+      Frozen = 0,
+      ActiveOnMatch = TIM_CCMR1_OC1M_0,
+      InactiveOnMatch = TIM_CCMR1_OC1M_1,
+      Toggle = TIM_CCMR1_OC1M_0 | TIM_CCMR1_OC1M_1,
+      ForceInactive = TIM_CCMR1_OC1M_2,
+      ForceActive = TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_0,
+      Pwm1 = TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1,
+      Pwm2 = TIM_CCMR1_OC1M_2 | TIM_CCMR1_OC1M_1 | TIM_CCMR1_OC1M_0,
+   };
 
-  uint32_t getCompare(Channel channel) const {
-    return (&tim.CCR1)[static_cast<uint8_t>(channel)];
-  }
+   void setOcMode(Channel channel, OcMode mode) const {
+      auto ch = static_cast<uint8_t>(channel);
+      // OC1M bits are at [6:4] in CCMR1 for Ch1, [14:12] for Ch2
+      // CCMR2 holds Ch3 and Ch4
+      volatile uint32_t &ccmr = (ch < 2) ? tim.CCMR1 : tim.CCMR2;
+      uint32_t shift = (ch & 1) ? 8 : 0;
+      uint32_t mask = TIM_CCMR1_OC1M << shift;
+      ccmr = (ccmr & ~mask) | (static_cast<uint32_t>(mode) << shift);
+   }
+
+   void enableOcPreload(Channel channel) const {
+      auto ch = static_cast<uint8_t>(channel);
+      volatile uint32_t &ccmr = (ch < 2) ? tim.CCMR1 : tim.CCMR2;
+      uint32_t shift = (ch & 1) ? 8 : 0;
+      ccmr |= (TIM_CCMR1_OC1PE << shift);
+   }
+
+   void disableOcPreload(Channel channel) const {
+      auto ch = static_cast<uint8_t>(channel);
+      volatile uint32_t &ccmr = (ch < 2) ? tim.CCMR1 : tim.CCMR2;
+      uint32_t shift = (ch & 1) ? 8 : 0;
+      ccmr &= ~(TIM_CCMR1_OC1PE << shift);
+   }
+
+   void setTriggerOutput(uint32_t trgo) const {
+      tim.CR2 = (tim.CR2 & ~TIM_CR2_MMS) | trgo;
+   }
+
+   void disableMasterSlaveMode() const {
+      tim.SMCR &= ~TIM_SMCR_MSM;
+   }
+
+   void enableChannel(Channel channel) const {
+      tim.CCER |= (TIM_CCER_CC1E << (static_cast<uint8_t>(channel) * 4));
+   }
+
+   void disableChannel(Channel channel) const {
+      tim.CCER &= ~(TIM_CCER_CC1E << (static_cast<uint8_t>(channel) * 4));
+   }
+
+   void setCompare(Channel channel, uint32_t value) const {
+      (&tim.CCR1)[static_cast<uint8_t>(channel)] = value;
+   }
+
+   uint32_t getCompare(Channel channel) const {
+      return (&tim.CCR1)[static_cast<uint8_t>(channel)];
+   }
 };
+
+} // namespace hw

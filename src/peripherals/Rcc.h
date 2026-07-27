@@ -25,7 +25,11 @@ enum class SystemClockSource : uint32_t {
 #if defined(RCC_CFGR_SWS_MSI)
    MSI = RCC_CFGR_SWS_MSI,
 #endif
+#if defined(RCC_CFGR_SWS_HSISYS)
+   HSI = RCC_CFGR_SWS_HSISYS,
+#else
    HSI = RCC_CFGR_SWS_HSI,
+#endif
    HSE = RCC_CFGR_SWS_HSE,
 #if defined(RCC_CFGR_SWS_PLL)
    PLL = RCC_CFGR_SWS_PLL,
@@ -171,7 +175,9 @@ uint32_t getHSI16Clock();
 uint32_t getAHBClock();
 #if defined(RCC_CR_HSIKERDIV)
 uint32_t getHSIKerClock();
-#elif defined(RCC_CR_HSION) && !defined(RCC_CR_HSIDIV)
+#elif defined(RCC_CR_HSIDIV)
+uint32_t getHSIKerClock();
+#elif defined(RCC_CR_HSION)
 inline uint32_t getHSIKerClock() {
    return getHSI16Clock();
 }
@@ -190,6 +196,7 @@ inline void clearBit(volatile uint32_t &reg, uint32_t bit) {
 // -----------------
 // GPIO (multiple series compatibility: L0 uses IOPENR/IOPSMENR, others use AHBxENR/AHBSMENR)
 // -----------------
+// STM32L0 uses RCC_IOPENR_IOPxEN naming, STM32G0 uses RCC_IOPENR_GPIOxEN naming
 #if defined(RCC_IOPENR_IOPAEN) && defined(RCC_IOPSMENR_IOPASMEN)
 inline void enableGPIOAClock() {
    detail::setBit(RCC->IOPENR, RCC_IOPENR_IOPAEN);
@@ -211,6 +218,13 @@ inline void enableGPIOAClock() {
 }
 inline void disableGPIOAClock() {
    detail::clearBit(RCC->IOPENR, RCC_IOPENR_IOPAEN);
+}
+#elif defined(RCC_IOPENR_GPIOAEN)
+inline void enableGPIOAClock() {
+   detail::setBit(RCC->IOPENR, RCC_IOPENR_GPIOAEN);
+}
+inline void disableGPIOAClock() {
+   detail::clearBit(RCC->IOPENR, RCC_IOPENR_GPIOAEN);
 }
 #endif
 #if defined(RCC_IOPENR_IOPBEN) && defined(RCC_IOPSMENR_IOPBSMEN)
@@ -235,6 +249,13 @@ inline void enableGPIOBClock() {
 inline void disableGPIOBClock() {
    detail::clearBit(RCC->IOPENR, RCC_IOPENR_IOPBEN);
 }
+#elif defined(RCC_IOPENR_GPIOBEN)
+inline void enableGPIOBClock() {
+   detail::setBit(RCC->IOPENR, RCC_IOPENR_GPIOBEN);
+}
+inline void disableGPIOBClock() {
+   detail::clearBit(RCC->IOPENR, RCC_IOPENR_GPIOBEN);
+}
 #endif
 #if defined(RCC_IOPENR_IOPCEN) && defined(RCC_IOPSMENR_IOPCSMEN)
 inline void enableGPIOCClock() {
@@ -257,6 +278,13 @@ inline void enableGPIOCClock() {
 }
 inline void disableGPIOCClock() {
    detail::clearBit(RCC->IOPENR, RCC_IOPENR_IOPCEN);
+}
+#elif defined(RCC_IOPENR_GPIOCEN)
+inline void enableGPIOCClock() {
+   detail::setBit(RCC->IOPENR, RCC_IOPENR_GPIOCEN);
+}
+inline void disableGPIOCClock() {
+   detail::clearBit(RCC->IOPENR, RCC_IOPENR_GPIOCEN);
 }
 #endif
 #if defined(RCC_IOPENR_IOPDEN) && defined(RCC_IOPSMENR_IOPDSMEN)
@@ -281,6 +309,13 @@ inline void enableGPIODClock() {
 inline void disableGPIODClock() {
    detail::clearBit(RCC->IOPENR, RCC_IOPENR_IOPDEN);
 }
+#elif defined(RCC_IOPENR_GPIODEN)
+inline void enableGPIODClock() {
+   detail::setBit(RCC->IOPENR, RCC_IOPENR_GPIODEN);
+}
+inline void disableGPIODClock() {
+   detail::clearBit(RCC->IOPENR, RCC_IOPENR_GPIODEN);
+}
 #endif
 #if defined(RCC_IOPENR_IOPEEN) && defined(RCC_IOPSMENR_IOPESMEN)
 inline void enableGPIOEClock() {
@@ -303,6 +338,21 @@ inline void enableGPIOEClock() {
 }
 inline void disableGPIOEClock() {
    detail::clearBit(RCC->IOPENR, RCC_IOPENR_IOPEEN);
+}
+#elif defined(RCC_IOPENR_GPIOEEN)
+inline void enableGPIOEClock() {
+   detail::setBit(RCC->IOPENR, RCC_IOPENR_GPIOEEN);
+}
+inline void disableGPIOEClock() {
+   detail::clearBit(RCC->IOPENR, RCC_IOPENR_GPIOEEN);
+}
+#endif
+#if defined(RCC_IOPENR_GPIOFEN)
+inline void enableGPIOFClock() {
+   detail::setBit(RCC->IOPENR, RCC_IOPENR_GPIOFEN);
+}
+inline void disableGPIOFClock() {
+   detail::clearBit(RCC->IOPENR, RCC_IOPENR_GPIOFEN);
 }
 #endif
 #if defined(RCC_IOPENR_IOPHEN) && defined(RCC_IOPSMENR_IOPHSMEN)
@@ -444,6 +494,13 @@ inline void enableSYSCFGClock() {
 inline void disableSYSCFGClock() {
    detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_SYSCFGEN);
 }
+#elif defined(RCC_APBENR2_SYSCFGEN)
+inline void enableSYSCFGClock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_SYSCFGEN);
+}
+inline void disableSYSCFGClock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_SYSCFGEN);
+}
 #elif defined(RCC_APB2SMENR_SYSCFGSMEN)
 inline void enableSYSCFGClockInSleepMode() {
    detail::setBit(RCC->APB2SMENR, RCC_APB2SMENR_SYSCFGSMEN);
@@ -475,6 +532,13 @@ inline void enablePWRClock() {
 }
 inline void disablePWRClock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_PWREN);
+}
+#elif defined(RCC_APBENR1_PWREN)
+inline void enablePWRClock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_PWREN);
+}
+inline void disablePWRClock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_PWREN);
 }
 #elif defined(RCC_APB1SMENR_PWRSMEN)
 inline void enablePWRClockInSleepMode() {
@@ -508,6 +572,13 @@ inline void enableUSART1Clock() {
 inline void disableUSART1Clock() {
    detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_USART1EN);
 }
+#elif defined(RCC_APBENR2_USART1EN)
+inline void enableUSART1Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_USART1EN);
+}
+inline void disableUSART1Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_USART1EN);
+}
 #endif
 #if defined(RCC_APB1ENR_USART2EN)
 inline void enableUSART2Clock() {
@@ -515,6 +586,13 @@ inline void enableUSART2Clock() {
 }
 inline void disableUSART2Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_USART2EN);
+}
+#elif defined(RCC_APBENR1_USART2EN)
+inline void enableUSART2Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_USART2EN);
+}
+inline void disableUSART2Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_USART2EN);
 }
 #endif
 #if defined(RCC_APB1ENR_USART3EN)
@@ -524,6 +602,13 @@ inline void enableUSART3Clock() {
 inline void disableUSART3Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_USART3EN);
 }
+#elif defined(RCC_APBENR1_USART3EN)
+inline void enableUSART3Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_USART3EN);
+}
+inline void disableUSART3Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_USART3EN);
+}
 #endif
 #if defined(RCC_APB1ENR_USART4EN)
 inline void enableUSART4Clock() {
@@ -532,6 +617,13 @@ inline void enableUSART4Clock() {
 inline void disableUSART4Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_USART4EN);
 }
+#elif defined(RCC_APBENR1_USART4EN)
+inline void enableUSART4Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_USART4EN);
+}
+inline void disableUSART4Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_USART4EN);
+}
 #endif
 #if defined(RCC_APB1ENR_USART5EN)
 inline void enableUSART5Clock() {
@@ -539,6 +631,13 @@ inline void enableUSART5Clock() {
 }
 inline void disableUSART5Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_USART5EN);
+}
+#elif defined(RCC_APBENR1_USART5EN)
+inline void enableUSART5Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_USART5EN);
+}
+inline void disableUSART5Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_USART5EN);
 }
 #endif
 #if defined(RCC_APB1ENR_UART4EN)
@@ -615,6 +714,13 @@ inline void enableLPUART1Clock() {
 inline void disableLPUART1Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_LPUART1EN);
 }
+#elif defined(RCC_APBENR1_LPUART1EN)
+inline void enableLPUART1Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_LPUART1EN);
+}
+inline void disableLPUART1Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_LPUART1EN);
+}
 #elif defined(RCC_APB1SMENR_LPUART1SMEN)
 inline void enableLPUART1ClockInSleepMode() {
    detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_LPUART1SMEN);
@@ -647,6 +753,13 @@ inline void enableI2C1Clock() {
 inline void disableI2C1Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_I2C1EN);
 }
+#elif defined(RCC_APBENR1_I2C1EN)
+inline void enableI2C1Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_I2C1EN);
+}
+inline void disableI2C1Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_I2C1EN);
+}
 #endif
 #if defined(RCC_APB1ENR_I2C2EN) && defined(RCC_APB1SMENR_I2C2SMEN)
 inline void enableI2C2Clock() {
@@ -669,6 +782,13 @@ inline void enableI2C2Clock() {
 }
 inline void disableI2C2Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_I2C2EN);
+}
+#elif defined(RCC_APBENR1_I2C2EN)
+inline void enableI2C2Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_I2C2EN);
+}
+inline void disableI2C2Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_I2C2EN);
 }
 #endif
 #if defined(RCC_APB1ENR_I2C3EN) && defined(RCC_APB1SMENR_I2C3SMEN)
@@ -718,6 +838,13 @@ inline void enableSPI1Clock() {
 inline void disableSPI1Clock() {
    detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_SPI1EN);
 }
+#elif defined(RCC_APBENR2_SPI1EN)
+inline void enableSPI1Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_SPI1EN);
+}
+inline void disableSPI1Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_SPI1EN);
+}
 #endif
 #if defined(RCC_APB1ENR_SPI2EN) && defined(RCC_APB1SMENR_SPI2SMEN)
 inline void enableSPI2Clock() {
@@ -740,6 +867,13 @@ inline void enableSPI2Clock() {
 }
 inline void disableSPI2Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_SPI2EN);
+}
+#elif defined(RCC_APBENR1_SPI2EN)
+inline void enableSPI2Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_SPI2EN);
+}
+inline void disableSPI2Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_SPI2EN);
 }
 #endif
 
@@ -765,6 +899,13 @@ inline void enableADC1Clock() {
 }
 inline void disableADC1Clock() {
    detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_ADC1EN);
+}
+#elif defined(RCC_APBENR2_ADCEN)
+inline void enableADC1Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_ADCEN);
+}
+inline void disableADC1Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_ADCEN);
 }
 #elif defined(RCC_APB2SMENR_ADC1SMEN)
 inline void enableADC1ClockInSleepMode() {
@@ -798,6 +939,13 @@ inline void enableTIM2Clock() {
 inline void disableTIM2Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_TIM2EN);
 }
+#elif defined(RCC_APBENR1_TIM2EN)
+inline void enableTIM2Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_TIM2EN);
+}
+inline void disableTIM2Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_TIM2EN);
+}
 #endif
 #if defined(RCC_APB1ENR_TIM3EN) && defined(RCC_APB1SMENR_TIM3SMEN)
 inline void enableTIM3Clock() {
@@ -821,6 +969,13 @@ inline void enableTIM3Clock() {
 inline void disableTIM3Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_TIM3EN);
 }
+#elif defined(RCC_APBENR1_TIM3EN)
+inline void enableTIM3Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_TIM3EN);
+}
+inline void disableTIM3Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_TIM3EN);
+}
 #endif
 #if defined(RCC_APB1ENR_TIM6EN)
 inline void enableTIM6Clock() {
@@ -829,6 +984,13 @@ inline void enableTIM6Clock() {
 inline void disableTIM6Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_TIM6EN);
 }
+#elif defined(RCC_APBENR1_TIM6EN)
+inline void enableTIM6Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_TIM6EN);
+}
+inline void disableTIM6Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_TIM6EN);
+}
 #endif
 #if defined(RCC_APB1ENR_TIM7EN)
 inline void enableTIM7Clock() {
@@ -836,6 +998,13 @@ inline void enableTIM7Clock() {
 }
 inline void disableTIM7Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_TIM7EN);
+}
+#elif defined(RCC_APBENR1_TIM7EN)
+inline void enableTIM7Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_TIM7EN);
+}
+inline void disableTIM7Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_TIM7EN);
 }
 #endif
 #if defined(RCC_APB2ENR_TIM21EN) && defined(RCC_APB2SMENR_TIM21SMEN)
@@ -882,6 +1051,48 @@ inline void enableTIM22Clock() {
 }
 inline void disableTIM22Clock() {
    detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_TIM22EN);
+}
+#endif
+
+// G0-series timers on APB2 (TIM1, TIM14, TIM15, TIM16, TIM17)
+#if defined(RCC_APBENR2_TIM1EN)
+inline void enableTIM1Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM1EN);
+}
+inline void disableTIM1Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM1EN);
+}
+#endif
+#if defined(RCC_APBENR2_TIM14EN)
+inline void enableTIM14Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM14EN);
+}
+inline void disableTIM14Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM14EN);
+}
+#endif
+#if defined(RCC_APBENR2_TIM15EN)
+inline void enableTIM15Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM15EN);
+}
+inline void disableTIM15Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM15EN);
+}
+#endif
+#if defined(RCC_APBENR2_TIM16EN)
+inline void enableTIM16Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM16EN);
+}
+inline void disableTIM16Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM16EN);
+}
+#endif
+#if defined(RCC_APBENR2_TIM17EN)
+inline void enableTIM17Clock() {
+   detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM17EN);
+}
+inline void disableTIM17Clock() {
+   detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM17EN);
 }
 #endif
 
@@ -956,6 +1167,13 @@ inline void enableLPTIM1Clock() {
 }
 inline void disableLPTIM1Clock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_LPTIM1EN);
+}
+#elif defined(RCC_APBENR1_LPTIM1EN)
+inline void enableLPTIM1Clock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_LPTIM1EN);
+}
+inline void disableLPTIM1Clock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_LPTIM1EN);
 }
 #elif defined(RCC_APB1SMENR_LPTIM1SMEN)
 inline void enableLPTIM1ClockInSleepMode() {
@@ -1108,6 +1326,70 @@ inline void disableTSCClockInSleepMode() {
 }
 #endif
 
+// DAC
+#if defined(RCC_APB1ENR_DACEN) && defined(RCC_APB1SMENR_DACSMEN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+   detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_DACSMEN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+   detail::clearBit(RCC->APB1SMENR, RCC_APB1SMENR_DACSMEN);
+}
+inline void enableDACClockInSleepMode() {
+   enableDACClock();
+}
+inline void disableDACClockInSleepMode() {
+   disableDACClock();
+}
+#elif defined(RCC_APB1ENR_DACEN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_DACEN);
+}
+#elif defined(RCC_APB1ENR_DAC1EN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_DAC1EN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_DAC1EN);
+}
+#elif defined(RCC_APBENR1_DAC1EN)
+inline void enableDACClock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_DAC1EN);
+}
+inline void disableDACClock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_DAC1EN);
+}
+#endif
+
+// LSI (Low-Speed Internal oscillator)
+#if defined(RCC_CSR_LSION) && defined(RCC_CSR_LSIRDY)
+inline void enableLSI() {
+   detail::setBit(RCC->CSR, RCC_CSR_LSION);
+   while(!(RCC->CSR & RCC_CSR_LSIRDY)) {
+   }
+}
+inline void disableLSI() {
+   detail::clearBit(RCC->CSR, RCC_CSR_LSION);
+}
+inline bool isLSIReady() {
+   return (RCC->CSR & RCC_CSR_LSIRDY) != 0;
+}
+#endif
+
+// MIF (NVM interface)
+#if defined(RCC_AHBENR_MIFEN)
+inline void enableMIFClock() {
+   detail::setBit(RCC->AHBENR, RCC_AHBENR_MIFEN);
+}
+inline void disableMIFClock() {
+   detail::clearBit(RCC->AHBENR, RCC_AHBENR_MIFEN);
+}
+#endif
+
 // -----------------
 // System clock helpers (guarded for STM32 series that support these bits)
 // -----------------
@@ -1168,6 +1450,148 @@ inline void setClock32MhzHSI() {
    // Switch system clock to PLL
    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_PLL;
    while((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL) {
+   }
+}
+#endif
+
+// Configure system clock to 64 MHz using HSI16 via PLL (STM32G0 series).
+// - Enables HSI16
+// - Sets FLASH latency to 2 wait states (required for >48 MHz)
+// - Enables prefetch and instruction cache
+// - Configures PLL: source HSI16, M=/1, N=x8, R=/2 => 16 MHz * 8 / 2 = 64 MHz
+// - Sets AHB/APB prescalers to DIV1
+// - Switches SYSCLK to PLL and waits until ready
+#if defined(RCC_PLLCFGR_PLLSRC_HSI) && defined(RCC_PLLCFGR_PLLM) && defined(RCC_PLLCFGR_PLLN) &&               \
+defined(RCC_PLLCFGR_PLLR) && defined(RCC_PLLCFGR_PLLREN) && defined(RCC_CR_PLLON) && defined(RCC_CR_PLLRDY) && \
+defined(RCC_CFGR_SW) && defined(RCC_CFGR_SWS) && defined(FLASH_ACR_LATENCY) && defined(RCC_CR_HSIDIV)
+inline void setClock64MhzHSI() {
+   // Enable HSI16 with no division and wait ready
+   RCC->CR = (RCC->CR & ~RCC_CR_HSIDIV);
+   RCC->CR |= RCC_CR_HSION;
+   while((RCC->CR & RCC_CR_HSIRDY) == 0) {
+   }
+
+   // Set flash latency to 2 wait states for 64 MHz, enable prefetch and instruction cache
+   // Note: FLASH_ACR_LATENCY_n defines are bit positions, not wait-state counts.
+   // 2 wait states = value 2 = FLASH_ACR_LATENCY_1 (bit 1).
+   FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | (2UL << FLASH_ACR_LATENCY_Pos)
+#if defined(FLASH_ACR_PRFTEN)
+                | FLASH_ACR_PRFTEN
+#endif
+#if defined(FLASH_ACR_ICEN)
+                | FLASH_ACR_ICEN
+#endif
+   ;
+
+   // Prescalers: AHB=1, APB=1
+   RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_HPRE) | static_cast<uint32_t>(AHBPrescaler::div1);
+
+   // Disable PLL if running
+   if(RCC->CR & RCC_CR_PLLON) {
+      RCC->CR &= ~RCC_CR_PLLON;
+      while(RCC->CR & RCC_CR_PLLRDY) {
+      }
+   }
+
+   // Configure PLL: source = HSI16, M=1 (0b000), N=8, R=2 (0b001)
+   // VCO = 16 MHz / 1 * 8 = 128 MHz, PLLR = 128 / 2 = 64 MHz
+   RCC->PLLCFGR = RCC_PLLCFGR_PLLSRC_HSI          // HSI16 as PLL source
+                  | (0UL << RCC_PLLCFGR_PLLM_Pos) // M = 1 (field value 0)
+                  | (8UL << RCC_PLLCFGR_PLLN_Pos) // N = 8
+                  | (1UL << RCC_PLLCFGR_PLLR_Pos) // R = 2 (field value 1)
+                  | RCC_PLLCFGR_PLLREN;           // Enable PLLR output
+
+   // Enable PLL and wait ready
+   RCC->CR |= RCC_CR_PLLON;
+   while((RCC->CR & RCC_CR_PLLRDY) == 0) {
+   }
+
+   // Switch system clock to PLL
+   RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | (0x2UL << RCC_CFGR_SW_Pos); // PLL = 0b010
+   while((RCC->CFGR & RCC_CFGR_SWS) != (0x2UL << RCC_CFGR_SWS_Pos)) {
+   }
+}
+#endif
+
+// STM32WL: 48 MHz SYSCLK via HSE TCXO through SUBGHZSPI + PLL.
+//
+// Sequence:
+//   1. Voltage range 1 (VOS=01, required for SYSCLK > 16 MHz)
+//   2. Enable TCXO on SX1262 DIO3 via SetTcxoMode (opcode 0x97, 1.8 V, 5 ms timeout)
+//      using the dedicated SUBGHZSPI peripheral — there is no GPIO power pin on STM32WLE5JC.
+//   3. Set flash wait states: 2 WS (FLASH_ACR_LATENCY_1) for 48 MHz at VOS1
+//   4. Enable HSE (32 MHz TCXO drives the HSE input) and wait for HSERDY
+//   5. Configure PLL: HSE (32 MHz) / M=2 * N=6 / R=2 = 48 MHz, enable PLLR output
+//   6. Switch SYSCLK to PLL
+//
+// Guarded by RCC_APB3ENR_SUBGHZSPIEN which is only defined in STM32WL CMSIS headers.
+// This function runs before DATA/BSS initialisation (called from SystemClock_Config),
+// so it must not access global variables — only registers and literal constants.
+#if defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
+inline void setClock48MhzHseTcxo() {
+   // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
+   if((PWR->CR1 & PWR_CR1_VOS) != PWR_CR1_VOS_0) {
+      PWR->CR1 = (PWR->CR1 & ~PWR_CR1_VOS) | PWR_CR1_VOS_0;
+      while(PWR->SR2 & PWR_SR2_VOSF) {
+      }
+   }
+
+   // 2. Enable TCXO via SX1262 SUBGHZSPI SetTcxoMode command.
+   RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
+   RCC->APB3RSTR |= RCC_APB3RSTR_SUBGHZSPIRST;
+   RCC->APB3RSTR &= ~RCC_APB3RSTR_SUBGHZSPIRST;
+   // 8-bit data frame, RXFIFO threshold = 1 byte
+   SUBGHZSPI->CR2 = SPI_CR2_FRXTH | (7u << SPI_CR2_DS_Pos);
+   // Master, mode 0, BR=001 (~1 MHz on MSI), software NSS
+   SUBGHZSPI->CR1 = SPI_CR1_MSTR | SPI_CR1_BR_0 | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE;
+   // Route NSS to PWR_SUBGHZSPICR for software control
+   PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
+   while(PWR->SR2 & PWR_SR2_RFBUSYS) {
+   }
+   PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
+   while(PWR->SR2 & PWR_SR2_RFBUSYS) {
+   }
+   // SetTcxoMode: opcode 0x97, voltage 0x02 (1.8 V), timeout 0x000140 (320 * 15.625 µs = 5 ms)
+   const uint8_t cmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
+   for(uint32_t i = 0u; i < sizeof(cmd); ++i) {
+      while(!(SUBGHZSPI->SR & SPI_SR_TXE)) {
+      }
+      *(volatile uint8_t *)&SUBGHZSPI->DR = cmd[i];
+      while(!(SUBGHZSPI->SR & SPI_SR_RXNE)) {
+      }
+      (void)*(volatile uint8_t *)&SUBGHZSPI->DR;
+   }
+   while(SUBGHZSPI->SR & SPI_SR_BSY) {
+   }
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+   SUBGHZSPI->CR1 &= ~SPI_CR1_SPE;
+   // Spin ~5 ms at reset clock (MSI 4 MHz ≈ 4 cycles/iteration)
+   volatile uint32_t ticks = 20000u;
+   while(ticks--) {
+   }
+
+   // 3. Flash wait states: 2 WS required for SYSCLK > 36 MHz at VOS1
+   FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_1;
+   while((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_1) {
+   }
+
+   // 4. Enable HSE and wait for oscillator ready
+   RCC->CR |= RCC_CR_HSEON;
+   while(!(RCC->CR & RCC_CR_HSERDY)) {
+   }
+
+   // 5. Configure and enable PLL
+   //    PLLSRC = HSE (11), PLLM = 001 (÷2), PLLN = 6, PLLR = 000 (÷2), PLLREN = 1
+   RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
+                  RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
+   RCC->CR |= RCC_CR_PLLON;
+   while(!(RCC->CR & RCC_CR_PLLRDY)) {
+   }
+
+   // 6. Switch SYSCLK to PLL (SW = 11) and wait for hardware confirmation
+   RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_0 | RCC_CFGR_SW_1;
+   while((RCC->CFGR & RCC_CFGR_SWS) != (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1)) {
    }
 }
 #endif

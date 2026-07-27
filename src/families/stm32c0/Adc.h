@@ -125,6 +125,11 @@ struct Adc {
    explicit Adc(ADC_TypeDef *adc)
       : _adc(*adc) {}
 
+   Adc(const Adc &) = default;
+   Adc(Adc &&) = default;
+   Adc &operator=(const Adc &) = delete;
+   Adc &operator=(Adc &&) = delete;
+
 
    void enable() const;
    void disable() const;
