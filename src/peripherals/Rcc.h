@@ -1524,10 +1524,10 @@ inline void setClock64MhzHSI() {
 //   5. Configure PLL: HSE (32 MHz) / M=2 * N=6 / R=2 = 48 MHz, enable PLLR output
 //   6. Switch SYSCLK to PLL
 //
-// Guarded by RCC_APB3ENR_SUBGHZSPIEN which is only defined in STM32WL CMSIS headers.
+// Guarded by RCC_CR_HSEBYPPWR which is only defined in STM32WL CMSIS headers.
 // This function runs before DATA/BSS initialisation (called from SystemClock_Config),
 // so it must not access global variables — only registers and literal constants.
-#if defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
+#if defined(RCC_CR_HSEBYPPWR) && defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
 inline void setClock48MhzHseTcxo() {
    // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
    if((PWR->CR1 & PWR_CR1_VOS) != PWR_CR1_VOS_0) {
@@ -1576,7 +1576,11 @@ inline void setClock48MhzHseTcxo() {
    while((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_1) {
    }
 
-   // 4. Enable HSE and wait for oscillator ready
+   // 4. Enable HSE in bypass/TCXO mode and wait for oscillator ready.
+   //    HSEBYPPWR must be set before HSEON so the oscillator driver treats the input
+   //    as an external clock (TCXO) rather than a crystal — without it HSERDY never asserts.
+   //    PLL input: 32 MHz (HSE) / PLLM=÷2 = 16 MHz, which is the rated PLL-input maximum.
+   RCC->CR |= RCC_CR_HSEBYPPWR;
    RCC->CR |= RCC_CR_HSEON;
    while(!(RCC->CR & RCC_CR_HSERDY)) {
    }
