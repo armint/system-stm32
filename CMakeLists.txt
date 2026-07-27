@@ -145,6 +145,15 @@ add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 # Select device and family macros for CMSIS headers so sources compile
 target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY} ${STM32_DEVICE})
 
+# STM32WL uses SRAM1_BASE (no generic SRAM_BASE alias) and has 78 vectors
+# (16 core exceptions + 62 device IRQs).
+if(STM32_FAMILY STREQUAL "STM32WL")
+    target_compile_definitions(system-stm32 PRIVATE
+        SRAM_BASE=SRAM1_BASE
+        VECTOR_TABLE_SIZE=78
+    )
+endif()
+
 target_include_directories(
         system-stm32
         PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
