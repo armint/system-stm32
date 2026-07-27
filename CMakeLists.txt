@@ -113,6 +113,17 @@ if(ACTIVE_FAMILY_SOURCES)
     list(APPEND PROJECT_SOURCES ${ACTIVE_FAMILY_SOURCES})
 endif()
 
+# When the consumer provides its own startup (e.g. µOS++ IIIe), exclude the
+# system-stm32 startup and assert stubs to avoid multiple-definition errors.
+option(SYSTEM_STM32_EXCLUDE_STARTUP
+    "Exclude startup.cpp and assert.c (use when an external RTOS provides these)" OFF)
+if(SYSTEM_STM32_EXCLUDE_STARTUP)
+    list(REMOVE_ITEM PROJECT_SOURCES
+        "${PROJECT_SOURCE_DIR}/src/startup.cpp"
+        "${PROJECT_SOURCE_DIR}/src/assert.c"
+    )
+endif()
+
 # Exclude peripheral and utility files that use family-specific register names
 # not yet ported to STM32WL.  WL-specific implementations will be added to
 # src/families/stm32wl/ in a later step.
