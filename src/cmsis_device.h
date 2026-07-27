@@ -5,4 +5,6 @@
 #include <stm32c0xx.h>
 #elif defined(STM32G0)
 #include <stm32g0xx.h>
+#elif defined(STM32WL)
+#include <stm32wlxx.h>
 #endif
