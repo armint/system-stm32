@@ -1513,4 +1513,87 @@ inline void setClock64MhzHSI() {
 }
 #endif
 
+// STM32WL: 48 MHz SYSCLK via HSE TCXO through SUBGHZSPI + PLL.
+//
+// Sequence:
+//   1. Voltage range 1 (VOS=01, required for SYSCLK > 16 MHz)
+//   2. Enable TCXO on SX1262 DIO3 via SetTcxoMode (opcode 0x97, 1.8 V, 5 ms timeout)
+//      using the dedicated SUBGHZSPI peripheral — there is no GPIO power pin on STM32WLE5JC.
+//   3. Set flash wait states: 2 WS (FLASH_ACR_LATENCY_1) for 48 MHz at VOS1
+//   4. Enable HSE (32 MHz TCXO drives the HSE input) and wait for HSERDY
+//   5. Configure PLL: HSE (32 MHz) / M=2 * N=6 / R=2 = 48 MHz, enable PLLR output
+//   6. Switch SYSCLK to PLL
+//
+// Guarded by RCC_APB3ENR_SUBGHZSPIEN which is only defined in STM32WL CMSIS headers.
+// This function runs before DATA/BSS initialisation (called from SystemClock_Config),
+// so it must not access global variables — only registers and literal constants.
+#if defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
+inline void setClock48MhzHseTcxo() {
+   // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
+   if((PWR->CR1 & PWR_CR1_VOS) != PWR_CR1_VOS_0) {
+      PWR->CR1 = (PWR->CR1 & ~PWR_CR1_VOS) | PWR_CR1_VOS_0;
+      while(PWR->SR2 & PWR_SR2_VOSF) {
+      }
+   }
+
+   // 2. Enable TCXO via SX1262 SUBGHZSPI SetTcxoMode command.
+   RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
+   RCC->APB3RSTR |= RCC_APB3RSTR_SUBGHZSPIRST;
+   RCC->APB3RSTR &= ~RCC_APB3RSTR_SUBGHZSPIRST;
+   // 8-bit data frame, RXFIFO threshold = 1 byte
+   SUBGHZSPI->CR2 = SPI_CR2_FRXTH | (7u << SPI_CR2_DS_Pos);
+   // Master, mode 0, BR=001 (~1 MHz on MSI), software NSS
+   SUBGHZSPI->CR1 = SPI_CR1_MSTR | SPI_CR1_BR_0 | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE;
+   // Route NSS to PWR_SUBGHZSPICR for software control
+   PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
+   while(PWR->SR2 & PWR_SR2_RFBUSYS) {
+   }
+   PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
+   while(PWR->SR2 & PWR_SR2_RFBUSYS) {
+   }
+   // SetTcxoMode: opcode 0x97, voltage 0x02 (1.8 V), timeout 0x000140 (320 * 15.625 µs = 5 ms)
+   const uint8_t cmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
+   for(uint32_t i = 0u; i < sizeof(cmd); ++i) {
+      while(!(SUBGHZSPI->SR & SPI_SR_TXE)) {
+      }
+      *(volatile uint8_t *)&SUBGHZSPI->DR = cmd[i];
+      while(!(SUBGHZSPI->SR & SPI_SR_RXNE)) {
+      }
+      (void)*(volatile uint8_t *)&SUBGHZSPI->DR;
+   }
+   while(SUBGHZSPI->SR & SPI_SR_BSY) {
+   }
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+   SUBGHZSPI->CR1 &= ~SPI_CR1_SPE;
+   // Spin ~5 ms at reset clock (MSI 4 MHz ≈ 4 cycles/iteration)
+   volatile uint32_t ticks = 20000u;
+   while(ticks--) {
+   }
+
+   // 3. Flash wait states: 2 WS required for SYSCLK > 36 MHz at VOS1
+   FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | FLASH_ACR_LATENCY_1;
+   while((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_1) {
+   }
+
+   // 4. Enable HSE and wait for oscillator ready
+   RCC->CR |= RCC_CR_HSEON;
+   while(!(RCC->CR & RCC_CR_HSERDY)) {
+   }
+
+   // 5. Configure and enable PLL
+   //    PLLSRC = HSE (11), PLLM = 001 (÷2), PLLN = 6, PLLR = 000 (÷2), PLLREN = 1
+   RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
+                  RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
+   RCC->CR |= RCC_CR_PLLON;
+   while(!(RCC->CR & RCC_CR_PLLRDY)) {
+   }
+
+   // 6. Switch SYSCLK to PLL (SW = 11) and wait for hardware confirmation
+   RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_0 | RCC_CFGR_SW_1;
+   while((RCC->CFGR & RCC_CFGR_SWS) != (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1)) {
+   }
+}
+#endif
+
 } // namespace Rcc
