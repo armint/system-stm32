@@ -26,13 +26,21 @@ enum class SystemClockSource : uint32_t {
    MSI = RCC_CFGR_SWS_MSI,
 #endif
 #if defined(RCC_CFGR_SWS_HSISYS)
+   // STM32G0: SWS field uses named HSISYS alias
    HSI = RCC_CFGR_SWS_HSISYS,
-#else
-   HSI = RCC_CFGR_SWS_HSI,
-#endif
    HSE = RCC_CFGR_SWS_HSE,
-#if defined(RCC_CFGR_SWS_PLL)
+#elif defined(RCC_CFGR_SWS_HSI)
+   // STM32L0 and similar: named HSI/HSE/PLL aliases
+   HSI = RCC_CFGR_SWS_HSI,
+   HSE = RCC_CFGR_SWS_HSE,
+#  if defined(RCC_CFGR_SWS_PLL)
    PLL = RCC_CFGR_SWS_PLL,
+#  endif
+#elif defined(RCC_CFGR_SWS_0)
+   // STM32WL: only bit-position defines; SWS encoding: 00=MSI, 01=HSI16, 10=HSE, 11=PLL
+   HSI = RCC_CFGR_SWS_0,
+   HSE = RCC_CFGR_SWS_1,
+   PLL = RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1,
 #endif
 #if defined(RCC_CFGR_SWS_LSI)
    LSI = RCC_CFGR_SWS_LSI,
