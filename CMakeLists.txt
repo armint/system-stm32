@@ -113,6 +113,23 @@ if(ACTIVE_FAMILY_SOURCES)
     list(APPEND PROJECT_SOURCES ${ACTIVE_FAMILY_SOURCES})
 endif()
 
+# Exclude peripheral and utility files that use family-specific register names
+# not yet ported to STM32WL.  WL-specific implementations will be added to
+# src/families/stm32wl/ in a later step.
+if(STM32_FAMILY STREQUAL "STM32WL")
+    set(_WL_EXCLUDE
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Rcc.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/I2c.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Spi.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
+        "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
+    )
+    foreach(_excl ${_WL_EXCLUDE})
+        list(REMOVE_ITEM PROJECT_SOURCES "${_excl}")
+    endforeach()
+endif()
+
 file(GLOB_RECURSE PROJECT_HEADERS
         "src/*.h"
         "src/*.hpp")
