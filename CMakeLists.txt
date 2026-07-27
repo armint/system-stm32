@@ -113,6 +113,23 @@ if(ACTIVE_FAMILY_SOURCES)
     list(APPEND PROJECT_SOURCES ${ACTIVE_FAMILY_SOURCES})
 endif()
 
+# Exclude peripheral and utility files that use family-specific register names
+# not yet ported to STM32WL.  WL-specific implementations will be added to
+# src/families/stm32wl/ in a later step.
+if(STM32_FAMILY STREQUAL "STM32WL")
+    set(_WL_EXCLUDE
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Rcc.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/I2c.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Spi.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
+        "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
+    )
+    foreach(_excl ${_WL_EXCLUDE})
+        list(REMOVE_ITEM PROJECT_SOURCES "${_excl}")
+    endforeach()
+endif()
+
 file(GLOB_RECURSE PROJECT_HEADERS
         "src/*.h"
         "src/*.hpp")
@@ -127,6 +144,15 @@ add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 
 # Select device and family macros for CMSIS headers so sources compile
 target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY} ${STM32_DEVICE})
+
+# STM32WL uses SRAM1_BASE (no generic SRAM_BASE alias) and has 78 vectors
+# (16 core exceptions + 62 device IRQs).
+if(STM32_FAMILY STREQUAL "STM32WL")
+    target_compile_definitions(system-stm32 PRIVATE
+        SRAM_BASE=SRAM1_BASE
+        VECTOR_TABLE_SIZE=78
+    )
+endif()
 
 target_include_directories(
         system-stm32
