@@ -56,11 +56,19 @@ enum class AHBPrescaler : uint32_t {
 enum class APBPrescaler : uint32_t {
    div1 = 0,
 #if defined(RCC_CFGR_PPRE1_DIV2)
+   // STM32L0 and similar: named DIV defines
    div2 = RCC_CFGR_PPRE1_DIV2,
    div4 = RCC_CFGR_PPRE1_DIV4,
    div8 = RCC_CFGR_PPRE1_DIV8,
    div16 = RCC_CFGR_PPRE1_DIV16,
+#elif defined(RCC_CFGR_PPRE1_2)
+   // STM32WL and similar: PPRE1_x bit defines (encoding: 1xx = divide, xx = shift)
+   div2 = RCC_CFGR_PPRE1_2,
+   div4 = RCC_CFGR_PPRE1_2 | RCC_CFGR_PPRE1_0,
+   div8 = RCC_CFGR_PPRE1_2 | RCC_CFGR_PPRE1_1,
+   div16 = RCC_CFGR_PPRE1_2 | RCC_CFGR_PPRE1_1 | RCC_CFGR_PPRE1_0,
 #else
+   // STM32G0 and similar: PPRE_x bit defines
    div2 = RCC_CFGR_PPRE_2,
    div4 = RCC_CFGR_PPRE_2 | RCC_CFGR_PPRE_0,
    div8 = RCC_CFGR_PPRE_2 | RCC_CFGR_PPRE_1,
