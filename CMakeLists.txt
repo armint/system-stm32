@@ -5,8 +5,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake")
 Include(FetchContent)
 
 # Default to STM32L0 if not specified
-set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0)")
-set(STM32_DEVICE "STM32L073xx" CACHE STRING "STM32 device define for CMSIS (e.g., STM32L073xx, STM32G071xx, STM32G0B1xx)")
+set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0, STM32WL)")
+set(STM32_DEVICE "STM32L073xx" CACHE STRING "STM32 device define for CMSIS (e.g., STM32L073xx, STM32G071xx, STM32G0B1xx, STM32WLE5xx)")
 
 # Use a family-specific FetchContent name so different STM32 families
 # can coexist in a shared FETCHCONTENT_BASE_DIR.
@@ -32,6 +32,12 @@ elseif (STM32_FAMILY STREQUAL "STM32G0")
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_g0.git
             GIT_TAG v1.4.4
     )
+elseif (STM32_FAMILY STREQUAL "STM32WL")
+    FetchContent_Declare(
+            ${_cmsis_device_name}
+            GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_wl.git
+            GIT_TAG v1.4.0
+    )
 endif()
 
 FetchContent_GetProperties(${_cmsis_device_name})
@@ -42,10 +48,17 @@ endif ()
 # Alias for the rest of this file
 set(cmsis_device_SOURCE_DIR "${${_cmsis_device_name}_SOURCE_DIR}")
 
+# STM32WL uses a Cortex-M4 application core; all other supported families use Cortex-M0+.
+if (STM32_FAMILY STREQUAL "STM32WL")
+    set(_cmsis_core_tag "v5.4.0_cm4")
+else()
+    set(_cmsis_core_tag "v5.4.0_cm0")
+endif()
+
 FetchContent_Declare(
         cmsis_core
         GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_core.git
-        GIT_TAG v5.4.0_cm0
+        GIT_TAG ${_cmsis_core_tag}
 )
 
 FetchContent_GetProperties(cmsis_core)
@@ -77,6 +90,8 @@ elseif (STM32_FAMILY STREQUAL "STM32C0")
     file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32c0xx.c")
 elseif (STM32_FAMILY STREQUAL "STM32G0")
     file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32g0xx.c")
+elseif (STM32_FAMILY STREQUAL "STM32WL")
+    file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32wlxx.c")
 endif()
 
 # Gather all project sources
