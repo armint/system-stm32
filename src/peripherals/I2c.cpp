@@ -150,26 +150,33 @@ void I2c::transmit(uint8_t slaveAddress,
    // Transmit data
    for(uint8_t i = 0; i < length; ++i) {
       while(!isTxEmpty()) {
-         // Check for NACK or errors
          if(isNackReceived()) {
-             clearNackFlag();
-             return;
+            clearNackFlag();
+            generateStop();
+            return;
          }
       }
       write(data[i]);
    }
 
-   // Wait for transfer to complete
-   while(!isTransferComplete()) {
-      if(isNackReceived()) {
-          clearNackFlag();
-          return;
+   if(stopCondition) {
+      // AUTOEND=1: hardware generates STOP automatically; wait for STOPF.
+      // TC is never set when AUTOEND is active.
+      while(!isStopSent()) {
+         if(isNackReceived()) {
+            clearNackFlag();
+            return;
+         }
       }
-   }
-
-   // Clear flags if autoEnd is disabled
-   if(!stopCondition) {
-      // For manual stop, usually handled by caller or next transfer
+      clearStopFlag();
+   } else {
+      // AUTOEND=0: wait for TC, then caller issues STOP or repeated-START.
+      while(!isTransferComplete()) {
+         if(isNackReceived()) {
+            clearNackFlag();
+            return;
+         }
+      }
    }
 }
 
@@ -200,12 +207,23 @@ void I2c::receive(uint8_t slaveAddress,
       data[i] = read();
    }
 
-   // Wait for transfer to complete
-   while(!isTransferComplete()) {
-       if(isNackReceived()) {
-             clearNackFlag();
-             return;
+   if(stopCondition) {
+      // AUTOEND=1: hardware generates STOP automatically; wait for STOPF.
+      while(!isStopSent()) {
+         if(isNackReceived()) {
+            clearNackFlag();
+            return;
          }
+      }
+      clearStopFlag();
+   } else {
+      // AUTOEND=0: wait for TC, then caller issues STOP or repeated-START.
+      while(!isTransferComplete()) {
+         if(isNackReceived()) {
+            clearNackFlag();
+            return;
+         }
+      }
    }
 }
 
