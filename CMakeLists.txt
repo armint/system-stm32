@@ -124,14 +124,12 @@ if(SYSTEM_STM32_EXCLUDE_STARTUP)
     )
 endif()
 
-# Exclude peripheral and utility files that use family-specific register names
-# not yet ported to STM32WL.  WL-specific implementations will be added to
-# src/families/stm32wl/ in a later step.
+# Exclude peripheral files whose register-level code is not yet ported to
+# STM32WL.  Rcc.cpp and I2c.cpp have been updated with WL-specific branches
+# and are included unconditionally.
 if(STM32_FAMILY STREQUAL "STM32WL")
     set(_WL_EXCLUDE
         "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
-        "${PROJECT_SOURCE_DIR}/src/peripherals/Rcc.cpp"
-        "${PROJECT_SOURCE_DIR}/src/peripherals/I2c.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Spi.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
         "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"

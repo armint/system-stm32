@@ -404,7 +404,14 @@ inline void disableGPIOAClock() {
    detail::clearBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOAEN);
 }
 #endif
-#if defined(RCC_AHB1ENR_GPIOBEN)
+#if defined(RCC_AHB2ENR_GPIOBEN)
+inline void enableGPIOBClock() {
+   detail::setBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOBEN);
+}
+inline void disableGPIOBClock() {
+   detail::clearBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOBEN);
+}
+#elif defined(RCC_AHB1ENR_GPIOBEN)
 inline void enableGPIOBClock() {
    detail::setBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOBEN);
 }
@@ -747,7 +754,15 @@ inline void disableLPUART1ClockInSleepMode() {
 #endif
 
 // I2C
-#if defined(RCC_APB1ENR_I2C1EN) && defined(RCC_APB1SMENR_I2C1SMEN)
+#if defined(RCC_APB1ENR1_I2C1EN)
+// STM32WL and similar: I2C1 clock on APB1ENR1
+inline void enableI2C1Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C1EN);
+}
+inline void disableI2C1Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C1EN);
+}
+#elif defined(RCC_APB1ENR_I2C1EN) && defined(RCC_APB1SMENR_I2C1SMEN)
 inline void enableI2C1Clock() {
    detail::setBit(RCC->APB1ENR, RCC_APB1ENR_I2C1EN);
    detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_I2C1SMEN);

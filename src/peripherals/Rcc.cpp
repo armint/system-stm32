@@ -44,7 +44,7 @@ uint32_t getAPB2Clock() {
 }
 #endif
 
-#if defined(RCC_CR_HSION) && !defined(RCC_CR_HSIDIV)
+#if defined(RCC_CR_HSIDIVEN)
 uint32_t getHSI16Clock() {
    if(RCC->CR & RCC_CR_HSIDIVEN) {
       return 16000000UL / 4;
