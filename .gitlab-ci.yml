@@ -1,0 +1,58 @@
+stages:
+  - build
+
+image: "docker.vandertogt.org/firmware-builder:v1.14.0"
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: "$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS"
+      when: never
+    - if: "$CI_COMMIT_BRANCH"
+
+# Builds the system-stm32 OBJECT library standalone (no linking needed) for
+# every STM32 family this repo claims to support. Each family exercises a
+# different CMSIS device header and register layout, so this is the only
+# thing that actually catches family-specific regressions (e.g. a fix that
+# only works on WL because that's the only family anyone builds downstream).
+build:
+  stage: build
+  variables:
+    GIT_DEPTH: 0
+  parallel:
+    matrix:
+      - STM32_FAMILY: STM32L0
+        STM32_DEVICE: STM32L073xx
+      - STM32_FAMILY: STM32G0
+        STM32_DEVICE: STM32G071xx
+      - STM32_FAMILY: STM32WL
+        STM32_DEVICE: STM32WLE5xx
+  script:
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D CMAKE_BUILD_TYPE=Release
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+    - cmake --build build --target system-stm32 -j$(nproc)
+
+# STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
+# branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
+# and VECTOR_TABLE_SIZE is only ever defined for STM32WL. Kept here
+# non-blocking so the gap stays visible instead of silently untracked, until
+# C0 support is actually implemented.
+build-c0-known-broken:
+  stage: build
+  allow_failure: true
+  variables:
+    GIT_DEPTH: 0
+    STM32_FAMILY: STM32C0
+    STM32_DEVICE: STM32C031xx
+  script:
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D CMAKE_BUILD_TYPE=Release
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+    - cmake --build build --target system-stm32 -j$(nproc)
