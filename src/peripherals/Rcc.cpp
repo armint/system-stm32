@@ -51,6 +51,10 @@ uint32_t getHSI16Clock() {
    }
    return 16000000UL;
 }
+#elif defined(RCC_CR_HSION) && !defined(RCC_CR_HSIDIV)
+uint32_t getHSI16Clock() {
+   return 16000000UL;
+}
 #endif
 
 uint32_t getAHBClock() {

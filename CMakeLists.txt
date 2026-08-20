@@ -131,7 +131,6 @@ if(STM32_FAMILY STREQUAL "STM32WL")
     set(_WL_EXCLUDE
         "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Spi.cpp"
-        "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
         "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
     )
     foreach(_excl ${_WL_EXCLUDE})
