@@ -24,7 +24,7 @@ elseif (STM32_FAMILY STREQUAL "STM32C0")
     FetchContent_Declare(
             ${_cmsis_device_name}
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_c0.git
-            GIT_TAG v1.0.1
+            GIT_TAG v1.0.0
     )
 elseif (STM32_FAMILY STREQUAL "STM32G0")
     FetchContent_Declare(
@@ -70,6 +70,11 @@ project(system-stm32
         LANGUAGES C CXX ASM
         VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_BUILD}"
 )
+
+# Provides CMAKE_INSTALL_*DIR defaults for the install() calls below. A
+# consuming superproject may already have included this; the module guards
+# against being processed twice.
+include(GNUInstallDirs)
 
 # Add our CMAKE modules folder
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
