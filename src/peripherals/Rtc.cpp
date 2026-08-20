@@ -40,8 +40,14 @@ constexpr uint32_t kLsiFrequencyHz = 32000u;
 // Wakeup Timer (WUT) Configuration
 constexpr uint32_t kWutClockDivider = 16u;            // RTCCLK / 16
 constexpr uint32_t kShortRangeMaxDurationMs = 32000u; // Max duration (ms) for RTCCLK/16 resolution
-constexpr uint32_t kMaxWutrTicks = 0x10000u;         // 16-bit counter max value (2^16)
-constexpr uint32_t kMaxExtendedWutrTicks = 0x20000u; // 17-bit counter max value (2^17)
+constexpr uint32_t kMaxWutrTicks = 0x10000u; // Max period (ticks) representable by the
+                                              // 16-bit WUTR counter (0 to 0xFFFF, i.e.
+                                              // up to 0x10000 ticks)
+constexpr uint32_t kMaxExtendedWutrTicks =
+    0x20000u; // Max period (seconds) representable with the 2^16 WUTR offset
+              // added (17-bit range)
+constexpr uint32_t kWutrExtendedOffset =
+    0x10000u; // Offset WUCKSEL=110 adds to the WUTR counter value
 
 // WUCKSEL clock selections in RTC_CR
 constexpr uint32_t kWuckselRtcClkDiv16 = 0u; // 000: RTCCLK/16
@@ -205,7 +211,7 @@ bool Rtc::armWakeup(uint32_t durationMs) const {
         seconds = kMaxExtendedWutrTicks;
       }
       wucksel = kWuckselCkSpreExtended; // 110: ck_spre with 2^16 added
-      wutr = seconds - kMaxWutrTicks - 1u;
+      wutr = seconds - kWutrExtendedOffset - 1u;
     }
   }
 
