@@ -39,7 +39,12 @@ uint32_t Usart::getClockFrequency() const {
          break;
       default:
       case ClockSource::PCLK:
+#if defined(RCC_CFGR_PPRE2)
+         // USART1 is on APB2 on parts that split APB1/APB2 (e.g. STM32WL).
+         clk = Rcc::getAPB2Clock();
+#else
          clk = Rcc::getAPBClock();
+#endif
          break;
       }
    } else {
