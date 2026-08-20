@@ -396,7 +396,14 @@ inline void disableGPIOHClock() {
 #endif
 
 // Alternative GPIO for other series (AHB1ENR/AHB2ENR etc.)
-#if defined(RCC_AHB1ENR_GPIOAEN)
+#if defined(RCC_AHB2ENR_GPIOAEN)
+inline void enableGPIOAClock() {
+   detail::setBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOAEN);
+}
+inline void disableGPIOAClock() {
+   detail::clearBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOAEN);
+}
+#elif defined(RCC_AHB1ENR_GPIOAEN)
 inline void enableGPIOAClock() {
    detail::setBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOAEN);
 }
@@ -419,7 +426,14 @@ inline void disableGPIOBClock() {
    detail::clearBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOBEN);
 }
 #endif
-#if defined(RCC_AHB1ENR_GPIOCEN)
+#if defined(RCC_AHB2ENR_GPIOCEN)
+inline void enableGPIOCClock() {
+   detail::setBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOCEN);
+}
+inline void disableGPIOCClock() {
+   detail::clearBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOCEN);
+}
+#elif defined(RCC_AHB1ENR_GPIOCEN)
 inline void enableGPIOCClock() {
    detail::setBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOCEN);
 }
@@ -792,7 +806,29 @@ inline void disableI2C1Clock() {
    detail::clearBit(RCC->APBENR1, RCC_APBENR1_I2C1EN);
 }
 #endif
-#if defined(RCC_APB1ENR_I2C2EN) && defined(RCC_APB1SMENR_I2C2SMEN)
+#if defined(RCC_APB1ENR1_I2C2EN) && defined(RCC_APB1SMENR1_I2C2SMEN)
+inline void enableI2C2Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C2EN);
+   detail::setBit(RCC->APB1SMENR1, RCC_APB1SMENR1_I2C2SMEN);
+}
+inline void disableI2C2Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C2EN);
+   detail::clearBit(RCC->APB1SMENR1, RCC_APB1SMENR1_I2C2SMEN);
+}
+inline void enableI2C2ClockInSleepMode() {
+   enableI2C2Clock();
+}
+inline void disableI2C2ClockInSleepMode() {
+   disableI2C2Clock();
+}
+#elif defined(RCC_APB1ENR1_I2C2EN)
+inline void enableI2C2Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C2EN);
+}
+inline void disableI2C2Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C2EN);
+}
+#elif defined(RCC_APB1ENR_I2C2EN) && defined(RCC_APB1SMENR_I2C2SMEN)
 inline void enableI2C2Clock() {
    detail::setBit(RCC->APB1ENR, RCC_APB1ENR_I2C2EN);
    detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_I2C2SMEN);
@@ -822,7 +858,29 @@ inline void disableI2C2Clock() {
    detail::clearBit(RCC->APBENR1, RCC_APBENR1_I2C2EN);
 }
 #endif
-#if defined(RCC_APB1ENR_I2C3EN) && defined(RCC_APB1SMENR_I2C3SMEN)
+#if defined(RCC_APB1ENR1_I2C3EN) && defined(RCC_APB1SMENR1_I2C3SMEN)
+inline void enableI2C3Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C3EN);
+   detail::setBit(RCC->APB1SMENR1, RCC_APB1SMENR1_I2C3SMEN);
+}
+inline void disableI2C3Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C3EN);
+   detail::clearBit(RCC->APB1SMENR1, RCC_APB1SMENR1_I2C3SMEN);
+}
+inline void enableI2C3ClockInSleepMode() {
+   enableI2C3Clock();
+}
+inline void disableI2C3ClockInSleepMode() {
+   disableI2C3Clock();
+}
+#elif defined(RCC_APB1ENR1_I2C3EN)
+inline void enableI2C3Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C3EN);
+}
+inline void disableI2C3Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_I2C3EN);
+}
+#elif defined(RCC_APB1ENR_I2C3EN) && defined(RCC_APB1SMENR_I2C3SMEN)
 inline void enableI2C3Clock() {
    detail::setBit(RCC->APB1ENR, RCC_APB1ENR_I2C3EN);
    detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_I2C3SMEN);
