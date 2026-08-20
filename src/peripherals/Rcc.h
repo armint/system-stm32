@@ -473,7 +473,14 @@ inline void disableGPIOGClock() {
    detail::clearBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOGEN);
 }
 #endif
-#if defined(RCC_AHB1ENR_GPIOHEN)
+#if defined(RCC_AHB2ENR_GPIOHEN)
+inline void enableGPIOHClock() {
+   detail::setBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOHEN);
+}
+inline void disableGPIOHClock() {
+   detail::clearBit(RCC->AHB2ENR, RCC_AHB2ENR_GPIOHEN);
+}
+#elif defined(RCC_AHB1ENR_GPIOHEN)
 inline void enableGPIOHClock() {
    detail::setBit(RCC->AHB1ENR, RCC_AHB1ENR_GPIOHEN);
 }
