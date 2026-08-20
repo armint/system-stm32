@@ -3,11 +3,79 @@
 namespace hw {
 
 namespace {
+
+// Timeout
 constexpr uint32_t kTimeoutLoops = 100000u;
-}
+
+// RTC Write Protection Keys (RTC_WPR)
+constexpr uint8_t kWriteProtectionKey1 = 0xCAu;
+constexpr uint8_t kWriteProtectionKey2 = 0x53u;
+constexpr uint8_t kWriteProtectionLockKey = 0xFFu;
+
+// BCD Conversion
+constexpr uint8_t kBcdTensShift = 4u;
+constexpr uint8_t kBcdDigitMask = 0x0Fu;
+
+// Calendar Prescalers (PRER)
+// PREDIV_A = 127 gives f_async = 32768 / 128 = 256 Hz (or 32000 / 128 = 250 Hz)
+constexpr uint32_t kPredivA = 127u;
+#if defined(RTC_PRER_PREDIV_A_Pos)
+constexpr uint32_t kPredivAPos = RTC_PRER_PREDIV_A_Pos;
+#else
+constexpr uint32_t kPredivAPos = 16u;
+#endif
+
+// Synchronous prescaler values to obtain 1 Hz ck_spre
+constexpr uint32_t kPredivSLse = 255u; // (255 + 1) = 256 -> 256 Hz / 256 = 1 Hz
+constexpr uint32_t kPredivSLsi = 249u; // (249 + 1) = 250 -> 250 Hz / 250 = 1 Hz
+constexpr uint32_t kDefaultPredivS = 255u;
+
+// Default Calendar Date: Year 00, Jan 01, Monday (WDU = 1)
+constexpr uint32_t kDefaultDate = 0x00002101u;
+
+// Clock Frequencies (Hz)
+constexpr uint32_t kLseFrequencyHz = 32768u;
+constexpr uint32_t kLsiFrequencyHz = 32000u;
+
+// Wakeup Timer (WUT) Configuration
+constexpr uint32_t kWutClockDivider = 16u;            // RTCCLK / 16
+constexpr uint32_t kShortRangeMaxDurationMs = 32000u; // Max duration (ms) for RTCCLK/16 resolution
+constexpr uint32_t kMaxWutrTicks = 0x10000u;         // 16-bit counter max value (2^16)
+constexpr uint32_t kMaxExtendedWutrTicks = 0x20000u; // 17-bit counter max value (2^17)
+
+// WUCKSEL clock selections in RTC_CR
+constexpr uint32_t kWuckselRtcClkDiv16 = 0u; // 000: RTCCLK/16
+#if defined(RTC_CR_WUCKSEL_2)
+constexpr uint32_t kWuckselCkSpre = RTC_CR_WUCKSEL_2; // 100: ck_spre (1 Hz)
+#else
+constexpr uint32_t kWuckselCkSpre = (1u << 2u);
+#endif
+#if defined(RTC_CR_WUCKSEL_2) && defined(RTC_CR_WUCKSEL_1)
+constexpr uint32_t kWuckselCkSpreExtended =
+    RTC_CR_WUCKSEL_2 | RTC_CR_WUCKSEL_1; // 110: ck_spre with 2^16 added
+#else
+constexpr uint32_t kWuckselCkSpreExtended = (1u << 2u) | (1u << 1u);
+#endif
+
+// TR Register Bit Fields (Time Register)
+constexpr uint32_t kTrHoursShift = 16u;
+constexpr uint32_t kTrHoursMask = 0x3Fu;
+constexpr uint32_t kTrMinutesShift = 8u;
+constexpr uint32_t kTrMinutesMask = 0x7Fu;
+constexpr uint32_t kTrSecondsMask = 0x7Fu;
+
+// Shadow Register Consistency
+constexpr uint32_t kMaxShadowReadRetries = 5u;
+
+// RCC RTCSEL clock source values (01: LSE)
+constexpr uint32_t kRccRtcSelLse = 1u;
+
+} // namespace
 
 uint8_t Rtc::bcdToDec(uint8_t bcd) {
-  return static_cast<uint8_t>((((bcd >> 4u) & 0x0Fu) * 10u) + (bcd & 0x0Fu));
+  return static_cast<uint8_t>(
+      (((bcd >> kBcdTensShift) & kBcdDigitMask) * 10u) +
+      (bcd & kBcdDigitMask));
 }
 
 void Rtc::unlockWriteProtection() const {
@@ -16,11 +84,11 @@ void Rtc::unlockWriteProtection() const {
 #elif defined(PWR_CR_DBP)
   PWR->CR |= PWR_CR_DBP;
 #endif
-  rtc_.WPR = 0xCAu;
-  rtc_.WPR = 0x53u;
+  rtc_.WPR = kWriteProtectionKey1;
+  rtc_.WPR = kWriteProtectionKey2;
 }
 
-void Rtc::lockWriteProtection() const { rtc_.WPR = 0xFFu; }
+void Rtc::lockWriteProtection() const { rtc_.WPR = kWriteProtectionLockKey; }
 
 bool Rtc::isInitMode() const {
 #if defined(RTC_ICSR_INITF)
@@ -68,15 +136,13 @@ bool Rtc::initCalendar(ClockSource clockSource) const {
 
   // Prescalers: PREDIV_A = 127, PREDIV_S = 255 (for LSE 32.768 kHz) or 249 (for
   // LSI 32.000 kHz)
-  if (clockSource == ClockSource::Lse) {
-    rtc_.PRER = (127u << 16u) | 255u;
-  } else {
-    rtc_.PRER = (127u << 16u) | 249u;
-  }
+  const uint32_t predivS =
+      (clockSource == ClockSource::Lse) ? kPredivSLse : kPredivSLsi;
+  rtc_.PRER = (kPredivA << kPredivAPos) | predivS;
 
   // Reset TR and DR registers
   rtc_.TR = 0u;
-  rtc_.DR = 0x00002101u; // Year 01, Jan 01, Monday
+  rtc_.DR = kDefaultDate; // Year 00, Jan 01, Monday
 
   // Exit initialization mode
 #if defined(RTC_ICSR_INIT)
@@ -105,41 +171,41 @@ bool Rtc::armWakeup(uint32_t durationMs) const {
   }
 
   const ClockSource cs = getClockSource();
-  const uint32_t rtcFreq = (cs == ClockSource::Lse) ? 32768u : 32000u;
+  const uint32_t rtcFreq =
+      (cs == ClockSource::Lse) ? kLseFrequencyHz : kLsiFrequencyHz;
 
   uint32_t wucksel = 0u;
   uint32_t wutr = 0u;
 
-  if (durationMs <= 32000u) {
+  if (durationMs <= kShortRangeMaxDurationMs) {
     // Short range: RTCCLK / 16 (~2048 Hz for LSE, 2000 Hz for LSI)
     // tick frequency = rtcFreq / 16 (2048 Hz or 2000 Hz)
-    const uint32_t wutFreq = rtcFreq / 16u;
+    const uint32_t wutFreq = rtcFreq / kWutClockDivider;
     // Round up: ceil(durationMs * wutFreq / 1000)
     uint32_t ticks = static_cast<uint32_t>(
         (static_cast<uint64_t>(durationMs) * wutFreq + 999u) / 1000u);
     if (ticks == 0u) {
       ticks = 1u;
     }
-    if (ticks > 0x10000u) {
-      ticks = 0x10000u;
+    if (ticks > kMaxWutrTicks) {
+      ticks = kMaxWutrTicks;
     }
-    wucksel = 0u; // 000: RTCCLK/16
+    wucksel = kWuckselRtcClkDiv16; // 000: RTCCLK/16
     wutr = ticks - 1u;
   } else {
     // Long range: ck_spre (1 Hz clock)
     // Round up to next whole second
     uint32_t seconds = (durationMs + 999u) / 1000u;
-    if (seconds <= 0x10000u) {
-      wucksel = RTC_CR_WUCKSEL_2; // 100: ck_spre (1 Hz), 0 to 65535 s
+    if (seconds <= kMaxWutrTicks) {
+      wucksel = kWuckselCkSpre; // 100: ck_spre (1 Hz), 0 to 65535 s
       wutr = seconds - 1u;
     } else {
       // Extended 17-bit range: adds 2^16 to WUTR counter value
-      if (seconds > 0x20000u) {
-        seconds = 0x20000u;
+      if (seconds > kMaxExtendedWutrTicks) {
+        seconds = kMaxExtendedWutrTicks;
       }
-      wucksel =
-          RTC_CR_WUCKSEL_2 | RTC_CR_WUCKSEL_1; // 110: ck_spre with 2^16 added
-      wutr = seconds - 0x10000u - 1u;
+      wucksel = kWuckselCkSpreExtended; // 110: ck_spre with 2^16 added
+      wutr = seconds - kMaxWutrTicks - 1u;
     }
   }
 
@@ -189,11 +255,11 @@ uint64_t Rtc::getSubSecondTimestamp() const {
   const uint32_t prer = rtc_.PRER;
   uint32_t prediv_s = prer & RTC_PRER_PREDIV_S;
   if (prediv_s == 0u) {
-    prediv_s = 255u;
+    prediv_s = kDefaultPredivS;
   }
 
   // Read SSR, TR, DR, SSR ensuring no second rollover occurred between reads
-  for (uint32_t retry = 0u; retry < 5u; ++retry) {
+  for (uint32_t retry = 0u; retry < kMaxShadowReadRetries; ++retry) {
     ssr1 = rtc_.SSR;
     tr = rtc_.TR;
     (void)rtc_.DR; // Read DR to unlock shadow registers
@@ -203,12 +269,15 @@ uint64_t Rtc::getSubSecondTimestamp() const {
     }
   }
 
-  const uint32_t hours = bcdToDec(static_cast<uint8_t>((tr >> 16u) & 0x3Fu));
-  const uint32_t minutes = bcdToDec(static_cast<uint8_t>((tr >> 8u) & 0x7Fu));
-  const uint32_t seconds = bcdToDec(static_cast<uint8_t>(tr & 0x7Fu));
+  const uint32_t hours =
+      bcdToDec(static_cast<uint8_t>((tr >> kTrHoursShift) & kTrHoursMask));
+  const uint32_t minutes =
+      bcdToDec(static_cast<uint8_t>((tr >> kTrMinutesShift) & kTrMinutesMask));
+  const uint32_t seconds = bcdToDec(static_cast<uint8_t>(tr & kTrSecondsMask));
 
   const uint64_t totalSeconds = static_cast<uint64_t>(hours) * 3600u +
-                                static_cast<uint64_t>(minutes) * 60u + seconds;
+                                 static_cast<uint64_t>(minutes) * 60u +
+                                 seconds;
 
   // Sub-second fraction: SSR decrements from prediv_s down to 0
   const uint32_t fractionMs = ((prediv_s - ssr2) * 1000u) / (prediv_s + 1u);
@@ -219,13 +288,13 @@ uint64_t Rtc::getSubSecondTimestamp() const {
 Rtc::ClockSource Rtc::getClockSource() {
 #if defined(RCC_BDCR_RTCSEL)
   const uint32_t sel = (RCC->BDCR & RCC_BDCR_RTCSEL) >> RCC_BDCR_RTCSEL_Pos;
-  if (sel == 1u) { // 01: LSE
+  if (sel == kRccRtcSelLse) {
     return ClockSource::Lse;
   }
   return ClockSource::Lsi;
 #elif defined(RCC_CSR_RTCSEL)
   const uint32_t sel = (RCC->CSR & RCC_CSR_RTCSEL) >> RCC_CSR_RTCSEL_Pos;
-  if (sel == 1u) { // 01: LSE
+  if (sel == kRccRtcSelLse) {
     return ClockSource::Lse;
   }
   return ClockSource::Lsi;
