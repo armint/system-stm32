@@ -247,6 +247,13 @@ struct Usart {
    bool isTxCompleteInterruptEnabled() const {
       return (usart_.CR1 & USART_CR1_TCIE) != 0;
    }
+   void clearTxCompleteFlag() const {
+#if defined(USART_ICR_TCCF)
+      usart_.ICR = USART_ICR_TCCF;
+#elif defined(USART_SR_TC)
+      usart_.SR &= ~USART_SR_TC;
+#endif
+   }
 
    // IDLE: Idle Line Detected (Useful for packet end detection)
    void enableIdleLineInterrupt() const {
