@@ -36,6 +36,32 @@ build:
         -D STM32_DEVICE=${STM32_DEVICE}
     - cmake --build build --target system-stm32 -j$(nproc)
 
+# Builds with SYSTEM_STM32_EXCLUDE_STARTUP=ON, the configuration every
+# downstream RTOS consumer (e.g. µOS++ IIIe-based projects) actually uses.
+# Catches the class of regression the src/bare-metal/ split guards
+# against: a file that should be excluded (or a stale path after moving
+# one) breaking this build without ever showing up in the default `build`
+# job above, which never sets this option. Only exercised for STM32WL,
+# the one family an RTOS consumer currently builds; this can't reproduce
+# the multiple-definition link errors this option exists to avoid (that
+# needs an actual RTOS on the other end of the link), only that the
+# option itself still configures and compiles correctly.
+build-exclude-startup:
+  stage: build
+  variables:
+    GIT_DEPTH: 0
+    STM32_FAMILY: STM32WL
+    STM32_DEVICE: STM32WLE5xx
+  script:
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D CMAKE_BUILD_TYPE=Release
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+        -D SYSTEM_STM32_EXCLUDE_STARTUP=ON
+    - cmake --build build --target system-stm32 -j$(nproc)
+
 # STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
 # branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
 # and VECTOR_TABLE_SIZE is only ever defined for STM32WL. Kept here

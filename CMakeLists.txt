@@ -118,15 +118,26 @@ if(ACTIVE_FAMILY_SOURCES)
     list(APPEND PROJECT_SOURCES ${ACTIVE_FAMILY_SOURCES})
 endif()
 
-# When the consumer provides its own startup (e.g. µOS++ IIIe), exclude the
-# system-stm32 startup and assert stubs to avoid multiple-definition errors.
+# Exclude src/bare-metal/* from the general GLOB. Those files (startup.cpp,
+# assert.c, exception-handlers.c, trace_compat.*) are only meaningful when
+# nothing else provides a C/C++ runtime entry point and exception handlers —
+# re-added below unless the consumer supplies its own (e.g. µOS++ IIIe).
+file(GLOB_RECURSE BARE_METAL_SOURCES "${PROJECT_SOURCE_DIR}/src/bare-metal/*.c" "${PROJECT_SOURCE_DIR}/src/bare-metal/*.cpp")
+if(BARE_METAL_SOURCES)
+    list(REMOVE_ITEM PROJECT_SOURCES ${BARE_METAL_SOURCES})
+endif()
+
+# When the consumer provides its own startup (e.g. µOS++ IIIe), leave
+# src/bare-metal/ out to avoid multiple-definition errors.
+# exception-handlers.c matters even though its Handler functions are weak:
+# it defines a non-weak dump_exception_stack() unconditionally, and µOS++
+# defines its own non-weak dump_exception_stack() whenever the consumer
+# defines TRACE — so the two land in the same link and clash as soon as
+# both are present.
 option(SYSTEM_STM32_EXCLUDE_STARTUP
-    "Exclude startup.cpp and assert.c (use when an external RTOS provides these)" OFF)
-if(SYSTEM_STM32_EXCLUDE_STARTUP)
-    list(REMOVE_ITEM PROJECT_SOURCES
-        "${PROJECT_SOURCE_DIR}/src/startup.cpp"
-        "${PROJECT_SOURCE_DIR}/src/assert.c"
-    )
+    "Exclude src/bare-metal/ (use when an external RTOS provides startup, assert, and exception handling)" OFF)
+if(NOT SYSTEM_STM32_EXCLUDE_STARTUP)
+    list(APPEND PROJECT_SOURCES ${BARE_METAL_SOURCES})
 endif()
 
 # Exclude peripheral files whose register-level code is not yet ported to
