@@ -130,9 +130,10 @@ endif()
 # When the consumer provides its own startup (e.g. µOS++ IIIe), leave
 # src/bare-metal/ out to avoid multiple-definition errors.
 # exception-handlers.c matters even though its Handler functions are weak:
-# dump_exception_stack() is not weak on either side, and µOS++'s own copy
-# (built with TRACE defined) clashes with this one if both end up in the
-# link.
+# it defines a non-weak dump_exception_stack() unconditionally, and µOS++
+# defines its own non-weak dump_exception_stack() whenever the consumer
+# defines TRACE — so the two land in the same link and clash as soon as
+# both are present.
 option(SYSTEM_STM32_EXCLUDE_STARTUP
     "Exclude src/bare-metal/ (use when an external RTOS provides startup, assert, and exception handling)" OFF)
 if(NOT SYSTEM_STM32_EXCLUDE_STARTUP)
