@@ -59,6 +59,4 @@ struct SysTickTimer {
    }
 };
 
-using SysTick = SysTickTimer;
-
 } // namespace hw
