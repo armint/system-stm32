@@ -1,93 +1,110 @@
 # system-stm32
 
+Hardware abstraction layer, startup code, and peripheral drivers for STM32
+microcontrollers, shared across several embedded firmware projects. It
+supports multiple STM32 families from a single repository, selecting
+family-specific code at CMake configure time instead of littering shared
+sources with `#ifdef STM32xx`.
 
+## Supported families
 
-## Getting started
+| `STM32_FAMILY` | CMSIS device package | Core       | CI status |
+|----------------|-----------------------|------------|-----------|
+| `STM32L0`      | cmsis\_device\_l0 v1.9.4 | Cortex-M0+ | built in CI |
+| `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI |
+| `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
+| `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
+for every supported family on each push, since that's the only thing that
+catches family-specific regressions (a change that only compiles for the
+one family a downstream project happens to use).
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Requirements
 
-## Add your files
+- CMake >= 3.20
+- An `arm-none-eabi-gcc` toolchain (a ready-made toolchain file is provided
+  at `cmake/gcc_arm.cmake`)
+- C11 / C++23
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+CMSIS device headers and CMSIS core are fetched automatically via
+`FetchContent` for the selected family; nothing needs to be vendored.
 
+## Using it
+
+Add as a git submodule and `add_subdirectory()` it (this is how the
+downstream projects mentioned below consume it), or `install()` it and
+`find_package(system-stm32)`. Relevant CMake variables:
+
+- `STM32_FAMILY` — one of `STM32L0`, `STM32C0`, `STM32G0`, `STM32WL`.
+  Defaults to `STM32L0`.
+- `STM32_DEVICE` — the CMSIS device define, e.g. `STM32WLE5xx`.
+- `SYSTEM_STM32_EXCLUDE_STARTUP` — see [Bare-metal startup vs. an external
+  RTOS](#bare-metal-startup-vs-an-external-rtos) below. Defaults to `OFF`.
+
+The library is added as the `system-stm32` CMake target (an `OBJECT`
+library) and, once installed, as `art::system-stm32`.
+
+## Directory layout
+
+- `src/peripherals/` — peripheral driver interfaces shared across families
+  (`Rcc`, `GpioPin`, `Usart`, `I2c`, `Dma`, `Timer`, `Exti`, `Spi`, `Rtc`,
+  `Iwdg`, `Dbg`). `#ifdef` on specific register/feature availability (e.g.
+  `#if defined(USART_PRESC_PRESCALER)`) is fine here; `#ifdef STM32xx` for
+  whole-family differences is not — that belongs below.
+- `src/families/<family>/` — family-specific implementations (e.g. `Rcc`
+  register layouts, vector tables) exposing the same interface as their
+  `src/peripherals/` counterpart. CMake adds only the active family's
+  directory to the include path, so `#include "Adc.h"` resolves to the
+  right one automatically.
+- `src/utils/` — interrupt vector-table relocation and C++ member-function
+  binding (`Interrupt`), GPIO interrupt dispatch.
+- `src/cmsis-plus/` — Cortex-M exception-handler declarations
+  (`Reset_Handler`, `HardFault_Handler`, ... and the exception stack frame
+  layout). Needed by the always-built vector table regardless of which
+  startup path is active, so it stays outside `src/bare-metal/`.
+- `src/bare-metal/` — see below.
+- `svd/` — SVD register descriptions, for reference/tooling use.
+
+## Bare-metal startup vs. an external RTOS
+
+Most of this library — peripheral drivers, interrupt binding, the vector
+table — is useful whether or not the application runs an RTOS. A small
+part of it is not: the C/C++ runtime entry point and the default exception
+handlers only make sense when *nothing else* provides them.
+
+That part lives in `src/bare-metal/`:
+
+- `startup.cpp` — `_start()`: copies `.data`, zeroes `.bss`, runs the
+  C++ static constructors, and calls `main()`. This is what a linker
+  reaches when the application is built `-nostartfiles` without an RTOS.
+- `assert.c` — `__assert_func()` / `assert_failed()`, reporting via
+  `trace_printf()` (see below) or semihosting before aborting.
+- `exception-handlers.c` — weak default `Reset_Handler`, `NMI_Handler`,
+  `HardFault_Handler`, and friends, plus `dump_exception_stack()` (only
+  compiled when `TRACE` is defined) for a register dump on hard faults.
+- `trace_compat.{h,cpp}` — weak no-op `trace_printf()` / `trace_flush()`,
+  satisfying `exception-handlers.c`'s trace calls when nothing else (no
+  RTOS, no ITU/semihosting backend) defines them.
+
+An RTOS with its own startup sequence — this repo's downstream consumers
+use [µOS++ IIIe](https://github.com/micro-os-plus) — provides its own
+versions of all of the above, generally as weak symbols too, as a
+fallback. Building both copies into the same firmware works for the
+*weak* symbols (the RTOS's copy simply wins), but **not** for
+`dump_exception_stack()`: it is a plain, non-weak function on both sides
+once `TRACE` is defined, so linking both in is a hard multiple-definition
+error.
+
+Set `SYSTEM_STM32_EXCLUDE_STARTUP=ON` to leave `src/bare-metal/` out of
+the build entirely when an external RTOS supplies its own startup and
+exception handling:
+
+```cmake
+set(SYSTEM_STM32_EXCLUDE_STARTUP ON CACHE BOOL "" FORCE)
+add_subdirectory(path/to/system-stm32)
 ```
-cd existing_repo
-git remote add origin https://gitlab.vandertogt.org/embedded-libraries/system-stm32.git
-git branch -M main
-git push -uf origin main
-```
 
-## Integrate with your tools
-
-- [ ] [Set up project integrations](https://gitlab.vandertogt.org/embedded-libraries/system-stm32/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
-***
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-Choose a self-explaining name for your project.
-
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
-
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+`sentinode-ht` (STM32WLE5JC + µOS++ IIIe) builds this way. Leave the
+option `OFF` (the default) for a bare-metal application with no RTOS,
+where `src/bare-metal/` is the only thing providing a runtime at all.
