@@ -1743,9 +1743,6 @@ inline bool hasResetFlag(uint32_t resetCause, ResetFlag flag) {
 // LSE (Low-Speed External Oscillator)
 // -----------------
 #if defined(RCC_BDCR_LSEON)
-inline void enableLSE() {
-   RCC->BDCR |= RCC_BDCR_LSEON;
-}
 inline void disableLSE() {
    RCC->BDCR &= ~RCC_BDCR_LSEON;
 }
@@ -1760,14 +1757,11 @@ inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
    }
    return true;
 }
-inline bool enableLSE(uint32_t timeoutLoops) {
-   enableLSE();
+inline bool enableLSE(uint32_t timeoutLoops = 500000u) {
+   RCC->BDCR |= RCC_BDCR_LSEON;
    return waitLSEReady(timeoutLoops);
 }
 #elif defined(RCC_CSR_LSEON)
-inline void enableLSE() {
-   RCC->CSR |= RCC_CSR_LSEON;
-}
 inline void disableLSE() {
    RCC->CSR &= ~RCC_CSR_LSEON;
 }
@@ -1782,8 +1776,8 @@ inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
    }
    return true;
 }
-inline bool enableLSE(uint32_t timeoutLoops) {
-   enableLSE();
+inline bool enableLSE(uint32_t timeoutLoops = 500000u) {
+   RCC->CSR |= RCC_CSR_LSEON;
    return waitLSEReady(timeoutLoops);
 }
 #endif
