@@ -51,7 +51,10 @@ library) and, once installed, as `art::system-stm32`.
   (`Rcc`, `GpioPin`, `Usart`, `I2c`, `Dma`, `Timer`, `Exti`, `Spi`, `Rtc`,
   `Iwdg`, `Dbg`). `#ifdef` on specific register/feature availability (e.g.
   `#if defined(USART_PRESC_PRESCALER)`) is fine here; `#ifdef STM32xx` for
-  whole-family differences is not — that belongs below.
+  whole-family differences is not — that belongs below. `Exti` and `Spi`
+  here, and `GpioInterrupt` in `src/utils/`, are not yet ported to
+  STM32WL and are excluded from the build for that family (see
+  `_WL_EXCLUDE` in `CMakeLists.txt`).
 - `src/families/<family>/` — family-specific implementations (currently
   `Adc`, and the interrupt vector table in `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
@@ -59,17 +62,25 @@ library) and, once installed, as `art::system-stm32`.
   include path, so `#include "Adc.h"` resolves to the right one
   automatically. `Rcc` and `I2c` are the exception: their STM32WL
   differences are small enough to handle with in-file `#if defined(...)`
-  branches instead, so they stay in `src/peripherals/` unconditionally
-  (see the comment next to their exclusion in `CMakeLists.txt`).
+  branches instead, so they stay in `src/peripherals/` unconditionally.
 - `src/utils/` — interrupt vector-table relocation and C++ member-function
-  binding (`Interrupt`), GPIO interrupt dispatch.
-- `src/startup-hooks.h` / `src/initialize-hardware.cpp` — the weak
-  `os_startup_initialize_hardware_early()` / `os_startup_initialize_hardware()`
-  hooks. Not part of `src/bare-metal/`: unlike the rest of the startup
-  path, these run and are useful even with an RTOS (µOS++ IIIe calls
-  the same two hooks from its own startup), so a consumer can override
-  just the hardware bring-up without pulling in the whole bare-metal
-  runtime.
+  binding (`Interrupt`), GPIO interrupt dispatch (`GpioInterrupt`, not
+  built for STM32WL — see above).
+- `src/startup-hooks.h` / `src/initialize-hardware.cpp` — declares and
+  weakly defines `os_startup_initialize_hardware_early()` /
+  `os_startup_initialize_hardware()`. Not part of `src/bare-metal/`
+  because it's always compiled, including with
+  `SYSTEM_STM32_EXCLUDE_STARTUP=ON`. That is not the same as "safe to use
+  with an RTOS": µOS++ IIIe defines its own weak defaults for the same
+  two hooks (`initialize-hardware.c` in its own sources), so with an RTOS
+  present, *both* weak definitions land in the link, and which one wins
+  is link-order dependent, not a deliberate fallback. In `sentinode-ht`
+  today, µOS++'s copy happens to win — which matters, since only that
+  copy honours `OS_HAS_SYSTEMCLOCK_CONFIG` and actually calls
+  `SystemClock_Config()` (which `sentinode-ht` defines, as the callee,
+  not as an override of either hook). A consumer that needs to guarantee
+  which hook implementation runs should define it as non-weak rather
+  than rely on which weak copy the linker happens to pick.
 - `src/cmsis-plus/` — Cortex-M exception-handler declarations
   (`Reset_Handler`, `HardFault_Handler`, ... and the exception stack frame
   layout). Needed by the always-built per-family vector table regardless
@@ -104,9 +115,11 @@ That part lives in `src/bare-metal/`:
 
 An RTOS with its own startup sequence — this repo's downstream consumers
 use [µOS++ IIIe](https://github.com/micro-os-plus) — provides its own
-versions of all of the above, generally as weak symbols too, as a
-fallback. Building both copies into the same firmware works for the
-*weak* symbols (the RTOS's copy simply wins), but **not** for
+versions of all of the above, generally as weak symbols too. Building
+both copies into the same firmware at least *links* for the weak
+symbols — which one wins is link-order dependent, as noted for
+`os_startup_initialize_hardware_early()` above, so this isn't a
+guaranteed fallback either — but it is outright broken for
 `dump_exception_stack()`: this library always defines it non-weak, and
 µOS++ also defines its own non-weak `dump_exception_stack()` whenever the
 consumer defines the `TRACE` macro — so the moment both land in the same
