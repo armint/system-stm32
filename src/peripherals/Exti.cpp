@@ -77,13 +77,13 @@ void configureExtiInterrupt(const uint8_t line, const Port port, const TriggerEd
 
 
 void setPortForExtiLine(const uint8_t line, const Port port) {
-#if defined(EXTI_IMR1_IM0)
+#if defined(EXTI_EXTICR1_EXTI0) || defined(EXTI_EXTICR1_EXTI0_Pos)
    uint8_t regnum = (line & 0xC) >> 2;
-   uint8_t index = (line & 0x3) << 3; // 8 bits per line in G0
+   uint8_t index = (line & 0x3) << 3; // 8 bits per line in G0/C0
    EXTI->EXTICR[regnum] = (EXTI->EXTICR[regnum] & ~(0xFF << index)) | (static_cast<uint16_t>(port) << index);
-#else
+#elif defined(SYSCFG_EXTICR1_EXTI0) || defined(SYSCFG_EXTICR1_EXTI0_Pos) || defined(SYSCFG_EXTICR1_EXTI0_PA)
    uint8_t regnum = (line & 0xC) >> 2;
-   uint8_t index = (line & 0x3) << 2; // 4 bits per line in L0
+   uint8_t index = (line & 0x3) << 2; // 4 bits per line in L0/WL
    SYSCFG->EXTICR[regnum] = (SYSCFG->EXTICR[regnum] & ~(0xF << index)) | (static_cast<uint16_t>(port) << index);
 #endif
 }

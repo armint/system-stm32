@@ -33,6 +33,72 @@ enum class Port : uint8_t {
    Undefined = 255,
 };
 
+#if defined(STM32WL)
+enum Line : uint8_t {
+   GPIOLine0 = 0,
+   GPIOLine1,
+   GPIOLine2,
+   GPIOLine3,
+   GPIOLine4,
+   GPIOLine5,
+   GPIOLine6,
+   GPIOLine7,
+   GPIOLine8,
+   GPIOLine9,
+   GPIOLine10,
+   GPIOLine11,
+   GPIOLine12,
+   GPIOLine13,
+   GPIOLine14,
+   GPIOLine15,
+   PVD = 16,
+   RTCAlarm = 17,
+   RTCTamper = 18,
+   RTCWakeup = 19,
+   Comp1Out = 21,
+   Comp2Out = 22,
+   I2C1Wakeup = 23,
+   I2C2Wakeup = 24,
+   I2C3Wakeup = 25,
+   USART1Wakeup = 26,
+   USART2Wakeup = 27,
+   LPUART1Wakeup = 28,
+   LPTimer1 = 29,
+   LPTimer2 = 30,
+   LPTimer3 = 31,
+   RadioIRQ = 36,
+   RadioBusy = 37,
+};
+#elif defined(STM32G0)
+enum Line : uint8_t {
+   GPIOLine0 = 0,
+   GPIOLine1,
+   GPIOLine2,
+   GPIOLine3,
+   GPIOLine4,
+   GPIOLine5,
+   GPIOLine6,
+   GPIOLine7,
+   GPIOLine8,
+   GPIOLine9,
+   GPIOLine10,
+   GPIOLine11,
+   GPIOLine12,
+   GPIOLine13,
+   GPIOLine14,
+   GPIOLine15,
+   RTCAlarm = 17,
+   RTCTamperAndWakeup = 19,
+   Comp1Out = 21,
+   Comp2Out = 22,
+   I2C1Wakeup = 23,
+   USART1Wakeup = 24,
+   USART2Wakeup = 25,
+   LPUART1Wakeup = 26,
+   LPTimer1 = 27,
+   LPTimer2 = 28,
+};
+#else
 enum Line : uint8_t {
    GPIOLine0 = 0,
    GPIOLine1,
@@ -65,12 +131,21 @@ enum Line : uint8_t {
    LPUART1Wakeup,
    LPTimer1,
 };
+#endif
 
+#if defined(STM32WL)
+constexpr IRQn_Type gpioIRQs[16] = {
+   EXTI0_IRQn,     EXTI1_IRQn,     EXTI2_IRQn,     EXTI3_IRQn,     EXTI4_IRQn,
+   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,
+   EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn,
+};
+#else
 constexpr IRQn_Type gpioIRQs[16] = {
    EXTI0_1_IRQn,  EXTI0_1_IRQn,  EXTI2_3_IRQn,  EXTI2_3_IRQn,  EXTI4_15_IRQn, EXTI4_15_IRQn,
    EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn,
    EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn, EXTI4_15_IRQn,
 };
+#endif
 
 void setPortForExtiLine(const uint8_t line, const Port port);
 
@@ -145,20 +220,28 @@ inline bool isInterruptMasked(const uint8_t line) {
 }
 
 inline bool isInterruptPending(const uint8_t line) {
-#if defined(EXTI_IMR1_IM0)
+#if defined(EXTI_RPR1_RPIF0) || defined(EXTI_RPR1_RPIF)
    return (EXTI->RPR1 | EXTI->FPR1) & (1 << line);
+#elif defined(EXTI_PR1_PIF0) || defined(EXTI_PR1_PIF)
+   return EXTI->PR1 & (1 << line);
 #else
    return EXTI->PR & (1 << line);
 #endif
 }
 
-inline void clearInterrruptPending(const uint8_t line) {
-#if defined(EXTI_IMR1_IM0)
+inline void clearInterruptPending(const uint8_t line) {
+#if defined(EXTI_RPR1_RPIF0) || defined(EXTI_RPR1_RPIF)
    EXTI->RPR1 = (1 << line);
    EXTI->FPR1 = (1 << line);
+#elif defined(EXTI_PR1_PIF0) || defined(EXTI_PR1_PIF)
+   EXTI->PR1 = (1 << line);
 #else
    EXTI->PR = (1 << line);
 #endif
+}
+
+inline void clearInterrruptPending(const uint8_t line) {
+   clearInterruptPending(line);
 }
 
 constexpr Port getPortFromGPIO(GPIO_TypeDef *const gpio) {
