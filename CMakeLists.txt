@@ -119,13 +119,18 @@ if(ACTIVE_FAMILY_SOURCES)
 endif()
 
 # When the consumer provides its own startup (e.g. µOS++ IIIe), exclude the
-# system-stm32 startup and assert stubs to avoid multiple-definition errors.
+# system-stm32 startup, assert, and exception-handler stubs to avoid
+# multiple-definition errors. exception-handlers.c matters even though its
+# Handler functions are weak: dump_exception_stack() is not weak on either
+# side, and µOS++'s own copy (built with TRACE defined) clashes with this
+# one if both end up in the link.
 option(SYSTEM_STM32_EXCLUDE_STARTUP
-    "Exclude startup.cpp and assert.c (use when an external RTOS provides these)" OFF)
+    "Exclude startup.cpp, assert.c, and exception-handlers.c (use when an external RTOS provides these)" OFF)
 if(SYSTEM_STM32_EXCLUDE_STARTUP)
     list(REMOVE_ITEM PROJECT_SOURCES
         "${PROJECT_SOURCE_DIR}/src/startup.cpp"
         "${PROJECT_SOURCE_DIR}/src/assert.c"
+        "${PROJECT_SOURCE_DIR}/src/exception-handlers.c"
     )
 endif()
 
