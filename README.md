@@ -110,13 +110,11 @@ fallback. Building both copies into the same firmware works for the
 `dump_exception_stack()`: this library always defines it non-weak, and
 µOS++ also defines its own non-weak `dump_exception_stack()` whenever the
 consumer defines the `TRACE` macro — so the moment both land in the same
-firmware, that's a hard multiple-definition link error. Setting
-`SYSTEM_STM32_EXCLUDE_STARTUP=ON` (below) avoids it, by not building
-`src/bare-metal/` — including this file — at all.
+firmware, that's a hard multiple-definition link error.
 
-Set `SYSTEM_STM32_EXCLUDE_STARTUP=ON` to leave `src/bare-metal/` out of
-the build entirely when an external RTOS supplies its own startup and
-exception handling:
+Setting `SYSTEM_STM32_EXCLUDE_STARTUP=ON` avoids it, by not building
+`src/bare-metal/` — including this file — at all. Use it whenever an
+external RTOS supplies its own startup and exception handling:
 
 ```cmake
 set(SYSTEM_STM32_EXCLUDE_STARTUP ON)
