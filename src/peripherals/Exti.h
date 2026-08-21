@@ -195,48 +195,48 @@ inline void disableEventMask(const uint32_t mask) {
 }
 
 inline void enableInterrupt(const uint8_t line) {
-   enableInterruptMask(1 << line);
+   enableInterruptMask(1UL << line);
 }
 
 inline void disableInterrupt(const uint8_t line) {
-   disableInterruptMask(1 << line);
+   disableInterruptMask(1UL << line);
 }
 
 inline void enableEvent(const uint8_t line) {
-   enableEventMask(1 << line);
+   enableEventMask(1UL << line);
 }
 
 inline void disableEvent(const uint8_t line) {
-   disableEventMask(1 << line);
+   disableEventMask(1UL << line);
 }
 
 
 inline bool isInterruptMasked(const uint8_t line) {
 #if defined(EXTI_IMR1_IM0)
-   return !(EXTI->IMR1 & (1 << line));
+   return !(EXTI->IMR1 & (1UL << line));
 #else
-   return !(EXTI->IMR & (1 << line));
+   return !(EXTI->IMR & (1UL << line));
 #endif
 }
 
 inline bool isInterruptPending(const uint8_t line) {
 #if defined(EXTI_RPR1_RPIF0) || defined(EXTI_RPR1_RPIF)
-   return (EXTI->RPR1 | EXTI->FPR1) & (1 << line);
+   return (EXTI->RPR1 | EXTI->FPR1) & (1UL << line);
 #elif defined(EXTI_PR1_PIF0) || defined(EXTI_PR1_PIF)
-   return EXTI->PR1 & (1 << line);
+   return EXTI->PR1 & (1UL << line);
 #else
-   return EXTI->PR & (1 << line);
+   return EXTI->PR & (1UL << line);
 #endif
 }
 
 inline void clearInterruptPending(const uint8_t line) {
 #if defined(EXTI_RPR1_RPIF0) || defined(EXTI_RPR1_RPIF)
-   EXTI->RPR1 = (1 << line);
-   EXTI->FPR1 = (1 << line);
+   EXTI->RPR1 = (1UL << line);
+   EXTI->FPR1 = (1UL << line);
 #elif defined(EXTI_PR1_PIF0) || defined(EXTI_PR1_PIF)
-   EXTI->PR1 = (1 << line);
+   EXTI->PR1 = (1UL << line);
 #else
-   EXTI->PR = (1 << line);
+   EXTI->PR = (1UL << line);
 #endif
 }
 
