@@ -118,20 +118,25 @@ if(ACTIVE_FAMILY_SOURCES)
     list(APPEND PROJECT_SOURCES ${ACTIVE_FAMILY_SOURCES})
 endif()
 
-# When the consumer provides its own startup (e.g. µOS++ IIIe), exclude the
-# system-stm32 startup, assert, and exception-handler stubs to avoid
-# multiple-definition errors. exception-handlers.c matters even though its
-# Handler functions are weak: dump_exception_stack() is not weak on either
-# side, and µOS++'s own copy (built with TRACE defined) clashes with this
-# one if both end up in the link.
+# Exclude src/bare-metal/* from the general GLOB. Those files (startup.cpp,
+# assert.c, exception-handlers.c, trace_compat.*) are only meaningful when
+# nothing else provides a C/C++ runtime entry point and exception handlers —
+# re-added below unless the consumer supplies its own (e.g. µOS++ IIIe).
+file(GLOB_RECURSE BARE_METAL_SOURCES "${PROJECT_SOURCE_DIR}/src/bare-metal/*.c" "${PROJECT_SOURCE_DIR}/src/bare-metal/*.cpp")
+if(BARE_METAL_SOURCES)
+    list(REMOVE_ITEM PROJECT_SOURCES ${BARE_METAL_SOURCES})
+endif()
+
+# When the consumer provides its own startup (e.g. µOS++ IIIe), leave
+# src/bare-metal/ out to avoid multiple-definition errors.
+# exception-handlers.c matters even though its Handler functions are weak:
+# dump_exception_stack() is not weak on either side, and µOS++'s own copy
+# (built with TRACE defined) clashes with this one if both end up in the
+# link.
 option(SYSTEM_STM32_EXCLUDE_STARTUP
-    "Exclude startup.cpp, assert.c, and exception-handlers.c (use when an external RTOS provides these)" OFF)
-if(SYSTEM_STM32_EXCLUDE_STARTUP)
-    list(REMOVE_ITEM PROJECT_SOURCES
-        "${PROJECT_SOURCE_DIR}/src/startup.cpp"
-        "${PROJECT_SOURCE_DIR}/src/assert.c"
-        "${PROJECT_SOURCE_DIR}/src/exception-handlers.c"
-    )
+    "Exclude src/bare-metal/ (use when an external RTOS provides startup, assert, and exception handling)" OFF)
+if(NOT SYSTEM_STM32_EXCLUDE_STARTUP)
+    list(APPEND PROJECT_SOURCES ${BARE_METAL_SOURCES})
 endif()
 
 # Exclude peripheral files whose register-level code is not yet ported to
