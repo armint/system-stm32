@@ -2,30 +2,28 @@
 
 #include <cmsis_device.h>
 
-namespace hw {
+namespace hw::Dbg {
 
 /**
- * Debug MCU peripheral wrapper.
- *
- * Provides a uniform API across STM32 families that name the peripheral
- * differently (DBGMCU on L0, DBG on G0/C0).
+ * @brief Freezes the Independent Watchdog (IWDG) counter when core is halted in debug mode.
  */
-struct Dbg {
-   static inline void freezeIwdgOnDebug() {
+inline void freezeIwdgOnDebug() {
 #if defined(DBGMCU_APB1_FZ_DBG_IWDG_STOP)
-      DBGMCU->APB1FZ |= DBGMCU_APB1_FZ_DBG_IWDG_STOP;
+   DBGMCU->APB1FZ |= DBGMCU_APB1_FZ_DBG_IWDG_STOP;
 #elif defined(DBG_APB_FZ1_DBG_IWDG_STOP)
-      DBG->APBFZ1 |= DBG_APB_FZ1_DBG_IWDG_STOP;
+   DBG->APBFZ1 |= DBG_APB_FZ1_DBG_IWDG_STOP;
 #endif
-   }
+}
 
-   static inline void freezeWwdgOnDebug() {
+/**
+ * @brief Freezes the Window Watchdog (WWDG) counter when core is halted in debug mode.
+ */
+inline void freezeWwdgOnDebug() {
 #if defined(DBGMCU_APB1_FZ_DBG_WWDG_STOP)
-      DBGMCU->APB1FZ |= DBGMCU_APB1_FZ_DBG_WWDG_STOP;
+   DBGMCU->APB1FZ |= DBGMCU_APB1_FZ_DBG_WWDG_STOP;
 #elif defined(DBG_APB_FZ1_DBG_WWDG_STOP)
-      DBG->APBFZ1 |= DBG_APB_FZ1_DBG_WWDG_STOP;
+   DBG->APBFZ1 |= DBG_APB_FZ1_DBG_WWDG_STOP;
 #endif
-   }
-};
+}
 
-} // namespace hw
+} // namespace hw::Dbg
