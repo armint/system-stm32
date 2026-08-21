@@ -141,11 +141,10 @@ if(NOT SYSTEM_STM32_EXCLUDE_STARTUP)
 endif()
 
 # Exclude peripheral files whose register-level code is not yet ported to
-# STM32WL.  Rcc.cpp and I2c.cpp have been updated with WL-specific branches
-# and are included unconditionally.
+# STM32WL.  Rcc.cpp, I2c.cpp, and Exti.cpp have been updated with WL-specific
+# branches and are included unconditionally.
 if(STM32_FAMILY STREQUAL "STM32WL")
     set(_WL_EXCLUDE
-        "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Spi.cpp"
         "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
     )

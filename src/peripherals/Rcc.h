@@ -1696,4 +1696,134 @@ inline void setClock48MhzHseTcxo() {
 }
 #endif
 
+// -----------------
+// Reset Cause & Flags
+// -----------------
+enum class ResetFlag : uint32_t {
+#if defined(RCC_CSR_LPWRRSTF)
+   LowPower = RCC_CSR_LPWRRSTF,
+#endif
+#if defined(RCC_CSR_WWDGRSTF)
+   WindowWatchdog = RCC_CSR_WWDGRSTF,
+#endif
+#if defined(RCC_CSR_IWDGRSTF)
+   IndependentWatchdog = RCC_CSR_IWDGRSTF,
+#endif
+#if defined(RCC_CSR_SFTRSTF)
+   Software = RCC_CSR_SFTRSTF,
+#endif
+#if defined(RCC_CSR_BORRSTF)
+   Brownout = RCC_CSR_BORRSTF,
+#elif defined(RCC_CSR_PWRRSTF)
+   Power = RCC_CSR_PWRRSTF,
+#endif
+#if defined(RCC_CSR_PINRSTF)
+   Pin = RCC_CSR_PINRSTF,
+#endif
+#if defined(RCC_CSR_OBLRSTF)
+   OptionByteLoader = RCC_CSR_OBLRSTF,
+#endif
+};
+
+inline uint32_t getResetCause() {
+   return RCC->CSR;
+}
+
+inline void clearResetFlags() {
+#if defined(RCC_CSR_RMVF)
+   RCC->CSR |= RCC_CSR_RMVF;
+#endif
+}
+
+inline bool hasResetFlag(uint32_t resetCause, ResetFlag flag) {
+   return (resetCause & static_cast<uint32_t>(flag)) != 0u;
+}
+
+// -----------------
+// LSE (Low-Speed External Oscillator)
+// -----------------
+#if defined(RCC_BDCR_LSEON)
+inline void disableLSE() {
+   RCC->BDCR &= ~RCC_BDCR_LSEON;
+}
+inline bool isLSEReady() {
+   return (RCC->BDCR & RCC_BDCR_LSERDY) != 0u;
+}
+inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
+   while(!isLSEReady()) {
+      if(--timeoutLoops == 0u) {
+         return false;
+      }
+   }
+   return true;
+}
+inline bool enableLSE(uint32_t timeoutLoops = 500000u) {
+   RCC->BDCR |= RCC_BDCR_LSEON;
+   return waitLSEReady(timeoutLoops);
+}
+#elif defined(RCC_CSR_LSEON)
+inline void disableLSE() {
+   RCC->CSR &= ~RCC_CSR_LSEON;
+}
+inline bool isLSEReady() {
+   return (RCC->CSR & RCC_CSR_LSERDY) != 0u;
+}
+inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
+   while(!isLSEReady()) {
+      if(--timeoutLoops == 0u) {
+         return false;
+      }
+   }
+   return true;
+}
+inline bool enableLSE(uint32_t timeoutLoops = 500000u) {
+   RCC->CSR |= RCC_CSR_LSEON;
+   return waitLSEReady(timeoutLoops);
+}
+#endif
+
+// -----------------
+// RTC Clock Source & Enable
+// -----------------
+enum class RtcClockSource : uint32_t {
+   NoClock = 0,
+   LSE = 1,
+   LSI = 2,
+   HSE = 3,
+};
+
+#if defined(RCC_BDCR_RTCSEL)
+inline void setRtcClockSource(RtcClockSource source) {
+   RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | (static_cast<uint32_t>(source) << RCC_BDCR_RTCSEL_Pos);
+}
+inline RtcClockSource getRtcClockSource() {
+   return static_cast<RtcClockSource>((RCC->BDCR & RCC_BDCR_RTCSEL) >> RCC_BDCR_RTCSEL_Pos);
+}
+inline void enableRTCClock() {
+   RCC->BDCR |= RCC_BDCR_RTCEN;
+}
+inline void disableRTCClock() {
+   RCC->BDCR &= ~RCC_BDCR_RTCEN;
+}
+inline bool isRTCClockEnabled() {
+   return (RCC->BDCR & RCC_BDCR_RTCEN) != 0u;
+}
+#elif defined(RCC_CSR_RTCSEL)
+inline void setRtcClockSource(RtcClockSource source) {
+   RCC->CSR = (RCC->CSR & ~RCC_CSR_RTCSEL) | (static_cast<uint32_t>(source) << RCC_CSR_RTCSEL_Pos);
+}
+inline RtcClockSource getRtcClockSource() {
+   return static_cast<RtcClockSource>((RCC->CSR & RCC_CSR_RTCSEL) >> RCC_CSR_RTCSEL_Pos);
+}
+inline void enableRTCClock() {
+   RCC->CSR |= RCC_CSR_RTCEN;
+}
+inline void disableRTCClock() {
+   RCC->CSR &= ~RCC_CSR_RTCEN;
+}
+inline bool isRTCClockEnabled() {
+   return (RCC->CSR & RCC_CSR_RTCEN) != 0u;
+}
+#endif
+
 } // namespace Rcc
