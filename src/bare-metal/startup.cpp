@@ -32,6 +32,9 @@
 // ----------------------------------------------------------------------------
 
 #include "startup-hooks.h"
+#include <cmsis_device.h>
+#include <cstdint>
+#include <stdint.h>
 
 // ----------------------------------------------------------------------------
 // This file defines the system code for a portable embedded
