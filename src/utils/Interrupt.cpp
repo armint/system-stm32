@@ -88,9 +88,9 @@ BlockingSection::~BlockingSection() {
    }
 }
 
-CriticalSection::CriticalSection() {
+CriticalSection::CriticalSection()
    // Read the current PRIMASK, to be later restored
-   _state = __get_PRIMASK();
+   : _state(__get_PRIMASK()) {
    // Disable all interrupts
    __disable_irq();
 }
