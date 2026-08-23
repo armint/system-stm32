@@ -1682,9 +1682,9 @@ inline void setClock48MhzHseTcxo() {
    }
 
    // 5. Configure and enable PLL
-   //    PLLSRC = HSE (11), PLLM = 001 (÷2), PLLN = 6, PLLR = 000 (÷2), PLLREN = 1
+   //    PLLSRC = HSE (11), PLLM = 001 (÷2), PLLN = 6, PLLR = 001 (÷2), PLLREN = 1
    RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
-                  RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
+                  (1u << RCC_PLLCFGR_PLLR_Pos) | RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
    RCC->CR |= RCC_CR_PLLON;
    while(!(RCC->CR & RCC_CR_PLLRDY)) {
    }
