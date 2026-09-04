@@ -190,6 +190,29 @@ struct Spi {
 #endif
    }
 
+   /**
+    * @brief Blocking full duplex transfer of a single data word.
+    * @param data Data to transmit (8 or 16 bits, according to the configured data size).
+    * @return The data word received while transmitting.
+    * @note Busy waits; only meaningful while the peripheral is enabled and in master mode.
+    */
+   inline uint16_t transfer(uint16_t data) const {
+      while(!isTxEmpty()) {
+      }
+      write(data);
+      while(!isRxNotEmpty()) {
+      }
+      return read();
+   }
+
+   /**
+    * @brief Busy waits until the peripheral has finished shifting out all data.
+    */
+   inline void waitUntilIdle() const {
+      while(isBusy()) {
+      }
+   }
+
    inline bool isTxEmpty() const {
       return (spi_.SR & SPI_SR_TXE) != 0;
    }
