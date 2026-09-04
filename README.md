@@ -51,10 +51,9 @@ library) and, once installed, as `art::system-stm32`.
   (`Rcc`, `GpioPin`, `Usart`, `I2c`, `Dma`, `Timer`, `Exti`, `Spi`, `Rtc`,
   `Iwdg`, `Dbg`). `#ifdef` on specific register/feature availability (e.g.
   `#if defined(USART_PRESC_PRESCALER)`) is fine here; `#ifdef STM32xx` for
-  whole-family differences is not — that belongs below. `Exti` and `Spi`
-  here, and `GpioInterrupt` in `src/utils/`, are not yet ported to
-  STM32WL and are excluded from the build for that family (see
-  `_WL_EXCLUDE` in `CMakeLists.txt`).
+  whole-family differences is not — that belongs below. `GpioInterrupt` in
+  `src/utils/` is not yet ported to STM32WL and is excluded from the build
+  for that family (see `_WL_EXCLUDE` in `CMakeLists.txt`).
 - `src/families/<family>/` — family-specific implementations (currently
   `Adc`, and the interrupt vector table in `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
