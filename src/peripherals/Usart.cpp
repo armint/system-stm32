@@ -76,7 +76,7 @@ void Usart::setParity(Parity parity) const {
 
    if(parity != Parity::None) {
       // 9 data bits total (8 data + 1 parity)
-      usart_.CR1 |= USART_CR1_M1;
+      usart_.CR1 |= USART_CR1_M0;
    }
 }
 
