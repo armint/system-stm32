@@ -942,7 +942,29 @@ inline void disableSPI1Clock() {
    detail::clearBit(RCC->APBENR2, RCC_APBENR2_SPI1EN);
 }
 #endif
-#if defined(RCC_APB1ENR_SPI2EN) && defined(RCC_APB1SMENR_SPI2SMEN)
+#if defined(RCC_APB1ENR1_SPI2EN) && defined(RCC_APB1SMENR1_SPI2SMEN)
+inline void enableSPI2Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_SPI2EN);
+   detail::setBit(RCC->APB1SMENR1, RCC_APB1SMENR1_SPI2SMEN);
+}
+inline void disableSPI2Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_SPI2EN);
+   detail::clearBit(RCC->APB1SMENR1, RCC_APB1SMENR1_SPI2SMEN);
+}
+inline void enableSPI2ClockInSleepMode() {
+   enableSPI2Clock();
+}
+inline void disableSPI2ClockInSleepMode() {
+   disableSPI2Clock();
+}
+#elif defined(RCC_APB1ENR1_SPI2EN)
+inline void enableSPI2Clock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_SPI2EN);
+}
+inline void disableSPI2Clock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_SPI2EN);
+}
+#elif defined(RCC_APB1ENR_SPI2EN) && defined(RCC_APB1SMENR_SPI2SMEN)
 inline void enableSPI2Clock() {
    detail::setBit(RCC->APB1ENR, RCC_APB1ENR_SPI2EN);
    detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_SPI2SMEN);
