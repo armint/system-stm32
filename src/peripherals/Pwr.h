@@ -6,10 +6,17 @@
 namespace hw::Pwr {
 
 enum class StopMode : uint32_t {
-#if defined(PWR_CR1_LPMS)
    Stop0 = 0,
+#if defined(PWR_CR1_LPMS)
    Stop1 = PWR_CR1_LPMS_0,
+#if defined(STM32WL)
    Stop2 = PWR_CR1_LPMS_1,
+#else
+   Stop2 = Stop1,
+#endif
+#else
+   Stop1 = 0,
+   Stop2 = 0,
 #endif
 };
 
@@ -55,6 +62,10 @@ inline bool isBackupDomainAccessEnabled() {
 inline void setStopMode(StopMode mode) {
 #if defined(PWR_CR1_LPMS)
    PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | static_cast<uint32_t>(mode);
+#elif defined(PWR_CR_PDDS)
+   // STM32L0 and similar
+   (void)mode;
+   PWR->CR &= ~(PWR_CR_PDDS | PWR_CR_LPSDSR);
 #endif
 }
 
