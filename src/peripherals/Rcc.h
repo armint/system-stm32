@@ -1672,8 +1672,27 @@ inline void setClock48MhzHseTcxo() {
    // isn't in its fresh-reset state can leave PWR->SR2.RFBUSYS stuck high
    // forever. Matters whenever this function runs a second time: after a
    // Stop2 wakeup, or (previously) later in the boot sequence.
-#if defined(RCC_CSR_RFRST)
+   uint32_t spins = 100'000u;
+#if defined(RCC_CSR_RFRST) && defined(RCC_CSR_RFRSTF)
    RCC->CSR |= RCC_CSR_RFRST;
+   while(!(RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
+   }
+   // Hold reset for >= 100 us to satisfy Semtech SX1262 t_SW_RST requirement.
+   // At reset clock (MSI 4 MHz ≈ 4 cycles/loop), 200 iterations provide ~200 us.
+   volatile uint32_t rstTicks = 200u;
+   while(rstTicks > 0) {
+      rstTicks = rstTicks - 1;
+   }
+   RCC->CSR &= ~RCC_CSR_RFRST;
+   spins = 100'000u;
+   while((RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
+   }
+#elif defined(RCC_CSR_RFRST)
+   RCC->CSR |= RCC_CSR_RFRST;
+   volatile uint32_t rstTicks = 200u;
+   while(rstTicks > 0) {
+      rstTicks = rstTicks - 1;
+   }
    RCC->CSR &= ~RCC_CSR_RFRST;
 #endif
    RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
@@ -1686,7 +1705,7 @@ inline void setClock48MhzHseTcxo() {
    // Route NSS to PWR_SUBGHZSPICR for software control
    PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
-   uint32_t spins = 100'000u;
+   spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
