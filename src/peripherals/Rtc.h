@@ -75,8 +75,9 @@ public:
    * @brief Reads the monotonic sub-second timestamp in milliseconds since
    * calendar reset.
    *
-   * Composed from TR (hours, minutes, seconds) and SSR (subsecond downcounter),
-   * performing consistency checks across second rollovers.
+   * Composed from DR (year, month, date), TR (hours, minutes, seconds), and
+   * SSR (subsecond downcounter), performing consistency checks across second
+   * and day rollovers. Monotonic across midnight transitions.
    */
   uint64_t getSubSecondTimestamp() const;
 
