@@ -70,6 +70,17 @@ constexpr uint32_t kTrMinutesShift = 8u;
 constexpr uint32_t kTrMinutesMask = 0x7Fu;
 constexpr uint32_t kTrSecondsMask = 0x7Fu;
 
+// DR Register Bit Fields (Date Register)
+constexpr uint32_t kDrYearsShift = 16u;
+constexpr uint32_t kDrYearsMask = 0xFFu;
+constexpr uint32_t kDrMonthShift = 8u;
+constexpr uint32_t kDrMonthMask = 0x1Fu;
+constexpr uint32_t kDrDateMask = 0x3Fu;
+
+// Days elapsed before each month in a non-leap year
+constexpr uint16_t kDaysBeforeMonth[12] = {
+    0u, 31u, 59u, 90u, 120u, 151u, 181u, 212u, 243u, 273u, 304u, 334u};
+
 // Shadow Register Consistency
 constexpr uint32_t kMaxShadowReadRetries = 5u;
 
@@ -263,6 +274,7 @@ uint64_t Rtc::getSubSecondTimestamp() const {
   uint32_t ssr1 = 0u;
   uint32_t ssr2 = 0u;
   uint32_t tr = 0u;
+  uint32_t dr = 0u;
 
   const uint32_t prer = rtc_.PRER;
   uint32_t prediv_s = prer & RTC_PRER_PREDIV_S;
@@ -274,12 +286,35 @@ uint64_t Rtc::getSubSecondTimestamp() const {
   for (uint32_t retry = 0u; retry < kMaxShadowReadRetries; ++retry) {
     ssr1 = rtc_.SSR;
     tr = rtc_.TR;
-    (void)rtc_.DR; // Read DR to unlock shadow registers
+    dr = rtc_.DR; // Reading DR also unlocks shadow registers
     ssr2 = rtc_.SSR;
     if (ssr1 >= ssr2) {
       break; // Normal decrement within the same second
     }
   }
+
+  uint32_t year =
+      bcdToDec(static_cast<uint8_t>((dr >> kDrYearsShift) & kDrYearsMask));
+  uint32_t month =
+      bcdToDec(static_cast<uint8_t>((dr >> kDrMonthShift) & kDrMonthMask));
+  uint32_t date = bcdToDec(static_cast<uint8_t>(dr & kDrDateMask));
+
+  if (month < 1u || month > 12u) {
+    month = 1u;
+  }
+  if (date < 1u || date > 31u) {
+    date = 1u;
+  }
+  if (year > 99u) {
+    year = 99u;
+  }
+
+  const bool isLeapYear = (year % 4u == 0u);
+  const uint32_t leapYearsBefore = (year + 3u) / 4u;
+  const uint32_t daysBeforeYear = year * 365u + leapYearsBefore;
+  const uint32_t daysInYear = kDaysBeforeMonth[month - 1u] + (date - 1u) +
+                              ((isLeapYear && month > 2u) ? 1u : 0u);
+  const uint64_t totalDays = daysBeforeYear + daysInYear;
 
   const uint32_t hours =
       bcdToDec(static_cast<uint8_t>((tr >> kTrHoursShift) & kTrHoursMask));
@@ -287,9 +322,10 @@ uint64_t Rtc::getSubSecondTimestamp() const {
       bcdToDec(static_cast<uint8_t>((tr >> kTrMinutesShift) & kTrMinutesMask));
   const uint32_t seconds = bcdToDec(static_cast<uint8_t>(tr & kTrSecondsMask));
 
-  const uint64_t totalSeconds = static_cast<uint64_t>(hours) * 3600u +
-                                 static_cast<uint64_t>(minutes) * 60u +
-                                 seconds;
+  const uint64_t totalSeconds = totalDays * 86400u +
+                                static_cast<uint64_t>(hours) * 3600u +
+                                static_cast<uint64_t>(minutes) * 60u +
+                                seconds;
 
   // Sub-second fraction: SSR decrements from prediv_s down to 0
   const uint32_t fractionMs = ((prediv_s - ssr2) * 1000u) / (prediv_s + 1u);
