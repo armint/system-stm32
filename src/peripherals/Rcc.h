@@ -1318,6 +1318,17 @@ inline void enableRTCAPBClock() {
 inline void disableRTCAPBClock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_RTCAPBEN);
 }
+#elif defined(RCC_APB1ENR1_RTCAPBEN)
+// STM32L4/L5/U5/WL: RTC APB bus interface clock enable lives in APB1ENR1
+// rather than a unified APB1ENR. Required before the RTC's registers
+// (CR, ICSR/ISR, WUTR, ...) are readable/writable at all -- without it,
+// every RTC register reads back as 0.
+inline void enableRTCAPBClock() {
+   detail::setBit(RCC->APB1ENR1, RCC_APB1ENR1_RTCAPBEN);
+}
+inline void disableRTCAPBClock() {
+   detail::clearBit(RCC->APB1ENR1, RCC_APB1ENR1_RTCAPBEN);
+}
 #endif
 #if defined(RCC_APB1ENR_LCDEN) && defined(RCC_APB1SMENR_LCDSMEN)
 inline void enableLCDClock() {
@@ -1655,6 +1666,16 @@ inline void setClock48MhzHseTcxo() {
    }
 
    // 2. Enable TCXO via SX1262 SUBGHZSPI SetTcxoMode command.
+   // Force the radio core itself back to its post-reset state first --
+   // resetting only the SUBGHZSPI bridge (below) leaves the SX1262's own
+   // state machine untouched, and re-sending SetTcxoMode to a radio that
+   // isn't in its fresh-reset state can leave PWR->SR2.RFBUSYS stuck high
+   // forever. Matters whenever this function runs a second time: after a
+   // Stop2 wakeup, or (previously) later in the boot sequence.
+#if defined(RCC_CSR_RFRST)
+   RCC->CSR |= RCC_CSR_RFRST;
+   RCC->CSR &= ~RCC_CSR_RFRST;
+#endif
    RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
    RCC->APB3RSTR |= RCC_APB3RSTR_SUBGHZSPIRST;
    RCC->APB3RSTR &= ~RCC_APB3RSTR_SUBGHZSPIRST;
@@ -1665,28 +1686,34 @@ inline void setClock48MhzHseTcxo() {
    // Route NSS to PWR_SUBGHZSPICR for software control
    PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
-   while(PWR->SR2 & PWR_SR2_RFBUSYS) {
+   uint32_t spins = 100'000u;
+   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
-   while(PWR->SR2 & PWR_SR2_RFBUSYS) {
+   spins = 100'000u;
+   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
    // SetTcxoMode: opcode 0x97, voltage 0x02 (1.8 V), timeout 0x000140 (320 * 15.625 µs = 5 ms)
    const uint8_t cmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
    for(uint32_t i = 0u; i < sizeof(cmd); ++i) {
-      while(!(SUBGHZSPI->SR & SPI_SR_TXE)) {
+      spins = 100'000u;
+      while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
       }
       *(volatile uint8_t *)&SUBGHZSPI->DR = cmd[i];
-      while(!(SUBGHZSPI->SR & SPI_SR_RXNE)) {
+      spins = 100'000u;
+      while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
       }
       (void)*(volatile uint8_t *)&SUBGHZSPI->DR;
    }
-   while(SUBGHZSPI->SR & SPI_SR_BSY) {
+   spins = 100'000u;
+   while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
    }
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
    SUBGHZSPI->CR1 &= ~SPI_CR1_SPE;
    // Spin ~5 ms at reset clock (MSI 4 MHz ≈ 4 cycles/iteration)
    volatile uint32_t ticks = 20000u;
-   while(ticks--) {
+   while(ticks > 0) {
+      ticks = ticks - 1;
    }
 
    // 3. Flash wait states: 2 WS required for SYSCLK > 36 MHz at VOS1
@@ -1700,7 +1727,8 @@ inline void setClock48MhzHseTcxo() {
    //    PLL input: 32 MHz (HSE) / PLLM=÷2 = 16 MHz, which is the rated PLL-input maximum.
    RCC->CR |= RCC_CR_HSEBYPPWR;
    RCC->CR |= RCC_CR_HSEON;
-   while(!(RCC->CR & RCC_CR_HSERDY)) {
+   spins = 500'000u;
+   while(!(RCC->CR & RCC_CR_HSERDY) && --spins) {
    }
 
    // 5. Configure and enable PLL
@@ -1708,12 +1736,14 @@ inline void setClock48MhzHseTcxo() {
    RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
                    RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
    RCC->CR |= RCC_CR_PLLON;
-   while(!(RCC->CR & RCC_CR_PLLRDY)) {
+   spins = 500'000u;
+   while(!(RCC->CR & RCC_CR_PLLRDY) && --spins) {
    }
 
    // 6. Switch SYSCLK to PLL (SW = 11) and wait for hardware confirmation
    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_0 | RCC_CFGR_SW_1;
-   while((RCC->CFGR & RCC_CFGR_SWS) != (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1)) {
+   spins = 500'000u;
+   while(((RCC->CFGR & RCC_CFGR_SWS) != (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1)) && --spins) {
    }
 }
 #endif
@@ -1764,6 +1794,21 @@ inline bool hasResetFlag(uint32_t resetCause, ResetFlag flag) {
 // -----------------
 // LSE (Low-Speed External Oscillator)
 // -----------------
+#if defined(RCC_BDCR_LSEDRV)
+enum class LseDrive : uint32_t {
+   Low = 0u,
+   MediumLow = RCC_BDCR_LSEDRV_0,
+   MediumHigh = RCC_BDCR_LSEDRV_1,
+   High = RCC_BDCR_LSEDRV,
+};
+inline void setLSEDrive(LseDrive drive) {
+   RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_LSEDRV) | static_cast<uint32_t>(drive);
+}
+inline LseDrive getLSEDrive() {
+   return static_cast<LseDrive>(RCC->BDCR & RCC_BDCR_LSEDRV);
+}
+#endif
+
 #if defined(RCC_BDCR_LSEON)
 inline void disableLSE() {
    RCC->BDCR &= ~RCC_BDCR_LSEON;
@@ -1771,7 +1816,7 @@ inline void disableLSE() {
 inline bool isLSEReady() {
    return (RCC->BDCR & RCC_BDCR_LSERDY) != 0u;
 }
-inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
+inline bool waitLSEReady(uint32_t timeoutLoops = 15'000'000u) {
    while(!isLSEReady()) {
       if(--timeoutLoops == 0u) {
          return false;
@@ -1779,7 +1824,7 @@ inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
    }
    return true;
 }
-inline bool enableLSE(uint32_t timeoutLoops = 500000u) {
+inline bool enableLSE(uint32_t timeoutLoops = 15'000'000u) {
    RCC->BDCR |= RCC_BDCR_LSEON;
    return waitLSEReady(timeoutLoops);
 }
@@ -1790,7 +1835,7 @@ inline void disableLSE() {
 inline bool isLSEReady() {
    return (RCC->CSR & RCC_CSR_LSERDY) != 0u;
 }
-inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
+inline bool waitLSEReady(uint32_t timeoutLoops = 15'000'000u) {
    while(!isLSEReady()) {
       if(--timeoutLoops == 0u) {
          return false;
@@ -1798,7 +1843,7 @@ inline bool waitLSEReady(uint32_t timeoutLoops = 500000u) {
    }
    return true;
 }
-inline bool enableLSE(uint32_t timeoutLoops = 500000u) {
+inline bool enableLSE(uint32_t timeoutLoops = 15'000'000u) {
    RCC->CSR |= RCC_CSR_LSEON;
    return waitLSEReady(timeoutLoops);
 }
