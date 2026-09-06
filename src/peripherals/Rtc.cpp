@@ -157,6 +157,12 @@ bool Rtc::initCalendar(ClockSource clockSource) const {
   rtc_.ISR &= ~RTC_ISR_INIT;
 #endif
 
+#if defined(RTC_CR_BYPSHAD)
+  // Bypass shadow registers so that calendar and subsecond registers are read
+  // directly from the live counters, avoiding frozen/stale data after low-power modes.
+  rtc_.CR |= RTC_CR_BYPSHAD;
+#endif
+
   lockWriteProtection();
   return true;
 }
