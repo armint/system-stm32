@@ -1,0 +1,87 @@
+=======================================================
+STM32WLxxx_v0r1: first release
+=======================================================
+Bee_IUM Internal user manual DocIDxxxxxx Rev 0.0.2 9 February 2018
+supported IP:
+FLASH / EXTI / GPIO / DMA/ DMAMUX / PWR / RCC / DBGMCU / SYSCFG / IPCC / HSEM
+SPI  / USART / RTC
+=======================================================
+STM32WL5x_CM0_v0r2: first release
+=======================================================
+Bee_IUM Internal user manual DocIDxxxxxx Rev 0.0.2 9 February 2018
+supported IP:
+FLASH / EXTI / GPIO / DMA/ DMAMUX / PWR / RCC / DBGMCU / SYSCFG / IPCC / HSEM
+SPI  / USART / RTC
+ =======================================================
+STM32WLxxx_CM0_v1r0: first official release
+=======================================================
+Bee_IUM Internal user manual DocIDxxxxxx Rev 0.0.5 April 2018
+supported IP: All
+
+=======================================================
+STM32WLx_CM4_v1r1: second release   24 JULY 2018
+=======================================================
+=======================================================
+STM32WLx_CM0_v1r1: second release   24 JULY 2018
+=======================================================
+Bee_IUM Internal user manual DocIDxxxxxx Rev 0.0.7 
+bUg fix: Ticket 49521
+updated IPs: PKA; SYSCFG; DBGMCU; NVIC; Flash; TZSC; PWR; ADC; EXTI.
+ 
+=======================================================
+STM32WLx_CM4_v1r2: THIRD RELEASE  05 September 2018
+=======================================================
+Bee_IUM Internal user manual DocIDxxxxxx Rev 0.0.7 
+- eliminated IPs: FPU and FPU_CPACR.
+- UPDATED interrupts
+- Updated IPs: EXTI, SYSCFG, TAMP, DBGMCU
+=======================================================
+STM32WLx_CM0P_v1r2: THIRD RELEASE  05 September 2018
+=======================================================
+Bee_IUM Internal user manual DocIDxxxxxx Rev 0.0.7 
+- CMO svd file has been renamed ( STM32WLx_CM0.svd -> STM32WLx_CM0P.svd)
+- Updated IPs:SYSCFG, EXTI, TAMP, DBGMCU
+- UPDATED interrupts
+
+=======================================================
+STM32WL5x_CM4_v1r3:  Ticket 55763_ 30 October 2018
+=======================================================
+aligned with RM:IUM_Bee (STM32WL5xx) Rev 0.0.8
+Updated IPs: Flash, PWR, RSS, HSEM, ADC, DBGMCU, PKA
+=======================================================
+STM32WL5x_CM0P_v1r3:  Ticket 55763_ 30 October 2018
+=======================================================
+aligned with RM:IUM_Bee (STM32WL5xx) Rev 0.0.8
+Updated IPs: Flash, PWR, RSS, HSEM, ADC, DBGMCU, PKA
+
+=======================================================
+STM32WL5x_v1r4 (CM4 & CM0P):  Ticket 56643_ 21 11 2018
+=======================================================
+ RM: IUM_Bee (STM32WL5xx) Rev 0.0.8 August 2018
+- Bug: Address Offset are wrong for RSS registers 
+- Updated Address Offset for the listed registers: PWR_
+     RSSCR, RSSCMDR, RSSSWDBGR, RSSTKxADISR, RSSTKxRx
+- Updated registers Status and their bit sizes: 
+     FLASH_: PCROP1ASR, PCROP1AER, WRP1AR, WRP1BR, IPCCBR, C2SR
+     RTC_ : Removed ICSR.ALRBWF and ALRAWF; 
+            Added ICSR.BIN and BCDU
+     RCC_: Renamed CSR.MSISTBYRG in to MSISRANGE
+=======================================================
+STM32WL5x_v1r5 (CM4 & CM0P):  Ticket 84333  20-04-2020
+=======================================================
+RM0453(dual) Rev 0.2 _ 30 September 2019
+support for: STM32WL5x
+
+***Bug fix in RTC***
+Adding missing SSRU bits:
+ SSRUIE in RTC_CR
+ SSRUF  in RTC_SR
+ SSRUMF in RTC_MISR
+ CSSRUF in RTC_SCR
+
+-Correcting reset values in RTC_DR/RTC_ICSR/RTC_PRER/RTC_WUTR
+-correcting bitWidth of bit SS in RTC_SSR and RTC_TSSSR
+-Add missing bit LPCAL in RTC_CALR 
+-Add missing bit SSCLR in RTC_ALRMASSR and RTC_ALRMBSSR
+-correcting bitWidth of bit PREDIV_S in RTC_PRER
+
