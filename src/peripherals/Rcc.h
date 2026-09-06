@@ -1657,7 +1657,15 @@ inline void setClock64MhzHSI() {
 // This function runs before DATA/BSS initialisation (called from SystemClock_Config),
 // so it must not access global variables — only registers and literal constants.
 #if defined(RCC_CR_HSEBYPPWR) && defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
-inline void setClock48MhzHseTcxo() {
+// Returns true if SYSCLK is confirmed running on PLL (48 MHz) when this
+// returns, false if HSE/PLL failed to lock and SYSCLK is left on whatever it
+// was before (typically MSI) -- see the "Startup clock" follow-up issue for
+// a known case where this happens on every reset (not just a genuine
+// power-on) and is not yet resolved. Callers must not assume success:
+// resync anything that assumed a fixed 48 MHz (e.g. UART BRR, via
+// SystemCoreClockUpdate() + Usart::setBaudRate()) after calling this,
+// regardless of the return value.
+inline bool setClock48MhzHseTcxo() {
    // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
    if((PWR->CR1 & PWR_CR1_VOS) != PWR_CR1_VOS_0) {
       PWR->CR1 = (PWR->CR1 & ~PWR_CR1_VOS) | PWR_CR1_VOS_0;
@@ -1752,8 +1760,14 @@ inline void setClock48MhzHseTcxo() {
 
    // 5. Configure and enable PLL
    //    PLLSRC = HSE (11), PLLM = 000 (÷2), PLLN = 6, PLLR = 001 (÷2), PLLREN = 1
+   // BUG FIX: PLLR field bits were never actually set here (left at the
+   // reserved value 0, "division factor cannot be 0" per RM0453), so the
+   // real PLLR division was undefined/hardware-dependent instead of the
+   // intended ÷2 -- and SystemCoreClockUpdate()'s standard field+1 formula
+   // read it as ÷1, computing 96 MHz instead of the real ~48 MHz. Setting
+   // RCC_PLLCFGR_PLLR_0 (field value 1) makes ÷2 explicit and RM-compliant.
    RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
-                   RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
+                   RCC_PLLCFGR_PLLR_0 | RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
    RCC->CR |= RCC_CR_PLLON;
    spins = 500'000u;
    while(!(RCC->CR & RCC_CR_PLLRDY) && --spins) {
@@ -1764,6 +1778,8 @@ inline void setClock48MhzHseTcxo() {
    spins = 500'000u;
    while(((RCC->CFGR & RCC_CFGR_SWS) != (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1)) && --spins) {
    }
+
+   return (RCC->CFGR & RCC_CFGR_SWS) == (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1);
 }
 #endif
 
