@@ -3,6 +3,7 @@
 #include <cmsis_device.h>
 #include <cstdint>
 #include <span>
+#include <type_traits>
 
 namespace Rcc {
 
@@ -1791,32 +1792,33 @@ struct ClockDiag {
    bool ok;
 };
 
-// Returns true if SYSCLK is confirmed running on PLL (48 MHz) when this
-// returns, false if HSE/PLL failed to lock and SYSCLK is left on whatever it
-// was before (typically MSI). Callers that must keep working in the failure
-// case should resync anything assuming a fixed 48 MHz (e.g. UART BRR, via
-// SystemCoreClockUpdate() + Usart::setBaudRate()) when false is returned.
+namespace detail {
+// Shared implementation of the two setClock48MhzHseTcxo() overloads below.
 //
-// On a successful call the clock is identical whether this ran at boot or
-// after a Stop2 wakeup, so no resync is needed on the success path.
-//
-// This function talks to the sub-GHz radio (releasing its reset if held, then
-// SetDIO3AsTCXOCtrl and ClearDeviceErrors). It does not reset the radio when
-// it is already running, so calling it after a Stop2 wakeup preserves radio
-// state -- but it is still not free, and callers should skip it entirely when
-// RCC_CFGR.SWS already reads PLL.
-//
-// Pass a ClockDiag to record what every step did; see that struct for why. It
-// is a diagnostic aid only, and adds a few read-only radio transactions. The
-// default nullptr records nothing and generates no extra traffic.
-inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
-   if(diag) {
-      diag->rccCrEntry = RCC->CR;
-      diag->rccCsrEntry = RCC->CSR;
-      diag->rccCfgrEntry = RCC->CFGR;
-      diag->rccApb3EnrEntry = RCC->APB3ENR;
-      diag->pwrCr1Entry = PWR->CR1;
-      diag->pwrSr2Entry = PWR->SR2;
+// Record is a template parameter rather than a runtime flag so that the
+// non-recording instantiation contains no diagnostic code whatsoever. The
+// discarded `if constexpr` branches are never instantiated, so neither the
+// recording nor the radio probe helpers it calls are odr-used, and none of it
+// reaches a binary that does not ask for diagnostics. A runtime `if(diag)`
+// could not achieve that: at ~1 KB this function is far too large for the
+// compiler to inline and constant-fold at a nullptr call site, so every branch
+// and every probe helper stayed in flash.
+// Stand-in for the diagnostics parameter in the non-recording instantiation,
+// so that instantiation carries no pointer and there is no nullability to
+// reason about: the recording instantiation takes a reference that cannot be
+// null, and the non-recording one takes an empty object it never touches.
+struct NoClockDiag {};
+
+template<bool Record>
+inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoClockDiag> diag) {
+
+   if constexpr(Record) {
+      diag.rccCrEntry = RCC->CR;
+      diag.rccCsrEntry = RCC->CSR;
+      diag.rccCfgrEntry = RCC->CFGR;
+      diag.rccApb3EnrEntry = RCC->APB3ENR;
+      diag.pwrCr1Entry = PWR->CR1;
+      diag.pwrSr2Entry = PWR->SR2;
    }
 
    // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
@@ -1854,19 +1856,19 @@ inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
       while((RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
       }
    }
-   if(diag) {
-      diag->radioResetReleased = radioWasInReset;
-      diag->rfrstReleaseSpins = radioWasInReset ? detail::spinsUsed(100'000u, spins) : 0;
+   if constexpr(Record) {
+      diag.radioResetReleased = radioWasInReset;
+      diag.rfrstReleaseSpins = radioWasInReset ? detail::spinsUsed(100'000u, spins) : 0;
    }
 #elif defined(RCC_CSR_RFRST)
    RCC->CSR &= ~RCC_CSR_RFRST;
-   if(diag) {
-      diag->radioResetReleased = true;
-      diag->rfrstReleaseSpins = 0;
+   if constexpr(Record) {
+      diag.radioResetReleased = true;
+      diag.rfrstReleaseSpins = 0;
    }
 #endif
-   if(diag) {
-      diag->rccCsrAfterReset = RCC->CSR;
+   if constexpr(Record) {
+      diag.rccCsrAfterReset = RCC->CSR;
    }
    RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
    RCC->APB3RSTR |= RCC_APB3RSTR_SUBGHZSPIRST;
@@ -1888,43 +1890,43 @@ inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
    // first established. 0 is also its reset value, so setting it here was not
    // merely redundant: it silently broke every SUBGHZSPI exchange below.
    PWR->CR1 &= ~PWR_CR1_SUBGHZSPINSSSEL;
-   if(diag) {
-      diag->spiSrAfterInit = SUBGHZSPI->SR;
+   if constexpr(Record) {
+      diag.spiSrAfterInit = SUBGHZSPI->SR;
    }
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
    spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
-   if(diag) {
-      diag->busyIdleSpins = detail::spinsUsed(100'000u, spins);
+   if constexpr(Record) {
+      diag.busyIdleSpins = detail::spinsUsed(100'000u, spins);
    }
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
    spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
-   if(diag) {
-      diag->busyAfterNssSpins = detail::spinsUsed(100'000u, spins);
+   if constexpr(Record) {
+      diag.busyAfterNssSpins = detail::spinsUsed(100'000u, spins);
    }
    // SetDIO3AsTCXOCtrl: opcode 0x97, tcxoVoltage 0x02 (DIO3 outputs 1.8 V),
    // delay 0x000140 (320 * 15.625 µs = 5 ms). SX1261/2 datasheet §13.3.6.
    uint8_t tcxoCmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
    for(uint32_t i = 0u; i < sizeof(tcxoCmd); ++i) {
       const uint8_t response = detail::subghzTransfer(tcxoCmd[i]);
-      if(diag) {
-         diag->tcxoResponse[i] = response;
+      if constexpr(Record) {
+         diag.tcxoResponse[i] = response;
       }
    }
    spins = 100'000u;
    while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
    }
-   if(diag) {
-      diag->spiBusySpins = detail::spinsUsed(100'000u, spins);
+   if constexpr(Record) {
+      diag.spiBusySpins = detail::spinsUsed(100'000u, spins);
    }
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
 
-   if(diag) {
-      diag->statusAfterTcxo = detail::subghzStatus();
-      diag->opErrorAfterTcxo = detail::subghzDeviceErrors();
+   if constexpr(Record) {
+      diag.statusAfterTcxo = detail::subghzStatus();
+      diag.opErrorAfterTcxo = detail::subghzDeviceErrors();
    }
 
    // Clear the radio's error controller. Per SX1261/2 §13.3.6, XOSC_START_ERR
@@ -1938,15 +1940,15 @@ inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
    uint8_t clearErrCmd[] = {0x07u, 0x00u, 0x00u};
    detail::subghzCommand(clearErrCmd);
 
-   if(diag) {
-      diag->opErrorAfterClear = detail::subghzDeviceErrors();
+   if constexpr(Record) {
+      diag.opErrorAfterClear = detail::subghzDeviceErrors();
       // Read the sync word under both NSS source settings. The link is already
       // established at this point, so flipping the bit here does not disturb
       // it; the pair is what makes a future regression in the routing above
       // legible instead of showing up as garbage in every field.
-      diag->syncWordNssSel0 = detail::subghzSyncWord();
+      diag.syncWordNssSel0 = detail::subghzSyncWord();
       PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
-      diag->syncWordNssSel1 = detail::subghzSyncWord();
+      diag.syncWordNssSel1 = detail::subghzSyncWord();
       PWR->CR1 &= ~PWR_CR1_SUBGHZSPINSSSEL;
    }
 
@@ -1967,23 +1969,23 @@ inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
    //    as an external clock (TCXO) rather than a crystal — without it HSERDY never asserts.
    //    PLL input: 32 MHz (HSE) / PLLM=÷2 = 16 MHz, which is the rated PLL-input maximum.
    RCC->CR |= RCC_CR_HSEBYPPWR;
-   if(diag) {
-      diag->rccCrAfterHseByp = RCC->CR;
+   if constexpr(Record) {
+      diag.rccCrAfterHseByp = RCC->CR;
    }
    RCC->CR |= RCC_CR_HSEON;
    spins = 500'000u;
    while(!(RCC->CR & RCC_CR_HSERDY) && --spins) {
    }
-   if(diag) {
-      diag->hseRdySpins = detail::spinsUsed(500'000u, spins);
-      diag->rccCrAfterHse = RCC->CR;
+   if constexpr(Record) {
+      diag.hseRdySpins = detail::spinsUsed(500'000u, spins);
+      diag.rccCrAfterHse = RCC->CR;
       // Re-read the radio now the 32 MHz reference should be running. If
       // XOSC_START_ERR (bit 5) is set again here, the radio genuinely did not
       // see the TCXO; if it stays clear, the flag recorded above was the
       // expected cold-start artefact SX1261/2 §13.3.6 describes.
       SUBGHZSPI->CR1 |= SPI_CR1_SPE;
-      diag->opErrorAfterHse = detail::subghzDeviceErrors();
-      diag->statusAfterHse = detail::subghzStatus();
+      diag.opErrorAfterHse = detail::subghzDeviceErrors();
+      diag.statusAfterHse = detail::subghzStatus();
       SUBGHZSPI->CR1 &= ~SPI_CR1_SPE;
    }
 
@@ -1997,16 +1999,16 @@ inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
    // RCC_PLLCFGR_PLLR_0 (field value 1) makes ÷2 explicit and RM-compliant.
    RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
                    RCC_PLLCFGR_PLLR_0 | RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
-   if(diag) {
-      diag->rccPllCfgr = RCC->PLLCFGR;
+   if constexpr(Record) {
+      diag.rccPllCfgr = RCC->PLLCFGR;
    }
    RCC->CR |= RCC_CR_PLLON;
    spins = 500'000u;
    while(!(RCC->CR & RCC_CR_PLLRDY) && --spins) {
    }
-   if(diag) {
-      diag->pllRdySpins = detail::spinsUsed(500'000u, spins);
-      diag->rccCrAfterPll = RCC->CR;
+   if constexpr(Record) {
+      diag.pllRdySpins = detail::spinsUsed(500'000u, spins);
+      diag.rccCrAfterPll = RCC->CR;
    }
 
    // 6. Switch SYSCLK to PLL (SW = 11) and wait for hardware confirmation
@@ -2016,15 +2018,41 @@ inline bool setClock48MhzHseTcxo(ClockDiag *diag = nullptr) {
    }
 
    const bool locked = (RCC->CFGR & RCC_CFGR_SWS) == (RCC_CFGR_SWS_0 | RCC_CFGR_SWS_1);
-   if(diag) {
-      diag->swsSpins = detail::spinsUsed(500'000u, spins);
-      diag->rccCrFinal = RCC->CR;
-      diag->rccCfgrFinal = RCC->CFGR;
-      diag->pwrSr2Final = PWR->SR2;
-      diag->flashAcrFinal = FLASH->ACR;
-      diag->ok = locked;
+   if constexpr(Record) {
+      diag.swsSpins = detail::spinsUsed(500'000u, spins);
+      diag.rccCrFinal = RCC->CR;
+      diag.rccCfgrFinal = RCC->CFGR;
+      diag.pwrSr2Final = PWR->SR2;
+      diag.flashAcrFinal = FLASH->ACR;
+      diag.ok = locked;
    }
    return locked;
+}
+} // namespace detail
+
+// Returns true if SYSCLK is confirmed running on PLL (48 MHz) when this
+// returns, false if HSE/PLL failed to lock and SYSCLK is left on whatever it
+// was before (typically MSI). Callers that must keep working in the failure
+// case should resync anything assuming a fixed 48 MHz (e.g. UART BRR, via
+// SystemCoreClockUpdate() + Usart::setBaudRate()) when false is returned.
+//
+// On a successful call the clock is identical whether this ran at boot or
+// after a Stop2 wakeup, so no resync is needed on the success path.
+//
+// This function talks to the sub-GHz radio (releasing its reset if held, then
+// SetDIO3AsTCXOCtrl and ClearDeviceErrors). It does not reset the radio when
+// it is already running, so calling it after a Stop2 wakeup preserves radio
+// state -- but it is still not free, and callers should skip it entirely when
+// RCC_CFGR.SWS already reads PLL.
+inline bool setClock48MhzHseTcxo() {
+   return detail::setClock48MhzHseTcxoImpl<false>({});
+}
+
+// As above, but records what every step did into @p diag, for diagnosing a
+// bring-up that fails or misbehaves. See ClockDiag. This overload adds a few
+// read-only radio transactions; the no-argument one above costs nothing.
+inline bool setClock48MhzHseTcxo(ClockDiag &diag) {
+   return detail::setClock48MhzHseTcxoImpl<true>(diag);
 }
 #endif
 
