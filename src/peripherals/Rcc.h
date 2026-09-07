@@ -1657,6 +1657,23 @@ inline void setClock64MhzHSI() {
 // This function runs before DATA/BSS initialisation (called from SystemClock_Config),
 // so it must not access global variables — only registers and literal constants.
 #if defined(RCC_CR_HSEBYPPWR) && defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
+namespace detail {
+// Exchange one byte with the sub-GHz radio over SUBGHZSPI, returning what the
+// radio clocked back. Both waits are bounded so an unresponsive or clock-gated
+// peripheral cannot hang the boot path. The caller frames the transfer with
+// PWR_SUBGHZSPICR.NSS.
+inline uint8_t subghzTransfer(uint8_t value) {
+   uint32_t spins = 100'000u;
+   while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
+   }
+   *(volatile uint8_t *)&SUBGHZSPI->DR = value;
+   spins = 100'000u;
+   while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
+   }
+   return *(volatile uint8_t *)&SUBGHZSPI->DR;
+}
+} // namespace detail
+
 // Returns true if SYSCLK is confirmed running on PLL (48 MHz) when this
 // returns, false if HSE/PLL failed to lock and SYSCLK is left on whatever it
 // was before (typically MSI) -- see the "Startup clock" follow-up issue for
@@ -1731,22 +1748,38 @@ inline bool setClock48MhzHseTcxo() {
    spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
-   // SetTcxoMode: opcode 0x97, voltage 0x02 (1.8 V), timeout 0x000140 (320 * 15.625 µs = 5 ms)
-   const uint8_t cmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
-   for(uint32_t i = 0u; i < sizeof(cmd); ++i) {
-      spins = 100'000u;
-      while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
-      }
-      *(volatile uint8_t *)&SUBGHZSPI->DR = cmd[i];
-      spins = 100'000u;
-      while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
-      }
-      (void)*(volatile uint8_t *)&SUBGHZSPI->DR;
+   // SetDIO3AsTCXOCtrl: opcode 0x97, tcxoVoltage 0x02 (DIO3 outputs 1.8 V),
+   // delay 0x000140 (320 * 15.625 µs = 5 ms). SX1261/2 datasheet §13.3.6.
+   const uint8_t tcxoCmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
+   for(uint32_t i = 0u; i < sizeof(tcxoCmd); ++i) {
+      (void)detail::subghzTransfer(tcxoCmd[i]);
    }
    spins = 100'000u;
    while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
    }
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+
+   // Clear the radio's error controller. Per SX1261/2 §13.3.6, XOSC_START_ERR
+   // "is raised at POR or at wake-up from Sleep mode in a cold-start condition,
+   // when a TCXO is used. It is an expected behaviour since the chip is not yet
+   // aware of being clocked by a TCXO. The user should simply clear this flag
+   // with the ClearDeviceErrors command." Confirmed on hardware: after the
+   // command above, GetDeviceErrors reads 0x0020 (bit 5, XOSC_START_ERR), and
+   // ClearDeviceErrors takes it back to 0x0000 -- where it stays once HSE32 is
+   // running, so the TCXO really does start.
+   const uint8_t clearErrCmd[] = {0x07u, 0x00u, 0x00u};
+   spins = 100'000u;
+   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
+   }
+   PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
+   for(uint32_t i = 0u; i < sizeof(clearErrCmd); ++i) {
+      (void)detail::subghzTransfer(clearErrCmd[i]);
+   }
+   spins = 100'000u;
+   while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
+   }
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+
    SUBGHZSPI->CR1 &= ~SPI_CR1_SPE;
    // Spin ~5 ms at reset clock (MSI 4 MHz ≈ 4 cycles/iteration)
    volatile uint32_t ticks = 20000u;
