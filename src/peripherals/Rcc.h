@@ -1690,34 +1690,34 @@ inline bool setClock48MhzHseTcxo() {
       }
    }
 
-   // 2. Enable TCXO via SX1262 SUBGHZSPI SetTcxoMode command.
-   // Force the radio core itself back to its post-reset state first --
-   // resetting only the SUBGHZSPI bridge (below) leaves the SX1262's own
-   // state machine untouched, and re-sending SetTcxoMode to a radio that
-   // isn't in its fresh-reset state can leave PWR->SR2.RFBUSYS stuck high
-   // forever. Matters whenever this function runs a second time: after a
-   // Stop2 wakeup, or (previously) later in the boot sequence.
+   // 2. Enable the TCXO via the SX1262 SetDIO3AsTCXOCtrl command.
+   //
+   // Release the radio reset if it is asserted; never re-assert it. The radio
+   // is held in reset coming out of a system reset -- measured on a LoRa-E5,
+   // RCC_CSR reads 0x0401C600 on entry at boot, with both RFRST and RFRSTF set
+   // -- so the reset has to be released here. On a Stop2 wakeup both already
+   // read 0 and the radio keeps the state it had before the sleep, so this
+   // leaves it untouched.
+   //
+   // The previous unconditional reset pulse worked around the radio being left
+   // with PWR_SR2.RFBUSYS stuck high when SetTcxoMode was re-sent to a
+   // non-fresh radio. That symptom was a consequence of the SUBGHZSPINSSSEL
+   // defect: NSS never toggled, so the radio sat mid-command indefinitely.
+   // With the link working the workaround is unnecessary, and confirmed so on
+   // hardware -- after a Stop2 wakeup with no reset, RFBUSYS is already low on
+   // the first poll, GetDeviceErrors reads 0x0000 (the radio kept its TCXO
+   // configuration across the sleep), and HSE/PLL lock exactly as at boot.
+   //
+   // Keeping the reset would also be actively harmful: it discards radio state
+   // on every wakeup, which would break an active LoRaWAN session.
    uint32_t spins = 100'000u;
 #if defined(RCC_CSR_RFRST) && defined(RCC_CSR_RFRSTF)
-   RCC->CSR |= RCC_CSR_RFRST;
-   while(!(RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
-   }
-   // Hold reset for >= 100 us to satisfy Semtech SX1262 t_SW_RST requirement.
-   // At reset clock (MSI 4 MHz ≈ 4 cycles/loop), 200 iterations provide ~200 us.
-   volatile uint32_t rstTicks = 200u;
-   while(rstTicks > 0) {
-      rstTicks = rstTicks - 1;
-   }
-   RCC->CSR &= ~RCC_CSR_RFRST;
-   spins = 100'000u;
-   while((RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
+   if(RCC->CSR & RCC_CSR_RFRST) {
+      RCC->CSR &= ~RCC_CSR_RFRST;
+      while((RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
+      }
    }
 #elif defined(RCC_CSR_RFRST)
-   RCC->CSR |= RCC_CSR_RFRST;
-   volatile uint32_t rstTicks = 200u;
-   while(rstTicks > 0) {
-      rstTicks = rstTicks - 1;
-   }
    RCC->CSR &= ~RCC_CSR_RFRST;
 #endif
    RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
