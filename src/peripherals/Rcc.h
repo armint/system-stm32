@@ -1676,12 +1676,18 @@ inline uint8_t subghzTransfer(uint8_t value) {
 
 // Returns true if SYSCLK is confirmed running on PLL (48 MHz) when this
 // returns, false if HSE/PLL failed to lock and SYSCLK is left on whatever it
-// was before (typically MSI) -- see the "Startup clock" follow-up issue for
-// a known case where this happens on every reset (not just a genuine
-// power-on) and is not yet resolved. Callers must not assume success:
-// resync anything that assumed a fixed 48 MHz (e.g. UART BRR, via
-// SystemCoreClockUpdate() + Usart::setBaudRate()) after calling this,
-// regardless of the return value.
+// was before (typically MSI). Callers that must keep working in the failure
+// case should resync anything assuming a fixed 48 MHz (e.g. UART BRR, via
+// SystemCoreClockUpdate() + Usart::setBaudRate()) when false is returned.
+//
+// On a successful call the clock is identical whether this ran at boot or
+// after a Stop2 wakeup, so no resync is needed on the success path.
+//
+// This function talks to the sub-GHz radio (releasing its reset if held, then
+// SetDIO3AsTCXOCtrl and ClearDeviceErrors). It does not reset the radio when
+// it is already running, so calling it after a Stop2 wakeup preserves radio
+// state -- but it is still not free, and callers should skip it entirely when
+// RCC_CFGR.SWS already reads PLL.
 inline bool setClock48MhzHseTcxo() {
    // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
    if((PWR->CR1 & PWR_CR1_VOS) != PWR_CR1_VOS_0) {
