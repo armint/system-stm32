@@ -1710,8 +1710,19 @@ inline bool setClock48MhzHseTcxo() {
    SUBGHZSPI->CR2 = SPI_CR2_FRXTH | (7u << SPI_CR2_DS_Pos);
    // Master, mode 0, BR=001 (~1 MHz on MSI), software NSS
    SUBGHZSPI->CR1 = SPI_CR1_MSTR | SPI_CR1_BR_0 | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE;
-   // Route NSS to PWR_SUBGHZSPICR for software control
-   PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
+   // Route NSS to PWR_SUBGHZSPICR for software control.
+   //
+   // SUBGHZSPINSSSEL must be *cleared* for this, not set. Determined by
+   // measurement on a LoRa-E5 (STM32WLE5JC), since neither RM0453's SVD nor the
+   // CMSIS headers describe the field: with the bit set from the start, every
+   // response byte reads 0xAA and a ReadRegister of the LoRa sync word at
+   // 0x0740 returns 0xAAAA instead of its 0x1424 reset value. With it cleared,
+   // every command answers correctly and GetStatus returns a valid STBY_RC
+   // status. Setting it again after the link is established does not break it,
+   // so it is not a simple NSS on/off gate -- it has to be 0 while the link is
+   // first established. 0 is also its reset value, so setting it here was not
+   // merely redundant: it silently broke every SUBGHZSPI exchange below.
+   PWR->CR1 &= ~PWR_CR1_SUBGHZSPINSSSEL;
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
    spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
