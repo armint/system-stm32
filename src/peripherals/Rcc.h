@@ -1657,14 +1657,37 @@ inline void setClock64MhzHSI() {
 // This function runs before DATA/BSS initialisation (called from SystemClock_Config),
 // so it must not access global variables — only registers and literal constants.
 #if defined(RCC_CR_HSEBYPPWR) && defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
+namespace detail {
+// Exchange one byte with the sub-GHz radio over SUBGHZSPI, returning what the
+// radio clocked back. Both waits are bounded so an unresponsive or clock-gated
+// peripheral cannot hang the boot path. The caller frames the transfer with
+// PWR_SUBGHZSPICR.NSS.
+inline uint8_t subghzTransfer(uint8_t value) {
+   uint32_t spins = 100'000u;
+   while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
+   }
+   *(volatile uint8_t *)&SUBGHZSPI->DR = value;
+   spins = 100'000u;
+   while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
+   }
+   return *(volatile uint8_t *)&SUBGHZSPI->DR;
+}
+} // namespace detail
+
 // Returns true if SYSCLK is confirmed running on PLL (48 MHz) when this
 // returns, false if HSE/PLL failed to lock and SYSCLK is left on whatever it
-// was before (typically MSI) -- see the "Startup clock" follow-up issue for
-// a known case where this happens on every reset (not just a genuine
-// power-on) and is not yet resolved. Callers must not assume success:
-// resync anything that assumed a fixed 48 MHz (e.g. UART BRR, via
-// SystemCoreClockUpdate() + Usart::setBaudRate()) after calling this,
-// regardless of the return value.
+// was before (typically MSI). Callers that must keep working in the failure
+// case should resync anything assuming a fixed 48 MHz (e.g. UART BRR, via
+// SystemCoreClockUpdate() + Usart::setBaudRate()) when false is returned.
+//
+// On a successful call the clock is identical whether this ran at boot or
+// after a Stop2 wakeup, so no resync is needed on the success path.
+//
+// This function talks to the sub-GHz radio (releasing its reset if held, then
+// SetDIO3AsTCXOCtrl and ClearDeviceErrors). It does not reset the radio when
+// it is already running, so calling it after a Stop2 wakeup preserves radio
+// state -- but it is still not free, and callers should skip it entirely when
+// RCC_CFGR.SWS already reads PLL.
 inline bool setClock48MhzHseTcxo() {
    // 1. Ensure voltage range 1 (VOS = 01); default after reset but verify.
    if((PWR->CR1 & PWR_CR1_VOS) != PWR_CR1_VOS_0) {
@@ -1673,34 +1696,34 @@ inline bool setClock48MhzHseTcxo() {
       }
    }
 
-   // 2. Enable TCXO via SX1262 SUBGHZSPI SetTcxoMode command.
-   // Force the radio core itself back to its post-reset state first --
-   // resetting only the SUBGHZSPI bridge (below) leaves the SX1262's own
-   // state machine untouched, and re-sending SetTcxoMode to a radio that
-   // isn't in its fresh-reset state can leave PWR->SR2.RFBUSYS stuck high
-   // forever. Matters whenever this function runs a second time: after a
-   // Stop2 wakeup, or (previously) later in the boot sequence.
+   // 2. Enable the TCXO via the SX1262 SetDIO3AsTCXOCtrl command.
+   //
+   // Release the radio reset if it is asserted; never re-assert it. The radio
+   // is held in reset coming out of a system reset -- measured on a LoRa-E5,
+   // RCC_CSR reads 0x0401C600 on entry at boot, with both RFRST and RFRSTF set
+   // -- so the reset has to be released here. On a Stop2 wakeup both already
+   // read 0 and the radio keeps the state it had before the sleep, so this
+   // leaves it untouched.
+   //
+   // The previous unconditional reset pulse worked around the radio being left
+   // with PWR_SR2.RFBUSYS stuck high when SetTcxoMode was re-sent to a
+   // non-fresh radio. That symptom was a consequence of the SUBGHZSPINSSSEL
+   // defect: NSS never toggled, so the radio sat mid-command indefinitely.
+   // With the link working the workaround is unnecessary, and confirmed so on
+   // hardware -- after a Stop2 wakeup with no reset, RFBUSYS is already low on
+   // the first poll, GetDeviceErrors reads 0x0000 (the radio kept its TCXO
+   // configuration across the sleep), and HSE/PLL lock exactly as at boot.
+   //
+   // Keeping the reset would also be actively harmful: it discards radio state
+   // on every wakeup, which would break an active LoRaWAN session.
    uint32_t spins = 100'000u;
 #if defined(RCC_CSR_RFRST) && defined(RCC_CSR_RFRSTF)
-   RCC->CSR |= RCC_CSR_RFRST;
-   while(!(RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
-   }
-   // Hold reset for >= 100 us to satisfy Semtech SX1262 t_SW_RST requirement.
-   // At reset clock (MSI 4 MHz ≈ 4 cycles/loop), 200 iterations provide ~200 us.
-   volatile uint32_t rstTicks = 200u;
-   while(rstTicks > 0) {
-      rstTicks = rstTicks - 1;
-   }
-   RCC->CSR &= ~RCC_CSR_RFRST;
-   spins = 100'000u;
-   while((RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
+   if(RCC->CSR & RCC_CSR_RFRST) {
+      RCC->CSR &= ~RCC_CSR_RFRST;
+      while((RCC->CSR & RCC_CSR_RFRSTF) && --spins) {
+      }
    }
 #elif defined(RCC_CSR_RFRST)
-   RCC->CSR |= RCC_CSR_RFRST;
-   volatile uint32_t rstTicks = 200u;
-   while(rstTicks > 0) {
-      rstTicks = rstTicks - 1;
-   }
    RCC->CSR &= ~RCC_CSR_RFRST;
 #endif
    RCC->APB3ENR |= RCC_APB3ENR_SUBGHZSPIEN;
@@ -1710,8 +1733,19 @@ inline bool setClock48MhzHseTcxo() {
    SUBGHZSPI->CR2 = SPI_CR2_FRXTH | (7u << SPI_CR2_DS_Pos);
    // Master, mode 0, BR=001 (~1 MHz on MSI), software NSS
    SUBGHZSPI->CR1 = SPI_CR1_MSTR | SPI_CR1_BR_0 | SPI_CR1_SSM | SPI_CR1_SSI | SPI_CR1_SPE;
-   // Route NSS to PWR_SUBGHZSPICR for software control
-   PWR->CR1 |= PWR_CR1_SUBGHZSPINSSSEL;
+   // Route NSS to PWR_SUBGHZSPICR for software control.
+   //
+   // SUBGHZSPINSSSEL must be *cleared* for this, not set. Determined by
+   // measurement on a LoRa-E5 (STM32WLE5JC), since neither RM0453's SVD nor the
+   // CMSIS headers describe the field: with the bit set from the start, every
+   // response byte reads 0xAA and a ReadRegister of the LoRa sync word at
+   // 0x0740 returns 0xAAAA instead of its 0x1424 reset value. With it cleared,
+   // every command answers correctly and GetStatus returns a valid STBY_RC
+   // status. Setting it again after the link is established does not break it,
+   // so it is not a simple NSS on/off gate -- it has to be 0 while the link is
+   // first established. 0 is also its reset value, so setting it here was not
+   // merely redundant: it silently broke every SUBGHZSPI exchange below.
+   PWR->CR1 &= ~PWR_CR1_SUBGHZSPINSSSEL;
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // NSS high — deasserted
    spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
@@ -1720,22 +1754,38 @@ inline bool setClock48MhzHseTcxo() {
    spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
-   // SetTcxoMode: opcode 0x97, voltage 0x02 (1.8 V), timeout 0x000140 (320 * 15.625 µs = 5 ms)
-   const uint8_t cmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
-   for(uint32_t i = 0u; i < sizeof(cmd); ++i) {
-      spins = 100'000u;
-      while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
-      }
-      *(volatile uint8_t *)&SUBGHZSPI->DR = cmd[i];
-      spins = 100'000u;
-      while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
-      }
-      (void)*(volatile uint8_t *)&SUBGHZSPI->DR;
+   // SetDIO3AsTCXOCtrl: opcode 0x97, tcxoVoltage 0x02 (DIO3 outputs 1.8 V),
+   // delay 0x000140 (320 * 15.625 µs = 5 ms). SX1261/2 datasheet §13.3.6.
+   const uint8_t tcxoCmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
+   for(uint32_t i = 0u; i < sizeof(tcxoCmd); ++i) {
+      (void)detail::subghzTransfer(tcxoCmd[i]);
    }
    spins = 100'000u;
    while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
    }
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+
+   // Clear the radio's error controller. Per SX1261/2 §13.3.6, XOSC_START_ERR
+   // "is raised at POR or at wake-up from Sleep mode in a cold-start condition,
+   // when a TCXO is used. It is an expected behaviour since the chip is not yet
+   // aware of being clocked by a TCXO. The user should simply clear this flag
+   // with the ClearDeviceErrors command." Confirmed on hardware: after the
+   // command above, GetDeviceErrors reads 0x0020 (bit 5, XOSC_START_ERR), and
+   // ClearDeviceErrors takes it back to 0x0000 -- where it stays once HSE32 is
+   // running, so the TCXO really does start.
+   const uint8_t clearErrCmd[] = {0x07u, 0x00u, 0x00u};
+   spins = 100'000u;
+   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
+   }
+   PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
+   for(uint32_t i = 0u; i < sizeof(clearErrCmd); ++i) {
+      (void)detail::subghzTransfer(clearErrCmd[i]);
+   }
+   spins = 100'000u;
+   while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
+   }
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+
    SUBGHZSPI->CR1 &= ~SPI_CR1_SPE;
    // Spin ~5 ms at reset clock (MSI 4 MHz ≈ 4 cycles/iteration)
    volatile uint32_t ticks = 20000u;
