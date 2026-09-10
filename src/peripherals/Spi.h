@@ -2,6 +2,7 @@
 
 #include <cmsis_device.h>
 #include <cstdint>
+#include <optional>
 
 /**
  * @brief SPI Peripheral access class.
@@ -191,26 +192,54 @@ struct Spi {
    }
 
    /**
+    * @brief Default bound on the poll loops in transfer() and waitUntilIdle().
+    *
+    * A stalled master-mode shift (dead bus, unpopulated peripheral) is a
+    * hardware fault, not a recoverable condition worth retrying, but it must
+    * not hang the caller forever. This is generous for a single-word
+    * transfer at any supported baud rate while still detecting a genuine
+    * stall in well under a millisecond, following the same loop-count
+    * timeout idiom as `Rcc::waitLSEReady()`.
+    */
+   static constexpr uint32_t defaultTimeoutLoops = 100'000u;
+
+   /**
     * @brief Blocking full duplex transfer of a single data word.
     * @param data Data to transmit (8 or 16 bits, according to the configured data size).
-    * @return The data word received while transmitting.
+    * @param timeoutLoops Maximum poll iterations to wait for TXE and, separately, for RXNE.
+    * @return The data word received while transmitting, or `std::nullopt` if TXE or RXNE
+    *         never asserted before `timeoutLoops` was exhausted.
     * @note Busy waits; only meaningful while the peripheral is enabled and in master mode.
     */
-   inline uint16_t transfer(uint16_t data) const {
+   inline std::optional<uint16_t> transfer(uint16_t data, uint32_t timeoutLoops = defaultTimeoutLoops) const {
+      uint32_t remaining = timeoutLoops;
       while(!isTxEmpty()) {
+         if(--remaining == 0u) {
+            return std::nullopt;
+         }
       }
       write(data);
+      remaining = timeoutLoops;
       while(!isRxNotEmpty()) {
+         if(--remaining == 0u) {
+            return std::nullopt;
+         }
       }
       return read();
    }
 
    /**
     * @brief Busy waits until the peripheral has finished shifting out all data.
+    * @param timeoutLoops Maximum poll iterations to wait for the busy flag to clear.
+    * @return true once BSY clears, false if `timeoutLoops` was exhausted first.
     */
-   inline void waitUntilIdle() const {
+   inline bool waitUntilIdle(uint32_t timeoutLoops = defaultTimeoutLoops) const {
       while(isBusy()) {
+         if(--timeoutLoops == 0u) {
+            return false;
+         }
       }
+      return true;
    }
 
    inline bool isTxEmpty() const {
