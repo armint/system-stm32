@@ -196,9 +196,13 @@ struct Spi {
     *
     * A stalled master-mode shift (dead bus, unpopulated peripheral) is a
     * hardware fault, not a recoverable condition worth retrying, but it must
-    * not hang the caller forever. This is generous for a single-word
+    * not hang the caller forever. 100'000 iterations of this volatile-read
+    * poll (a handful of core cycles each) is generous for a single-word
     * transfer at any supported baud rate while still detecting a genuine
-    * stall in well under a millisecond, following the same loop-count
+    * stall -- roughly 10-20 ms on an STM32WL at 48 MHz, up to a few hundred
+    * ms on an STM32L0 at 2 MHz. Expressed as iterations rather than a wall
+    * time because system-stm32 must keep working before the scheduler (and
+    * any millisecond clock source) exists, following the same loop-count
     * timeout idiom as `Rcc::waitLSEReady()`.
     */
    static constexpr uint32_t defaultTimeoutLoops = 100'000u;
@@ -207,37 +211,57 @@ struct Spi {
     * @brief Blocking full duplex transfer of a single data word.
     * @param data Data to transmit (8 or 16 bits, according to the configured data size).
     * @param timeoutLoops Maximum poll iterations to wait for TXE and, separately, for RXNE.
-    * @return The data word received while transmitting, or `std::nullopt` if TXE or RXNE
-    *         never asserted before `timeoutLoops` was exhausted.
+    *        `0` fails immediately unless the flag is already set -- it does not disable the
+    *        bound, and never wraps to an unbounded wait.
+    * @return The data word received while transmitting, or `std::nullopt` (encoding a timeout,
+    *         not a zero data word -- test the optional itself, not the value inside it) if TXE
+    *         or RXNE never asserted before `timeoutLoops` was exhausted.
     * @note Busy waits; only meaningful while the peripheral is enabled and in master mode.
+    * @note Post-timeout contract: on a `nullopt` return the peripheral has already been left in
+    *       a known state (RX drained, OVR cleared) by this call, so it is safe to call transfer()
+    *       or waitUntilIdle() again immediately. A caller does not need its own recovery step.
     */
-   inline std::optional<uint16_t> transfer(uint16_t data, uint32_t timeoutLoops = defaultTimeoutLoops) const {
+   [[nodiscard]] inline std::optional<uint16_t> transfer(uint16_t data,
+                                                          uint32_t timeoutLoops = defaultTimeoutLoops) const {
       uint32_t remaining = timeoutLoops;
       while(!isTxEmpty()) {
-         if(--remaining == 0u) {
+         if(remaining == 0u) {
+            clearOverrun();
             return std::nullopt;
          }
+         --remaining;
       }
       write(data);
       remaining = timeoutLoops;
       while(!isRxNotEmpty()) {
-         if(--remaining == 0u) {
+         if(remaining == 0u) {
+            /* Left alone, a stale or unexpectedly-late byte sitting in DR
+             * would get handed to the next caller's transfer() as if it
+             * were their own result -- a silent one-transaction bus desync,
+             * and a worse failure than the hang this bound exists to
+             * remove. clearOverrun() reads DR then SR, draining whatever is
+             * there now and clearing OVR if two receptions stacked up, so
+             * the peripheral starts the next transfer from a known state. */
+            clearOverrun();
             return std::nullopt;
          }
+         --remaining;
       }
       return read();
    }
 
    /**
     * @brief Busy waits until the peripheral has finished shifting out all data.
-    * @param timeoutLoops Maximum poll iterations to wait for the busy flag to clear.
+    * @param timeoutLoops Maximum poll iterations to wait for the busy flag to clear. `0` fails
+    *        immediately unless BSY is already clear.
     * @return true once BSY clears, false if `timeoutLoops` was exhausted first.
     */
-   inline bool waitUntilIdle(uint32_t timeoutLoops = defaultTimeoutLoops) const {
+   [[nodiscard]] inline bool waitUntilIdle(uint32_t timeoutLoops = defaultTimeoutLoops) const {
       while(isBusy()) {
-         if(--timeoutLoops == 0u) {
+         if(timeoutLoops == 0u) {
             return false;
          }
+         --timeoutLoops;
       }
       return true;
    }
