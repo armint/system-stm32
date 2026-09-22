@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Spi.h"
 #include <cmsis_device.h>
 #include <cstdint>
 #include <optional>
@@ -1663,25 +1664,21 @@ inline void setClock64MhzHSI() {
 #if defined(RCC_CR_HSEBYPPWR) && defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
 namespace detail {
 // Exchange one byte with the sub-GHz radio over SUBGHZSPI, returning what the
-// radio clocked back, or std::nullopt if TXE or RXNE never asserted within
-// the bounded wait. Both waits are bounded so an unresponsive or clock-gated
-// peripheral cannot hang the boot path. The caller frames the transfer with
-// PWR_SUBGHZSPICR.NSS.
+// radio clocked back, or std::nullopt if TXE or RXNE never asserted before
+// hw::Spi::transfer()'s bounded wait gave up. Delegates to hw::Spi rather
+// than reimplementing the poll loop, because hw::Spi::transfer() also drains
+// the RX FIFO and clears OVR on a timeout (see Spi.h) -- reimplementing the
+// raw register polling here previously left a timed-out byte's stale data
+// sitting in DR for the *next* transaction to read. hw::Spi is a reference
+// wrapper with no static state, so this stays safe to call from the
+// pre-DATA/BSS boot path below. The caller frames the transfer with
+// PWR_SUBGHZSPICR.NSS; hw::Spi itself only owns TXE/RXNE, not NSS.
 inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
-   uint32_t spins = 100'000u;
-   while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
-   }
-   if(spins == 0u) {
+   const std::optional<uint16_t> response = hw::Spi(SUBGHZSPI).transfer(value);
+   if(!response) {
       return std::nullopt;
    }
-   *(volatile uint8_t *)&SUBGHZSPI->DR = value;
-   spins = 100'000u;
-   while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
-   }
-   if(spins == 0u) {
-      return std::nullopt;
-   }
-   return *(volatile uint8_t *)&SUBGHZSPI->DR;
+   return static_cast<uint8_t>(*response);
 }
 } // namespace detail
 
@@ -1743,10 +1740,7 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
       byte = *response;
    }
 
-   spins = 100'000u;
-   while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
-   }
-   ok = ok && spins != 0u;
+   ok = ok && hw::Spi(SUBGHZSPI).waitUntilIdle();
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
    return ok;
 }
@@ -1818,6 +1812,11 @@ struct ClockDiag {
    int32_t busyIdleSpins;
    int32_t busyAfterNssSpins;
    uint8_t tcxoResponse[5];
+   // Bit i set means tcxoResponse[i] is a genuine radio reply; bit i clear
+   // means byte i timed out and tcxoResponse[i] is just 0, which is also a
+   // value the radio could legitimately send back -- the mask, not the byte,
+   // is what tells the two apart.
+   uint8_t tcxoResponseOkMask;
    int32_t spiBusySpins;
 
    // Radio error controller, before and after ClearDeviceErrors. Bit 5 is
@@ -1972,12 +1971,16 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    // SetDIO3AsTCXOCtrl: opcode 0x97, tcxoVoltage 0x02 (DIO3 outputs 1.8 V),
    // delay 0x000140 (320 * 15.625 µs = 5 ms). SX1261/2 datasheet §13.3.6.
    uint8_t tcxoCmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
+   if constexpr(Record) {
+      diag.tcxoResponseOkMask = 0u;
+   }
    for(uint32_t i = 0u; i < sizeof(tcxoCmd); ++i) {
-      // 0xFFu is a "no response" sentinel, distinguishable in the diagnostic
-      // capture from a genuine radio byte on the rare timeout.
-      const uint8_t response = detail::subghzTransfer(tcxoCmd[i]).value_or(0xFFu);
+      const std::optional<uint8_t> response = detail::subghzTransfer(tcxoCmd[i]);
       if constexpr(Record) {
-         diag.tcxoResponse[i] = response;
+         diag.tcxoResponse[i] = response.value_or(0u);
+         if(response) {
+            diag.tcxoResponseOkMask |= static_cast<uint8_t>(1u << i);
+         }
       }
    }
    spins = 100'000u;
