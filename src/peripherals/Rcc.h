@@ -1675,18 +1675,27 @@ inline uint8_t subghzTransfer(uint8_t value) {
    }
    return *(volatile uint8_t *)&SUBGHZSPI->DR;
 }
+} // namespace detail
 
 // Frame one sub-GHz radio command: wait for the radio to go idle, assert NSS,
 // exchange the bytes in place, wait for the shift register to drain, deassert
 // NSS. Per SX1261/2 §13.5 the radio answers on every byte, so frame holds the
 // responses on return; byte 0's response is RFU and byte 1 carries the status.
+//
+// Public (not detail::) because it is also the transport primitive for
+// LoRaMac-node's SX126x board-HAL layer (SX126xWriteCommand/ReadCommand and
+// friends are each a single NSS-framed transaction, not a raw byte the caller
+// frames itself) — see bsp/loramac_board's subghz_spi bindings. Both the
+// "write" case (opcode + write-data, response bytes unread) and the "read"
+// case (opcode + address/NOP turnaround + read-data) are the same in-place
+// full-duplex exchange; callers just ignore the bytes they don't need back.
 inline void subghzCommand(std::span<uint8_t> frame) {
    uint32_t spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
    for(uint8_t &byte : frame) {
-      byte = subghzTransfer(byte);
+      byte = detail::subghzTransfer(byte);
    }
    spins = 100'000u;
    while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
@@ -1694,6 +1703,7 @@ inline void subghzCommand(std::span<uint8_t> frame) {
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
 }
 
+namespace detail {
 // GetDeviceErrors (0x17): OpError(15:0) comes back in bytes 2-3.
 inline uint16_t subghzDeviceErrors() {
    uint8_t buf[4] = {0x17u, 0x00u, 0x00u, 0x00u};
@@ -1938,7 +1948,7 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    // ClearDeviceErrors takes it back to 0x0000 -- where it stays once HSE32 is
    // running, so the TCXO really does start.
    uint8_t clearErrCmd[] = {0x07u, 0x00u, 0x00u};
-   detail::subghzCommand(clearErrCmd);
+   subghzCommand(clearErrCmd);
 
    if constexpr(Record) {
       diag.opErrorAfterClear = detail::subghzDeviceErrors();
