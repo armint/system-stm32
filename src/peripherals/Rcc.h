@@ -2,6 +2,7 @@
 
 #include <cmsis_device.h>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <type_traits>
 
@@ -1662,16 +1663,23 @@ inline void setClock64MhzHSI() {
 #if defined(RCC_CR_HSEBYPPWR) && defined(RCC_APB3ENR_SUBGHZSPIEN) && defined(PWR_CR1_VOS_0) && defined(PWR_SR2_RFBUSYS)
 namespace detail {
 // Exchange one byte with the sub-GHz radio over SUBGHZSPI, returning what the
-// radio clocked back. Both waits are bounded so an unresponsive or clock-gated
+// radio clocked back, or std::nullopt if TXE or RXNE never asserted within
+// the bounded wait. Both waits are bounded so an unresponsive or clock-gated
 // peripheral cannot hang the boot path. The caller frames the transfer with
 // PWR_SUBGHZSPICR.NSS.
-inline uint8_t subghzTransfer(uint8_t value) {
+inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
    uint32_t spins = 100'000u;
    while(!(SUBGHZSPI->SR & SPI_SR_TXE) && --spins) {
+   }
+   if(spins == 0u) {
+      return std::nullopt;
    }
    *(volatile uint8_t *)&SUBGHZSPI->DR = value;
    spins = 100'000u;
    while(!(SUBGHZSPI->SR & SPI_SR_RXNE) && --spins) {
+   }
+   if(spins == 0u) {
+      return std::nullopt;
    }
    return *(volatile uint8_t *)&SUBGHZSPI->DR;
 }
@@ -1683,38 +1691,82 @@ inline uint8_t subghzTransfer(uint8_t value) {
 // responses on return; byte 0's response is RFU and byte 1 carries the status.
 //
 // Public (not detail::) because it is also the transport primitive for
-// LoRaMac-node's SX126x board-HAL layer (SX126xWriteCommand/ReadCommand and
-// friends are each a single NSS-framed transaction, not a raw byte the caller
-// frames itself) — see bsp/loramac_board's subghz_spi bindings. Both the
-// "write" case (opcode + write-data, response bytes unread) and the "read"
-// case (opcode + address/NOP turnaround + read-data) are the same in-place
-// full-duplex exchange; callers just ignore the bytes they don't need back.
-inline void subghzCommand(std::span<uint8_t> frame) {
+// LoRaMac-node's SX126x board-HAL layer: SX126xWriteCommand/ReadCommand and
+// SX126xWriteRegister(s)/ReadRegister(s) are each a single NSS-framed
+// transaction that sends an opcode (plus address/data) and reads back the
+// radio's per-byte status responses — see bsp/loramac_board's subghz_spi
+// bindings. Both the "write" case (opcode + write-data, response bytes
+// unread) and the "read" case (opcode + address/NOP turnaround + read-data)
+// are the same in-place full-duplex exchange; callers just ignore the bytes
+// they don't need back.
+//
+// SX126xWakeup() is deliberately not one of these "friends": it only pulses
+// NSS to rouse the radio from sleep (no opcode, no data, no RFBUSYS wait
+// beforehand) and needs its own raw NSS-pulse primitive, which this function
+// does not provide — left for the SX126x board-HAL shim issue that wires up
+// the remaining LoRaMac-node entry points.
+//
+// Precondition: SUBGHZSPI must already be enabled (SPE=1, via
+// hw::Spi(SUBGHZSPI).enable()). This is the caller's responsibility rather
+// than something this call manages itself, since a caller issuing a run of
+// commands (a whole radio session) holds one enable/disable window around
+// all of them instead of paying the toggle cost on every single command —
+// see bsp/loramac_board's init()/deInit(). Calling this with SPE clear would
+// otherwise fail silently: TXE reads set trivially while the peripheral is
+// disabled, so nothing ever shifts and the frame comes back unchanged.
+//
+// Returns false — without partially reframing the failed transaction; NSS is
+// always deasserted again before returning — if SPE is clear on entry, the
+// radio never went idle (RFBUSYS), a byte's TXE/RXNE never asserted, or the
+// shift register never drained (BSY) within the bounded wait. A caller must
+// check the return value; a stalled link has no other way to be reported.
+[[nodiscard]] inline bool subghzCommand(std::span<uint8_t> frame) {
+   if(!(SUBGHZSPI->CR1 & SPI_CR1_SPE)) {
+      return false;
+   }
+
    uint32_t spins = 100'000u;
    while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
    }
-   PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
-   for(uint8_t &byte : frame) {
-      byte = detail::subghzTransfer(byte);
+   if(spins == 0u) {
+      return false;
    }
+
+   PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
+   bool ok = true;
+   for(uint8_t &byte : frame) {
+      const std::optional<uint8_t> response = detail::subghzTransfer(byte);
+      if(!response) {
+         ok = false;
+         break;
+      }
+      byte = *response;
+   }
+
    spins = 100'000u;
    while((SUBGHZSPI->SR & SPI_SR_BSY) && --spins) {
    }
+   ok = ok && spins != 0u;
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+   return ok;
 }
 
 namespace detail {
 // GetDeviceErrors (0x17): OpError(15:0) comes back in bytes 2-3.
 inline uint16_t subghzDeviceErrors() {
    uint8_t buf[4] = {0x17u, 0x00u, 0x00u, 0x00u};
-   subghzCommand(buf);
+   // Best-effort diagnostics: SPE is already enabled at every call site of
+   // these detail:: helpers, so failure is not expected; on the rare timeout
+   // buf keeps its zero-initialised bytes and the diagnostic reads as zero
+   // rather than corrupting a caller's own data.
+   (void)subghzCommand(buf);
    return (uint16_t)(((uint16_t)buf[2] << 8) | buf[3]);
 }
 
 // GetStatus (0xC0): the status byte comes back in byte 1.
 inline uint8_t subghzStatus() {
    uint8_t buf[2] = {0xC0u, 0x00u};
-   subghzCommand(buf);
+   (void)subghzCommand(buf);
    return buf[1];
 }
 
@@ -1723,7 +1775,7 @@ inline uint8_t subghzStatus() {
 // and one mandatory NOP (SX1261/2 Table 13-25).
 inline uint16_t subghzSyncWord() {
    uint8_t buf[6] = {0x1Du, 0x07u, 0x40u, 0x00u, 0x00u, 0x00u};
-   subghzCommand(buf);
+   (void)subghzCommand(buf);
    return (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
 }
 
@@ -1921,7 +1973,9 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    // delay 0x000140 (320 * 15.625 µs = 5 ms). SX1261/2 datasheet §13.3.6.
    uint8_t tcxoCmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
    for(uint32_t i = 0u; i < sizeof(tcxoCmd); ++i) {
-      const uint8_t response = detail::subghzTransfer(tcxoCmd[i]);
+      // 0xFFu is a "no response" sentinel, distinguishable in the diagnostic
+      // capture from a genuine radio byte on the rare timeout.
+      const uint8_t response = detail::subghzTransfer(tcxoCmd[i]).value_or(0xFFu);
       if constexpr(Record) {
          diag.tcxoResponse[i] = response;
       }
@@ -1948,7 +2002,7 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    // ClearDeviceErrors takes it back to 0x0000 -- where it stays once HSE32 is
    // running, so the TCXO really does start.
    uint8_t clearErrCmd[] = {0x07u, 0x00u, 0x00u};
-   subghzCommand(clearErrCmd);
+   (void)subghzCommand(clearErrCmd);
 
    if constexpr(Record) {
       diag.opErrorAfterClear = detail::subghzDeviceErrors();
