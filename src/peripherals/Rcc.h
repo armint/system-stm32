@@ -3,6 +3,7 @@
 #include "Spi.h"
 #include <cmsis_device.h>
 #include <cstdint>
+#include <delaybusywait.h>
 #include <optional>
 #include <span>
 #include <type_traits>
@@ -1759,34 +1760,47 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
 }
 
 // Wakes the sub-GHz radio from Sleep mode per RM0453's Sleep mode wakeup
-// sequence: assert NSS, hold it until the radio's BUSY (mirrored in
-// PWR_SR2.RFBUSYS) clears, then deassert NSS. No opcode or data byte is
-// clocked out — this is the same no-SPI-bytes pulse ST's own STM32WL HAL
-// uses to wake the integrated radio, not the GetStatus+NOP pulse
-// discrete-SX126x reference board ports use to wake an externally-clocked
-// chip; the two are not interchangeable, since clocking an opcode byte in
-// here would shift it into a still-waking register with undefined effect.
+// sequence: assert NSS, hold it low for a fixed duration, deassert NSS, then
+// confirm the radio actually came up. No opcode or data byte is clocked
+// out — this is the same no-SPI-bytes pulse ST's own STM32WL HAL uses to
+// wake the integrated radio, not the GetStatus+NOP pulse discrete-SX126x
+// reference board ports use to wake an externally-clocked chip; the two are
+// not interchangeable, since clocking an opcode byte in here would shift it
+// into a still-waking register with undefined effect.
+//
+// The hold cannot be a RFBUSYS poll the way subghzCommand()'s pre-wait is:
+// while the radio is genuinely asleep, RFBUSYS already reads low, the same
+// as when it is idle and ready (confirmed on hardware after a Stop2
+// wakeup — see the comment on step 2 of setClock48MhzHseTcxoImpl() above).
+// Polling it as the hold condition would therefore return on the very first
+// read and barely dip NSS at all. Instead this holds NSS low for a fixed
+// ~1 ms, the same duration ST's HAL uses, via delayuS() (calibrated off
+// SystemCoreClock, so it stays correct regardless of which clock this runs
+// under) — and only polls subghzWaitOnBusy() afterwards, once NSS is back
+// high, to confirm the radio is actually ready rather than to time the hold
+// itself. LoRaMac-node's own RADIO_WAKEUP_TIME budget for this step is 3 ms
+// (sx126x.h), so a 1 ms hold plus the bounded post-wait comfortably fits.
 //
 // Deliberately does not reuse subghzCommand(): this call *is* what rouses
 // the radio out of Sleep, so subghzCommand()'s own pre-wait on RFBUSYS would
-// either block indefinitely or race a still-sleeping radio into answering a
-// command too early.
+// either return immediately (same reasoning as above) or, worse, go on to
+// clock an opcode byte into the still-waking radio.
 //
 // Precondition: SPE already set, same as subghzCommand() and for the same
 // reason — see the precondition note above subghzCommand()'s declaration.
-// Returns false if the radio never reports idle within the bound; NSS is
-// always deasserted before returning either way, matching subghzCommand()'s
-// contract. See also the serialization note above subghzCommand()'s
-// declaration, which applies here too.
+// Returns false if the radio never reports idle within the post-wait bound;
+// NSS is always deasserted before returning either way, matching
+// subghzCommand()'s contract. See also the serialization note above
+// subghzCommand()'s declaration, which applies here too.
 [[nodiscard]] inline bool subghzWakeup() {
    if(!(SUBGHZSPI->CR1 & SPI_CR1_SPE)) {
       return false;
    }
 
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
-   const bool ok = subghzWaitOnBusy();
+   delayuS(1000u); // fixed ~1 ms hold, see comment above
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
-   return ok;
+   return subghzWaitOnBusy();
 }
 
 namespace detail {
