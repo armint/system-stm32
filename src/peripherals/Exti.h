@@ -74,6 +74,12 @@ enum Line : uint8_t {
    // port routing or edge-trigger configuration applies, only the IMR2
    // mask), and RFBUSY is on line 45 (a "Configurable" line). Previously
    // misnumbered as 36/37.
+   //
+   // IMPORTANT: as a Direct line, RadioIRQ has no PR2 pending bit --
+   // isInterruptPending(RadioIRQ) is always false and
+   // clearInterruptPending(RadioIRQ) is a no-op on hardware. The radio IRQ
+   // source can only be acknowledged by issuing the SX126x ClearIrqStatus
+   // command over SPI; callers must not rely on this API to clear it.
    RadioIRQ = 44,
    RadioBusy = 45,
 };
@@ -155,16 +161,41 @@ constexpr IRQn_Type gpioIRQs[16] = {
 };
 #endif
 
+// Lines >= 16 (PVD, RTC, comparators, radio, ...) have no GPIO port routing --
+// SYSCFG_EXTICR only maps GPIO lines 0-15 to a port. Calling this for a line
+// >= 16 is a no-op (see definition).
 void setPortForExtiLine(const uint8_t line, const Port port);
 
 void setTriggerEdge(const uint32_t mask, const TriggerEdge trigger);
 TriggerEdge getTriggerEdge(const uint32_t mask);
 
+// STM32WL's extended-bank lines (32-63) have their own RTSR2/FTSR2 trigger
+// registers, separate from the RTSR1/FTSR1 bank the mask-based functions
+// above operate on. Only lines with an actual "Configurable" line in that
+// bank define the corresponding bit (e.g. line 45/RadioBusy); "Direct" lines
+// (e.g. line 44/RadioIRQ) have no trigger-edge bit at all -- setting one is a
+// silent no-op on hardware, matching the no-op these functions perform on it.
+#if defined(EXTI_IMR2_IM44)
+void setTriggerEdgeMask2(const uint32_t mask, const TriggerEdge trigger);
+TriggerEdge getTriggerEdgeMask2(const uint32_t mask);
+#endif
+
 inline void setTriggerEdgeForLine(const uint8_t line, const TriggerEdge trigger) {
+#if defined(EXTI_IMR2_IM44)
+   if(line >= 32) {
+      setTriggerEdgeMask2(1UL << (line - 32), trigger);
+      return;
+   }
+#endif
    setTriggerEdge(1UL << line, trigger);
 }
 
 inline TriggerEdge getTriggerEdgeForLine(const uint8_t line) {
+#if defined(EXTI_IMR2_IM44)
+   if(line >= 32) {
+      return getTriggerEdgeMask2(1UL << (line - 32));
+   }
+#endif
    return getTriggerEdge(1UL << line);
 }
 
@@ -278,6 +309,10 @@ inline bool isInterruptMasked(const uint8_t line) {
 #endif
 }
 
+// Note: "Direct" extended-bank lines (e.g. RadioIRQ = 44) have no PR2 bit at
+// all -- for those, isInterruptPending() always returns false and
+// clearInterruptPending() is a hardware no-op. Only "Configurable" lines
+// (e.g. RadioBusy = 45) have a real pending bit here.
 inline bool isInterruptPending(const uint8_t line) {
 #if defined(EXTI_IMR2_IM44)
    if(line >= 32) {
