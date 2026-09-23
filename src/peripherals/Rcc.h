@@ -1682,6 +1682,18 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
 }
 } // namespace detail
 
+// Bounded poll of PWR_SR2.RFBUSYS, the STM32WL's mirror of the integrated
+// radio's BUSY line. Used both as subghzCommand()'s own pre-wait and, on its
+// own, as the SX126x board-HAL layer's SX126xWaitOnBusy() -- the radio has no
+// discrete BUSY GPIO on this SoC, so this register poll is the only way to
+// implement it. Returns false if the radio never went idle within the bound.
+[[nodiscard]] inline bool subghzWaitOnBusy() {
+   uint32_t spins = 100'000u;
+   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
+   }
+   return spins != 0u;
+}
+
 // Frame one sub-GHz radio command: wait for the radio to go idle, assert NSS,
 // exchange the bytes in place, wait for the shift register to drain, deassert
 // NSS. Per SX1261/2 §13.5 the radio answers on every byte, so frame holds the
@@ -1698,10 +1710,8 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
 // they don't need back.
 //
 // SX126xWakeup() is deliberately not one of these "friends": it only pulses
-// NSS to rouse the radio from sleep (no opcode, no data, no RFBUSYS wait
-// beforehand) and needs its own raw NSS-pulse primitive, which this function
-// does not provide — left for the SX126x board-HAL shim issue that wires up
-// the remaining LoRaMac-node entry points.
+// NSS to rouse the radio from Sleep and does not frame an SX126x command at
+// all (see subghzWakeup() below).
 //
 // Precondition: SUBGHZSPI must already be enabled (SPE=1, via
 // hw::Spi(SUBGHZSPI).enable()). This is the caller's responsibility rather
@@ -1711,6 +1721,12 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
 // see bsp/loramac_board's init()/deInit(). Calling this with SPE clear would
 // otherwise fail silently: TXE reads set trivially while the peripheral is
 // disabled, so nothing ever shifts and the frame comes back unchanged.
+//
+// Callers are responsible for serializing access to SUBGHZSPI: subghzCommand()
+// and subghzWakeup() both perform a non-atomic NSS assert/deassert around the
+// PWR_SUBGHZSPICR register, and LoRaMac-node's SX126x driver only ever issues
+// one radio transaction at a time from its own task context, so no lock is
+// taken here.
 //
 // Returns false — without partially reframing the failed transaction; NSS is
 // always deasserted again before returning — if SPE is clear on entry, the
@@ -1722,10 +1738,7 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
       return false;
    }
 
-   uint32_t spins = 100'000u;
-   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
-   }
-   if(spins == 0u) {
+   if(!subghzWaitOnBusy()) {
       return false;
    }
 
@@ -1745,33 +1758,35 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
    return ok;
 }
 
-// Bounded poll of PWR_SR2.RFBUSYS, the STM32WL's mirror of the integrated
-// radio's BUSY line. Used both as subghzCommand()'s own pre-wait and, on its
-// own, as the SX126x board-HAL layer's SX126xWaitOnBusy() -- the radio has no
-// discrete BUSY GPIO on this SoC, so this register poll is the only way to
-// implement it. Returns false if the radio never went idle within the bound.
-[[nodiscard]] inline bool subghzWaitOnBusy() {
-   uint32_t spins = 100'000u;
-   while((PWR->SR2 & PWR_SR2_RFBUSYS) && --spins) {
+// Wakes the sub-GHz radio from Sleep mode per RM0453's Sleep mode wakeup
+// sequence: assert NSS, hold it until the radio's BUSY (mirrored in
+// PWR_SR2.RFBUSYS) clears, then deassert NSS. No opcode or data byte is
+// clocked out — this is the same no-SPI-bytes pulse ST's own STM32WL HAL
+// uses to wake the integrated radio, not the GetStatus+NOP pulse
+// discrete-SX126x reference board ports use to wake an externally-clocked
+// chip; the two are not interchangeable, since clocking an opcode byte in
+// here would shift it into a still-waking register with undefined effect.
+//
+// Deliberately does not reuse subghzCommand(): this call *is* what rouses
+// the radio out of Sleep, so subghzCommand()'s own pre-wait on RFBUSYS would
+// either block indefinitely or race a still-sleeping radio into answering a
+// command too early.
+//
+// Precondition: SPE already set, same as subghzCommand() and for the same
+// reason — see the precondition note above subghzCommand()'s declaration.
+// Returns false if the radio never reports idle within the bound; NSS is
+// always deasserted before returning either way, matching subghzCommand()'s
+// contract. See also the serialization note above subghzCommand()'s
+// declaration, which applies here too.
+[[nodiscard]] inline bool subghzWakeup() {
+   if(!(SUBGHZSPI->CR1 & SPI_CR1_SPE)) {
+      return false;
    }
-   return spins != 0u;
-}
 
-// Wakes the sub-GHz radio from Sleep mode: an NSS pulse framing a GetStatus
-// opcode + NOP turnaround byte, the same two bytes the SX1261/2 reference
-// board ports clock out for their own wakeup pulse. Deliberately does not
-// reuse subghzCommand() for this, and does not pre-wait on RFBUSYS the way
-// subghzCommand() does: this call *is* what rouses the radio out of Sleep, so
-// waiting for it to report idle first would either block or race a
-// still-sleeping radio into answering commands too early. Precondition: SPE
-// already set, same as subghzCommand(). The caller must still poll
-// subghzWaitOnBusy() afterwards -- this only pulses NSS, it does not wait for
-// the wakeup itself to complete.
-inline void subghzWakeup() {
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
-   (void)detail::subghzTransfer(0xC0u); // RADIO_GET_STATUS opcode
-   (void)detail::subghzTransfer(0x00u); // NOP turnaround byte
+   const bool ok = subghzWaitOnBusy();
    PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+   return ok;
 }
 
 namespace detail {
