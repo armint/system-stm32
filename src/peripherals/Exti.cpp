@@ -69,14 +69,56 @@ TriggerEdge getTriggerEdge(const uint32_t mask) {
    return static_cast<TriggerEdge>(edge);
 }
 
+#if defined(EXTI_IMR2_IM44)
+void setTriggerEdgeMask2(const uint32_t mask, const TriggerEdge trigger) {
+   switch(trigger) {
+   case TriggerEdge::Disabled:
+      EXTI->RTSR2 &= ~mask;
+      EXTI->FTSR2 &= ~mask;
+      break;
+   case TriggerEdge::Both:
+      EXTI->RTSR2 |= mask;
+      EXTI->FTSR2 |= mask;
+      break;
+   case TriggerEdge::Rising:
+      EXTI->RTSR2 |= mask;
+      EXTI->FTSR2 &= ~mask;
+      break;
+   case TriggerEdge::Falling:
+      EXTI->RTSR2 &= ~mask;
+      EXTI->FTSR2 |= mask;
+      break;
+   }
+}
+
+TriggerEdge getTriggerEdgeMask2(const uint32_t mask) {
+   uint8_t edge = 0;
+   if(EXTI->RTSR2 & mask) {
+      edge |= static_cast<uint8_t>(TriggerEdge::Rising);
+   }
+   if(EXTI->FTSR2 & mask) {
+      edge |= static_cast<uint8_t>(TriggerEdge::Falling);
+   }
+   return static_cast<TriggerEdge>(edge);
+}
+#endif
+
 void configureExtiInterrupt(const uint8_t line, const Port port, const TriggerEdge edge) {
    setPortForExtiLine(line, port);
-   uint32_t mask = 1 << line;
-   setTriggerEdge(mask, edge);
+   setTriggerEdgeForLine(line, edge);
 }
 
 
 void setPortForExtiLine(const uint8_t line, const Port port) {
+   // Only GPIO lines 0-15 have SYSCFG/EXTI port routing. Lines 16+ (PVD, RTC,
+   // comparators, the radio's lines 44/45, ...) are wired directly to their
+   // peripheral and have no port-select field -- without this guard, the
+   // register-index arithmetic below wraps modulo 16 and silently corrupts
+   // an unrelated GPIO line's port-select bits (e.g. line 45 aliases onto
+   // line 13's slot in EXTICR4).
+   if(line >= 16) {
+      return;
+   }
 #if defined(EXTI_EXTICR1_EXTI0) || defined(EXTI_EXTICR1_EXTI0_Pos)
    uint8_t regnum = (line & 0xC) >> 2;
    uint8_t index = (line & 0x3) << 3; // 8 bits per line in G0/C0
