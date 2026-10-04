@@ -1388,6 +1388,13 @@ inline void enableUSBClock() {
 inline void disableUSBClock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_USBEN);
 }
+#elif defined(RCC_APBENR1_USBEN)
+inline void enableUSBClock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_USBEN);
+}
+inline void disableUSBClock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_USBEN);
+}
 #elif defined(RCC_APB1SMENR_USBSMEN)
 inline void enableUSBClockInSleepMode() {
    detail::setBit(RCC->APB1SMENR, RCC_APB1SMENR_USBSMEN);
@@ -1419,6 +1426,13 @@ inline void enableCRSClock() {
 }
 inline void disableCRSClock() {
    detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_CRSEN);
+}
+#elif defined(RCC_APBENR1_CRSEN)
+inline void enableCRSClock() {
+   detail::setBit(RCC->APBENR1, RCC_APBENR1_CRSEN);
+}
+inline void disableCRSClock() {
+   detail::clearBit(RCC->APBENR1, RCC_APBENR1_CRSEN);
 }
 #elif defined(RCC_APB1SMENR_CRSSMEN)
 inline void enableCRSClockInSleepMode() {
