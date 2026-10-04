@@ -48,8 +48,8 @@ library) and, once installed, as `art::system-stm32`.
 ## Directory layout
 
 - `src/peripherals/` — peripheral driver interfaces shared across families
-  (`Rcc`, `GpioPin`, `Usart`, `I2c`, `Dma`, `Timer`, `Exti`, `Spi`, `Rtc`,
-  `Iwdg`, `Dbg`). `#ifdef` on specific register/feature availability (e.g.
+  (`Rcc`, `Crs`, `GpioPin`, `Usart`, `I2c`, `Dma`, `Timer`, `Exti`, `Spi`,
+  `Rtc`, `Iwdg`, `Dbg`). `#ifdef` on specific register/feature availability (e.g.
   `#if defined(USART_PRESC_PRESCALER)`) is fine here; `#ifdef STM32xx` for
   whole-family differences is not — that belongs below. `GpioInterrupt` in
   `src/utils/` is not yet ported to STM32WL and is excluded from the build
@@ -137,7 +137,7 @@ add_subdirectory(path/to/system-stm32)
 option `OFF` (the default) for a bare-metal application with no RTOS,
 where `src/bare-metal/` is the only thing providing a runtime at all.
 
-## USB clock: HSI48
+## USB clock: HSI48 and CRS
 
 The USB full-speed peripheral needs a 48 MHz clock. The STM32L0 and the
 STM32G0B1/G0C1 have no crystal requirement for USB. They use the internal
@@ -171,3 +171,49 @@ Family details:
 `enableHSI48()` returns `false` if `HSI48RDY` does not come within a
 bounded wait. The startup time is 6 µs maximum, so this only occurs if the
 oscillator does not start.
+
+### Clock Recovery System (CRS)
+
+The factory calibration of HSI48 is not accurate enough for USB (±4 % on
+the STM32L073 at 25 °C). USB full speed needs ±0.25 %. The CRS fixes
+this. It measures HSI48 against a synchronisation signal and trims HSI48
+by itself. For USB, the signal is the start-of-frame (SOF) packet. The
+host sends one SOF every 1 ms.
+
+`src/peripherals/Crs.h` (namespace `hw::Crs`) is one driver for STM32L0
+and STM32G0B1/G0C1, because the CRS registers are the same on both
+families. Only the `TRIM` field width differs: 6 bits on L0, 7 bits on
+G0. `hw::Crs::TrimMax` and `hw::Crs::TrimDefault` get the width from the
+CMSIS header. The driver exists only when the CMSIS header defines `CRS`.
+
+| Function | Purpose |
+|---|---|
+| `configure(Config)` | Writes `CRS_CFGR`: sync source, divider, polarity, `RELOAD`, `FELIM`. The defaults are USB SOF, 48 MHz / 1 kHz. Returns `false` while the counter runs, because the hardware then write-protects `CRS_CFGR`. |
+| `enable(autoTrim = true)` / `disable()` | Starts or stops the frequency error counter (`CEN`) and automatic trimming (`AUTOTRIMEN`). |
+| `getSyncStatus()` | Returns `None`, `Ok`, `Warning` or `Error` from the `CRS_ISR` flags. |
+| `isFlagSet(Flag)` / `clearFlags()` | Reads one `CRS_ISR` flag or clears all of them. |
+| `setTrim()` / `getTrim()` | Manual trimming. The hardware ignores writes while automatic trimming is on. |
+| `getFrequencyErrorCapture()` / `isFrequencyBelowTarget()` | `FECAP` and `FEDIR` of the last SYNC event. |
+
+Start-up sequence for USB from HSI48:
+
+```cpp
+#include "peripherals/Crs.h"
+#include "peripherals/Rcc.h"
+
+if(!Rcc::enableHSI48()) {
+   // HSI48 did not start, or SYSCFG_CFGR3 is locked (L0)
+}
+Rcc::setUSBClockSource(Rcc::USBClockSource::HSI48);
+Rcc::enableCRSClock();
+(void)hw::Crs::configure({}); // USB SOF, RELOAD = 47999, FELIM = 34
+hw::Crs::enable();             // counter and automatic trimming on
+Rcc::enableUSBClock();
+```
+
+The CRS reports `SyncStatus::None` until the host sends SOF packets. The
+host sends SOF packets after the USB bus reset, and only while the bus is
+not suspended. Without SOF packets, HSI48 runs at its last trimming value.
+
+The CRS stops in Stop mode and loses its configuration in Standby mode.
+After Standby, run the sequence again.
