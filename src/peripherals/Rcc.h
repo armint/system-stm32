@@ -1529,6 +1529,72 @@ inline bool isLSIReady() {
 }
 #endif
 
+// HSI48 (48 MHz RC oscillator, clock for USB and RNG)
+// STM32L0: HSI48ON/HSI48RDY live in RCC_CRRCR. The oscillator also needs the
+// VREFINT buffer for HSI48 (SYSCFG_CFGR3.ENREF_HSI48, RM0367 7.2.4), which
+// enableHSI48() switches on as well.
+// STM32G0B1/G0C1: HSI48ON/HSI48RDY live in RCC_CR; no reference buffer bit.
+// The hardware also sets HSI48ON by itself while HSI48 is the USB clock and
+// the USB peripheral is enabled (RM0444 5.2.3).
+// HSI48 stops in Stop and Standby mode on both families.
+#if defined(RCC_CRRCR_HSI48ON) || defined(RCC_CR_HSI48ON)
+/**
+ * @brief Switches on the HSI48 oscillator and waits until it is ready.
+ * @return false if HSI48 did not become ready within a bounded wait, or (L0)
+ * if SYSCFG_CFGR3 is locked (REF_LOCK) with ENREF_HSI48 still cleared.
+ * Enables the SYSCFG clock on L0, because ENREF_HSI48 is a SYSCFG bit.
+ */
+[[nodiscard]] bool enableHSI48();
+
+/**
+ * @brief Switches off the HSI48 oscillator (and, on L0, the HSI48 reference
+ * buffer unless SYSCFG_CFGR3 is locked). Do not call while USB or RNG runs
+ * from HSI48.
+ */
+void disableHSI48();
+
+inline bool isHSI48Ready() {
+#if defined(RCC_CRRCR_HSI48RDY)
+   return (RCC->CRRCR & RCC_CRRCR_HSI48RDY) != 0;
+#else
+   return (RCC->CR & RCC_CR_HSI48RDY) != 0;
+#endif
+}
+#endif
+
+// USB kernel clock selection. HSI48 is the common enumerator, so code that
+// runs USB from HSI48 + CRS is the same on every family that has it.
+#if defined(RCC_CCIPR_HSI48SEL)
+// STM32L0: RCC_CCIPR.HSI48SEL selects the 48 MHz clock for USB *and* RNG.
+enum class USBClockSource : uint32_t {
+   PLL = 0,                    // "PLL USB clock" (PLLVCO / 2), needs PLLVCO = 96 MHz
+   HSI48 = RCC_CCIPR_HSI48SEL, // HSI48 RC oscillator, trimmed by the CRS
+};
+
+inline void setUSBClockSource(USBClockSource source) {
+   RCC->CCIPR = (RCC->CCIPR & ~RCC_CCIPR_HSI48SEL) | static_cast<uint32_t>(source);
+}
+
+inline USBClockSource getUSBClockSource() {
+   return static_cast<USBClockSource>(RCC->CCIPR & RCC_CCIPR_HSI48SEL);
+}
+#elif defined(RCC_CCIPR2_USBSEL)
+// STM32G0B1/G0C1: RCC_CCIPR2.USBSEL selects the USB clock only (RNG has RNGSEL).
+enum class USBClockSource : uint32_t {
+   HSI48 = 0,
+   HSE = RCC_CCIPR2_USBSEL_0,
+   PLLQ = RCC_CCIPR2_USBSEL_1,
+};
+
+inline void setUSBClockSource(USBClockSource source) {
+   RCC->CCIPR2 = (RCC->CCIPR2 & ~RCC_CCIPR2_USBSEL) | static_cast<uint32_t>(source);
+}
+
+inline USBClockSource getUSBClockSource() {
+   return static_cast<USBClockSource>(RCC->CCIPR2 & RCC_CCIPR2_USBSEL);
+}
+#endif
+
 // MIF (NVM interface)
 #if defined(RCC_AHBENR_MIFEN)
 inline void enableMIFClock() {

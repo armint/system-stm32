@@ -136,3 +136,38 @@ add_subdirectory(path/to/system-stm32)
 `sentinode-ht` (STM32WLE5JC + µOS++ IIIe) builds this way. Leave the
 option `OFF` (the default) for a bare-metal application with no RTOS,
 where `src/bare-metal/` is the only thing providing a runtime at all.
+
+## USB clock: HSI48
+
+The USB full-speed peripheral needs a 48 MHz clock. The STM32L0 and the
+STM32G0B1/G0C1 have no crystal requirement for USB. They use the internal
+48 MHz RC oscillator (HSI48) for this clock. `Rcc` controls HSI48 and the
+USB clock selection:
+
+| Function | STM32L0 | STM32G0B1 / G0C1 |
+|---|---|---|
+| `Rcc::enableHSI48()` | Sets `SYSCFG_CFGR3.ENREF_HSI48` and `RCC_CRRCR.HSI48ON`, then waits for `HSI48RDY` | Sets `RCC_CR.HSI48ON`, then waits for `HSI48RDY` |
+| `Rcc::disableHSI48()` | Clears `HSI48ON` and `ENREF_HSI48` | Clears `HSI48ON` |
+| `Rcc::isHSI48Ready()` | Reads `RCC_CRRCR.HSI48RDY` | Reads `RCC_CR.HSI48RDY` |
+| `Rcc::setUSBClockSource()` | `RCC_CCIPR.HSI48SEL`: `PLL` or `HSI48` | `RCC_CCIPR2.USBSEL`: `HSI48`, `HSE` or `PLLQ` |
+| `Rcc::enableUSBClock()`, `Rcc::enableCRSClock()` | `RCC_APB1ENR` | `RCC_APBENR1` |
+
+These functions exist only when the CMSIS device header defines the
+related register bits. STM32G071, STM32C0 and STM32WL have no HSI48, so
+the functions are not declared there.
+
+Family details:
+
+- **STM32L0:** HSI48 needs the VREFINT buffer for HSI48 (RM0367 section
+  7.2.4). `enableHSI48()` sets `ENREF_HSI48` and enables the SYSCFG clock
+  for this. If `SYSCFG_CFGR3.REF_LOCK` is set and `ENREF_HSI48` is
+  clear, `enableHSI48()` returns `false`.
+- **STM32L0:** `HSI48SEL` selects the 48 MHz clock for USB *and* RNG.
+- **STM32G0B1/G0C1:** the hardware sets `HSI48ON` by itself while HSI48
+  is the USB clock and the USB peripheral is enabled (RM0444 section
+  5.2.3).
+- HSI48 stops in Stop and Standby mode on both families.
+
+`enableHSI48()` returns `false` if `HSI48RDY` does not come within a
+bounded wait. The startup time is 6 µs maximum, so this only occurs if the
+oscillator does not start.
