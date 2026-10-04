@@ -25,6 +25,10 @@ build:
         STM32_DEVICE: STM32L073xx
       - STM32_FAMILY: STM32G0
         STM32_DEVICE: STM32G071xx
+      # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of
+      # the HSI48/USB clock code in Rcc.
+      - STM32_FAMILY: STM32G0
+        STM32_DEVICE: STM32G0B1xx
       - STM32_FAMILY: STM32WL
         STM32_DEVICE: STM32WLE5xx
   script:

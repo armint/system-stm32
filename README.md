@@ -11,7 +11,7 @@ sources with `#ifdef STM32xx`.
 | `STM32_FAMILY` | CMSIS device package | Core       | CI status |
 |----------------|-----------------------|------------|-----------|
 | `STM32L0`      | cmsis\_device\_l0 v1.9.4 | Cortex-M0+ | built in CI |
-| `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI |
+| `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
