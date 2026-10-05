@@ -1,8 +1,9 @@
 // Minimal STM32F1 test image. CI links it to prove that the F1 part of the
 // library builds, links and fits in memory. It never runs on hardware.
-// Extend it when more F1 drivers land (USART, USB).
+// Extend it when more F1 drivers land (USART).
 #include <Adc.h>
 #include <Afio.h>
+#include <UsbDevice.h>
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/FastPin.h>
@@ -63,6 +64,54 @@ void exerciseAdc() {
    adc.disable();
 }
 
+// Links the F1 USB driver: a packet-level echo on bulk EP1, without
+// enumeration (no descriptors, EP0 SETUP is stalled). The CDC echo with
+// the libArT USB stack is in the oven controller (extra/boardtest).
+hw::UsbDevice usb;
+
+void onUsbEvent(void *, const hw::usb::Event &event) {
+   using hw::usb::EventType;
+   switch(event.type) {
+   case EventType::Reset:
+      (void)usb.openEndpoint(0x01, hw::usb::EndpointType::Bulk, 64);
+      (void)usb.openEndpoint(0x81, hw::usb::EndpointType::Bulk, 64);
+      usb.armOut(0x01);
+      break;
+   case EventType::Setup:
+      usb.setStall(0x80, true);
+      usb.setStall(0x00, true);
+      break;
+   case EventType::Out:
+      if(event.endpoint == 0x01) {
+         uint8_t packet[64];
+         uint16_t size = usb.readOut(0x01, packet);
+         (void)usb.startIn(0x81, std::span<const uint8_t>(packet, size));
+      }
+      break;
+   case EventType::InComplete:
+      if(event.endpoint == 0x81) {
+         usb.armOut(0x01);
+      }
+      break;
+   case EventType::Suspend:
+   case EventType::Resume:
+      break;
+   }
+}
+
+void usbPullup(void *, bool enable) {
+   // Versaloon Mini: PC13 switches the D+ pull-up.
+   GPIOC->BSRR = enable ? (1UL << 13) : (1UL << (13 + 16));
+}
+
+void exerciseUsb() {
+   RCC->APB1ENR |= RCC_APB1ENR_USBEN;
+   usb.setPullupCallback(&usbPullup, nullptr);
+   usb.begin(&onUsbEvent, nullptr);
+   usb.connect();
+   sink = usb.isConnected() && !usb.isStalled(0x81);
+}
+
 void onTim2() {
    TIM2->SR = 0;
    ticks = ticks + 1;
@@ -72,6 +121,7 @@ void onTim2() {
 int main() {
    exerciseGpio();
    exerciseAdc();
+   exerciseUsb();
    Interrupt::connectHandler(TIM2_IRQn, &onTim2);
    hw::Timer timer(TIM2);
    timer.enableCounter();
