@@ -13,7 +13,7 @@ sources with `#ifdef STM32xx`.
 | `STM32L0`      | cmsis\_device\_l0 v1.9.4 | Cortex-M0+ | built in CI |
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
-| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, USART, I2C and RTC not ported (see below) |
+| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, USART, I2C and RTC not ported; ADC in `families/stm32f1` (see below) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -79,6 +79,14 @@ library) and, once installed, as `art::system-stm32`.
   automatically. `Rcc` and `I2c` are the exception: their STM32WL
   differences are small enough to handle with in-file `#if defined(...)`
   branches instead, so they stay in `src/peripherals/` unconditionally.
+  The STM32F1 `Adc` does not match the interface of the other families,
+  because the F1 ADC has a different register block. It offers single
+  software-triggered conversions, `ADCPRE` setup (ADCCLK at most 14 MHz),
+  calibration and a VDDA measurement from Vrefint. Vrefint has no factory
+  calibration value on F1. The datasheet gives 1.16 to 1.24 V (up to 85 °C)
+  and up to 1.26 V (105 °C). So VDDA from Vrefint has an error of about
+  ±3.3 % (+5 % at the highest temperatures), plus the ADC error. In the
+  worst case this is about ±110 mV at 3.3 V and ±120 mV at 3.6 V.
 - `src/utils/` — interrupt vector-table relocation and C++ member-function
   binding (`Interrupt`), GPIO interrupt dispatch (`GpioInterrupt`, not
   built for STM32WL and STM32F1 — see above).
