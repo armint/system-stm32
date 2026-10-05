@@ -31,6 +31,8 @@ build:
         STM32_DEVICE: STM32G0B1xx
       - STM32_FAMILY: STM32WL
         STM32_DEVICE: STM32WLE5xx
+      - STM32_FAMILY: STM32F1
+        STM32_DEVICE: STM32F103xB
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake

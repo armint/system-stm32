@@ -13,6 +13,7 @@ sources with `#ifdef STM32xx`.
 | `STM32L0`      | cmsis\_device\_l0 v1.9.4 | Cortex-M0+ | built in CI |
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
+| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); GPIO, EXTI, USART, I2C and RTC not ported (see below) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -36,9 +37,12 @@ Add as a git submodule and `add_subdirectory()` it (this is how the
 downstream projects mentioned below consume it), or `install()` it and
 `find_package(system-stm32)`. Relevant CMake variables:
 
-- `STM32_FAMILY` — one of `STM32L0`, `STM32C0`, `STM32G0`, `STM32WL`.
+- `STM32_FAMILY` — one of `STM32L0`, `STM32C0`, `STM32G0`, `STM32WL`,
+  `STM32F1`.
   Defaults to `STM32L0`.
-- `STM32_DEVICE` — the CMSIS device define, e.g. `STM32WLE5xx`.
+- `STM32_DEVICE` — the CMSIS device define, e.g. `STM32WLE5xx`. Use
+  `STM32F103xB` for both STM32F103x8 and STM32F103xB. CMSIS has no
+  separate define for the 64 KB part.
 - `SYSTEM_STM32_EXCLUDE_STARTUP` — see [Bare-metal startup vs. an external
   RTOS](#bare-metal-startup-vs-an-external-rtos) below. Defaults to `OFF`.
 
@@ -53,7 +57,10 @@ library) and, once installed, as `art::system-stm32`.
   `#if defined(USART_PRESC_PRESCALER)`) is fine here; `#ifdef STM32xx` for
   whole-family differences is not — that belongs below. `GpioInterrupt` in
   `src/utils/` is not yet ported to STM32WL and is excluded from the build
-  for that family (see `_WL_EXCLUDE` in `CMakeLists.txt`).
+  for that family (see `_WL_EXCLUDE` in `CMakeLists.txt`). STM32F1 has
+  older GPIO, EXTI, USART, I2C and RTC peripherals. The build excludes
+  `GpioPin`, `Exti`, `Usart`, `I2c`, `Rtc` and `GpioInterrupt` for STM32F1
+  (see `_F1_EXCLUDE` in `CMakeLists.txt`).
 - `src/families/<family>/` — family-specific implementations (currently
   `Adc`, `UsbDevice` (STM32L0 only), and the interrupt vector table in
   `vectors_stm32<family>xx.c`)
@@ -65,7 +72,7 @@ library) and, once installed, as `art::system-stm32`.
   branches instead, so they stay in `src/peripherals/` unconditionally.
 - `src/utils/` — interrupt vector-table relocation and C++ member-function
   binding (`Interrupt`), GPIO interrupt dispatch (`GpioInterrupt`, not
-  built for STM32WL — see above).
+  built for STM32WL and STM32F1 — see above).
 - `src/startup-hooks.h` / `src/initialize-hardware.cpp` — declares and
   weakly defines `os_startup_initialize_hardware_early()` /
   `os_startup_initialize_hardware()`. Not part of `src/bare-metal/`

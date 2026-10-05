@@ -7,4 +7,6 @@
 #include <stm32g0xx.h>
 #elif defined(STM32WL)
 #include <stm32wlxx.h>
+#elif defined(STM32F1)
+#include <stm32f1xx.h>
 #endif
