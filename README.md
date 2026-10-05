@@ -94,6 +94,14 @@ library) and, once installed, as `art::system-stm32`.
   of which startup path is active, so it stays outside `src/bare-metal/`.
 - `src/bare-metal/` — see below.
 - `svd/` — SVD register descriptions, for reference/tooling use.
+- `ldscripts/` — memory linker scripts (`MEMORY` regions only) for the
+  parts that this repository supplies. Today these are `mem-F103x8.ld` and
+  `mem-F103xB.ld`. The consumer adds its own sections script (for example
+  `sections.ld`) and points the linker at this directory with `-L`. The
+  first 0x100 bytes of RAM stay free. `Interrupt::connectHandler()` copies
+  the vector table to `SRAM_BASE`, and VTOR needs that copy 256-byte
+  aligned. The scripts start FLASH at 0x08000000. A consumer with a
+  bootloader supplies its own script with a different FLASH origin.
 
 ## Bare-metal startup vs. an external RTOS
 
