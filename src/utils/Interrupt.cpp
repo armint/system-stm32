@@ -5,6 +5,13 @@
 
 #define VTOR_ADDRESS SRAM_BASE
 
+#if defined(STM32F1)
+// The F1 memory scripts (ldscripts/mem-F103*.ld) keep the first 0x100 bytes of
+// RAM free for the copy of the vector table. A larger table would overwrite
+// .data. VTOR also needs the table aligned to the next power of two of its size.
+static_assert(VECTOR_TABLE_SIZE * sizeof(uint32_t) <= 0x100, "vector table does not fit in the RAM reserved by ldscripts/mem-F103*.ld");
+#endif
+
 extern uintptr_t __vectors_start;
 
 namespace Interrupt {

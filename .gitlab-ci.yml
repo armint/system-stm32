@@ -3,6 +3,10 @@ stages:
 
 image: "docker.vandertogt.org/firmware-builder:v1.14.0"
 
+# One place for the toolchain location. A toolchain bump is a one-line change.
+variables:
+  GCC_TOOLCHAIN_PREFIX: /opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+
 workflow:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -36,7 +40,7 @@ build:
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
-        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
         -D STM32_FAMILY=${STM32_FAMILY}
         -D STM32_DEVICE=${STM32_DEVICE}
@@ -61,7 +65,7 @@ build-exclude-startup:
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
-        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
         -D STM32_FAMILY=${STM32_FAMILY}
         -D STM32_DEVICE=${STM32_DEVICE}
@@ -79,13 +83,15 @@ build-f1-test-image:
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
-        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
         -D STM32_FAMILY=STM32F1
         -D STM32_DEVICE=STM32F103xB
         -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON
     - cmake --build build -j$(nproc)
-    - /opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi/bin/arm-none-eabi-nm build/tests/stm32f1/test-image-f103xB | grep -q "^08000000 T g_pfnVectors$"
+    - for image in test-image-f103x8 test-image-f103xB; do
+        ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1;
+      done
 
 # STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
 # branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
@@ -102,7 +108,7 @@ build-c0-known-broken:
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
-        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
         -D STM32_FAMILY=${STM32_FAMILY}
         -D STM32_DEVICE=${STM32_DEVICE}
