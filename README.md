@@ -399,8 +399,9 @@ driver.
   [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs). On STM32F1, the
   USB clock comes from the PLL: 72 MHz / 1.5 or 48 MHz / 1
   (`RCC_CFGR.USBPRE`). Thus STM32F1 needs a crystal (HSE) for USB.
-- The USB bus clock enabled before `begin()` (`Rcc::enableUSBClock()` on
-  STM32L0, `RCC_APB1ENR.USBEN` on STM32F1).
+  `Rcc::setClock72MhzHSE()` sets this clock (see
+  [STM32F1: 72 MHz from HSE](#stm32f1-72-mhz-from-hse)).
+- The USB bus clock enabled with `Rcc::enableUSBClock()` before `begin()`.
 - On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
   errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
   underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section

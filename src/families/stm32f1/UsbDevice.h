@@ -48,8 +48,8 @@ namespace hw {
 // stages.
 //
 // Requirements (see README "USB device driver"):
-//  - 48 MHz USB clock from the PLL (72 MHz / 1.5 or 48 MHz / 1) and the
-//    USB clock enabled in RCC_APB1ENR before begin().
+//  - 48 MHz USB clock from the PLL (72 MHz / 1.5 or 48 MHz / 1), e.g. with
+//    Rcc::setClock72MhzHSE(), and Rcc::enableUSBClock() before begin().
 //  - APB1 clock > 8 MHz, against packet memory overrun/underrun (RM0008
 //    23.4.2, "Structure and usage of packet buffers").
 //  - PA11/PA12 need no alternate-function setup; the transceiver takes them
