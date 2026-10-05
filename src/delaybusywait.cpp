@@ -49,9 +49,12 @@ void delayuS(uint32_t usec) {
 }
 
 void delayCycles(uint32_t cycles) {
-   if(cycles <= 170)
+   // Estimated cycle count for method entry & exit. There is no division
+   // here, unlike in delayuS(), so this is much less than 170.
+   constexpr uint32_t kOverheadCycles = 10;
+   if(cycles <= kOverheadCycles)
       return;
-   cycles -= 170; // cycle count for method entry & exit
+   cycles -= kOverheadCycles;
    cycles /= 3;   // cycle count per iteration - should be 3 on Cortex M0+
 
    if(!cycles)

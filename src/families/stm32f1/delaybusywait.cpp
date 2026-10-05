@@ -10,16 +10,19 @@ extern uint32_t SystemCoreClock;
 
 namespace {
 
-// Estimated cycles that the function entry, the counter start and the loop
-// exit add to a delay. Tune with a logic analyzer on the target.
-constexpr uint32_t kOverheadCycles = 6;
+// Estimated cycles that the function call, the counter check and the loop
+// exit add to a delay, counted from the call until the return. The code
+// subtracts it from the requested cycles. Tune with a logic analyzer.
+constexpr uint32_t kOverheadCycles = 12;
 
 // Enable the DWT cycle counter if it is not running. Every delay calls
 // this. That keeps the delays working after a debugger session or other
-// code has cleared TRCENA or CYCCNTENA. When the counter runs, the cost is
-// one load and one branch.
+// code has cleared TRCENA or CYCCNTENA. TRCENA gates the whole DWT: when it
+// is 0, CYCCNT stays frozen even if CYCCNTENA reads 1. So the function
+// tests both bits. When the counter runs, the cost is two loads and two
+// branches.
 __attribute__((always_inline)) inline void enableCycleCounter() {
-   if(!(DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk)) {
+   if(!(CoreDebug->DEMCR & CoreDebug_DEMCR_TRCENA_Msk) || !(DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk)) {
       CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
       DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
    }
@@ -32,11 +35,10 @@ inline void waitUntil(uint32_t deadline) {
    }
 }
 
-} // namespace
-
-void delayCycles(uint32_t cycles) {
-   enableCycleCounter();
-   const uint32_t start = DWT->CYCCNT;
+// Wait for a number of cycles, counted from a CYCCNT value that the caller
+// read as early as possible. Work that the caller did after reading start
+// (for example the cycle count calculation) is part of the delay.
+inline void waitCyclesFrom(uint32_t start, uint32_t cycles) {
    cycles = cycles > kOverheadCycles ? cycles - kOverheadCycles : 0;
    // Cap each step below 2^31 so the signed compare in waitUntil() holds.
    uint32_t deadline = start;
@@ -48,7 +50,18 @@ void delayCycles(uint32_t cycles) {
    waitUntil(deadline + cycles);
 }
 
+} // namespace
+
+void delayCycles(uint32_t cycles) {
+   enableCycleCounter();
+   waitCyclesFrom(DWT->CYCCNT, cycles);
+}
+
 void delayuS(uint32_t usec) {
+   enableCycleCounter();
+   // Read the start value before the calculation. The udiv time depends on
+   // the data, so it must be inside the measured window.
+   const uint32_t start = DWT->CYCCNT;
    uint32_t cycles = SystemCoreClock;
    if(cycles >= 2000000) {
       // Exact for whole-MHz core clocks, and no 64-bit math in the hot path.
@@ -58,7 +71,7 @@ void delayuS(uint32_t usec) {
       cycles *= usec;
       cycles /= 1000000;
    }
-   delayCycles(cycles);
+   waitCyclesFrom(start, cycles);
 }
 
 void delaymS(uint32_t msec) {
