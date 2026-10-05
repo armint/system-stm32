@@ -60,7 +60,9 @@ library) and, once installed, as `art::system-stm32`.
   for that family (see `_WL_EXCLUDE` in `CMakeLists.txt`). STM32F1 has
   older GPIO, EXTI, USART, I2C and RTC peripherals. The build excludes
   `GpioPin`, `Exti`, `Usart`, `I2c`, `Rtc` and `GpioInterrupt` for STM32F1
-  (see `_F1_EXCLUDE` in `CMakeLists.txt`).
+  (see `_F1_EXCLUDE` in `CMakeLists.txt`). `FastPin` is a header-only
+  `GpioPin` for bit-bang loops. Port and pin are template arguments, so
+  each access is one `BSRR` store or one `IDR` load.
 - `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
   The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
   STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
