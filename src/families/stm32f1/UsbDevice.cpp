@@ -14,7 +14,7 @@ using usb::EventType;
 
 constexpr IRQn_Type UsbIrq = USB_LP_CAN1_RX0_IRQn;
 
-// --- Endpoint registers (USB_EPnR, RM0008 section 23.5) ----------------------
+// --- Endpoint registers (USB_EPnR, RM0008 23.5.2) ----------------------------
 // Bit types: CTR_RX/CTR_TX are rc_w0 (write 1 = no change), DTOG_x and
 // STAT_x are toggle bits (write 0 = no change), SETUP is read-only. Every
 // write therefore uses these "invariant" values for the bits it does not
@@ -79,11 +79,11 @@ void setTypeAndAddress(uint8_t n, EndpointType type) {
    epr(n) = static_cast<uint16_t>(EpCtrKeep | t | n);
 }
 
-// --- Packet memory (RM0008 section 23.5) -------------------------------------
+// --- Packet memory (RM0008 23.5, 23.5.3) -------------------------------------
 // 512 bytes, addressed by the USB peripheral with byte offsets. The CPU sees
 // them as 256 16-bit words at a 32-bit stride: USB offset o (even) is at
 // USB_PMAADDR + o * 2, and the upper half of each 32-bit slot is unused.
-// 16-bit access only. The buffer descriptor table is at offset 0
+// The driver uses 16-bit access. The buffer descriptor table is at offset 0
 // (USB_BTABLE). Every offset passed to pma16() is even.
 
 volatile uint16_t &pma16(uint16_t offset) {
@@ -129,7 +129,7 @@ constexpr uint16_t InterruptMask = USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SU
 
 } // namespace
 
-// Compile-time checks of the COUNTn_RX encoding (RM0008 section 23.5).
+// Compile-time checks of the COUNTn_RX encoding (RM0008 23.5.3).
 static_assert(UsbDevice::rxBufferSize(8).count == (4u << 10) && UsbDevice::rxBufferSize(8).pmaBytes == 8);
 static_assert(UsbDevice::rxBufferSize(9).pmaBytes == 10);
 static_assert(UsbDevice::rxBufferSize(62).count == (31u << 10) && UsbDevice::rxBufferSize(62).pmaBytes == 62);
@@ -141,7 +141,7 @@ void UsbDevice::begin(usb::EventCallback callback, void *context) {
    _callback = callback;
    _context = context;
 
-   // Power-up sequence (RM0008 section 23): clear PDWN with FRES still set,
+   // Power-up sequence (RM0008 23.4.2): clear PDWN with FRES still set,
    // wait tSTARTUP (1 us max, STM32F103x8/B datasheet), then release FRES
    // and clear spurious interrupt flags.
    USB->CNTR = USB_CNTR_FRES;
@@ -454,7 +454,7 @@ void UsbDevice::handleInterrupt() {
    }
 
    if(istr & USB_ISTR_SUSP) {
-      // FSUSP stops further SUSP interrupts while suspended (RM0008).
+      // FSUSP stops further SUSP interrupts while suspended (RM0008 23.4.5).
       USB->CNTR = static_cast<uint16_t>(USB->CNTR | USB_CNTR_FSUSP);
       USB->ISTR = static_cast<uint16_t>(~USB_ISTR_SUSP);
       report(EventType::Suspend, 0);

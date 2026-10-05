@@ -43,14 +43,15 @@ namespace hw {
 //    in RAM, and readOut(0x00) reads from that copy.
 //
 // After a SETUP packet the hardware sets both directions of that control
-// endpoint to NAK (RM0008 section 23, "Control transfers"). The layer above
+// endpoint to NAK (RM0008 23.4.2 "Control transfers"). The layer above
 // then calls startIn(), armOut() or setStall() for the data and status
 // stages.
 //
 // Requirements (see README "USB device driver"):
 //  - 48 MHz USB clock from the PLL (72 MHz / 1.5 or 48 MHz / 1) and the
 //    USB clock enabled in RCC_APB1ENR before begin().
-//  - APB1 clock >= 8 MHz (RM0008 section 23).
+//  - APB1 clock > 8 MHz, against packet memory overrun/underrun (RM0008
+//    23.4.2, "Structure and usage of packet buffers").
 //  - PA11/PA12 need no alternate-function setup; the transceiver takes them
 //    when the peripheral is powered up.
 //  - A D+ pull-up of 1.5 kOhm to 3.3 V on the board, switched by a GPIO

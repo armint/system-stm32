@@ -337,7 +337,8 @@ driver.
   STM32L0, `RCC_APB1ENR.USBEN` on STM32F1).
 - On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
   errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
-  underrun. On STM32F1, an APB1 clock of 8 MHz or more.
+  underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section
+  23.4.2).
 - PA11 (DM) and PA12 (DP) need no GPIO setup. The transceiver uses them
   when the peripheral is powered up.
 
