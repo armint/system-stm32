@@ -62,10 +62,14 @@ inline bool isBackupDomainAccessEnabled() {
 inline void setStopMode(StopMode mode) {
 #if defined(PWR_CR1_LPMS)
    PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | static_cast<uint32_t>(mode);
-#elif defined(PWR_CR_PDDS)
+#elif defined(PWR_CR_PDDS) && defined(PWR_CR_LPSDSR)
    // STM32L0 and similar
    (void)mode;
    PWR->CR &= ~(PWR_CR_PDDS | PWR_CR_LPSDSR);
+#elif defined(PWR_CR_PDDS) && defined(PWR_CR_LPDS)
+   // STM32F1: Stop with the voltage regulator in run mode (LPDS = 0)
+   (void)mode;
+   PWR->CR &= ~(PWR_CR_PDDS | PWR_CR_LPDS);
 #endif
 }
 
