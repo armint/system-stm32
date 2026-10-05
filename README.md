@@ -93,6 +93,10 @@ library) and, once installed, as `art::system-stm32`.
   layout). Needed by the always-built per-family vector table regardless
   of which startup path is active, so it stays outside `src/bare-metal/`.
 - `src/bare-metal/` — see below.
+- `tests/stm32f1/` — STM32F1 test image: a minimal `main()` with a copy of
+  the µOS++ `sections.ld`. CI links it for F103x8 and F103xB. Enable it with
+  `-DSYSTEM_STM32_BUILD_TEST_IMAGE=ON` and `STM32_FAMILY=STM32F1`. The image
+  never runs on hardware. Add new F1 drivers to it when they land.
 - `svd/` — SVD register descriptions, for reference/tooling use.
 - `ldscripts/` — memory linker scripts (`MEMORY` regions only) for the
   parts that this repository supplies. Today these are `mem-F103x8.ld` and

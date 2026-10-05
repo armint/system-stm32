@@ -68,6 +68,25 @@ build-exclude-startup:
         -D SYSTEM_STM32_EXCLUDE_STARTUP=ON
     - cmake --build build --target system-stm32 -j$(nproc)
 
+# Links the STM32F1 test image (tests/stm32f1) for both memory scripts. This
+# catches link and layout errors that the library-only build cannot see:
+# missing symbols, a vector table that does not fit, a section overflow.
+# Extend the image when more F1 drivers land (GPIO, USART, ADC, USB).
+build-f1-test-image:
+  stage: build
+  variables:
+    GIT_DEPTH: 0
+  script:
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain-14.3.rel1-x86_64-arm-none-eabi
+        -D CMAKE_BUILD_TYPE=Release
+        -D STM32_FAMILY=STM32F1
+        -D STM32_DEVICE=STM32F103xB
+        -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON
+    - cmake --build build -j$(nproc)
+    - arm-none-eabi-nm build/tests/stm32f1/test-image-f103xB | grep -q "^08000000 T g_pfnVectors$"
+
 # STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
 # branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
 # and VECTOR_TABLE_SIZE is only ever defined for STM32WL. Kept here

@@ -246,6 +246,15 @@ endif ()
 # Ensure the exported interface does not pull non-exported targets.
 set_property(TARGET system-stm32 PROPERTY INTERFACE_LINK_LIBRARIES "")
 
+option(SYSTEM_STM32_BUILD_TEST_IMAGE
+    "Build the STM32F1 test image (STM32_FAMILY=STM32F1 only; needs an ARM toolchain)" OFF)
+if(SYSTEM_STM32_BUILD_TEST_IMAGE)
+    if(NOT STM32_FAMILY STREQUAL "STM32F1")
+        message(FATAL_ERROR "SYSTEM_STM32_BUILD_TEST_IMAGE needs STM32_FAMILY=STM32F1")
+    endif()
+    add_subdirectory(tests/stm32f1)
+endif()
+
 install(TARGETS system-stm32
         EXPORT system-stm32-targets
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
