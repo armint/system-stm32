@@ -51,11 +51,14 @@ void Adc::enable() const {
    if(_adc.CR2 & ADC_CR2_ADON)
       return;
    _adc.CR2 |= ADC_CR2_ADON;
-   delayuS(2); // tSTAB is 1 us, and the calibration needs 2 ADCCLK cycles after power-up
+   delayuS(2); // tSTAB is at most 1 us (datasheet)
 }
 
 void Adc::disable() const {
    _adc.CR2 &= ~ADC_CR2_ADON;
+   // A calibration needs at least 2 ADCCLK cycles of power-off before it (RM0008).
+   // 4 us covers the lowest ADCCLK of 0.6 MHz.
+   delayuS(4);
 }
 
 void Adc::calibrate() const {
@@ -97,7 +100,7 @@ bool Adc::convert(Channel channel, uint16_t &value) const {
 
 bool Adc::readSupplyMillivolts(uint32_t &vddaMv) const {
    enableInternalChannels();
-   delayuS(10); // tSTART of the internal reference
+   delayuS(10); // settling margin; the datasheet gives no start-up time for Vrefint
    setSamplingTime(Vrefint, SamplingCycles::Cycles239_5);
    uint16_t raw;
    if(!convert(Vrefint, raw) || raw == 0)
