@@ -173,9 +173,10 @@ endif()
 
 # Exclude peripheral files whose register-level code does not match the
 # STM32F1 peripherals. F1 has the older I2C and RTC blocks (no I2C v2 TIMINGR,
-# no RTC calendar/wakeup timer), a GPIO port with CRL/CRH instead of MODER,
-# USART v1 (SR/DR instead of ISR/RDR/TDR) and EXTI IRQs per line. The GPIO,
-# EXTI and USART ports come in separate changes.
+# no RTC calendar/wakeup timer), USART v1 (SR/DR instead of ISR/RDR/TDR) and
+# EXTI IRQs per line. The EXTI and USART ports come in separate changes.
+# GPIO uses CRL/CRH instead of MODER: src/families/stm32f1/GpioPin.cpp
+# replaces src/peripherals/GpioPin.cpp.
 if(STM32_FAMILY STREQUAL "STM32F1")
     set(_F1_EXCLUDE
         "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
