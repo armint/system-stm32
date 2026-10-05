@@ -385,6 +385,16 @@ void UsbDevice::handleInterrupt() {
    while((istr = USB->ISTR) & USB_ISTR_CTR) {
       uint8_t n = istr & USB_ISTR_EP_ID;
       uint16_t v = epr(n);
+      // TX before RX: if both CTR bits are set, the IN transaction came
+      // first. After a SETUP the hardware sets STAT_TX to NAK, so no IN can
+      // complete while that CTR_RX is pending. Example: the host ACKs the
+      // last IN data packet and sends the OUT status packet before this
+      // handler runs. The layer above must see InComplete, then Out (or a
+      // stale InComplete before a new Setup).
+      if(v & USB_EP_CTR_TX) {
+         clearCtrTx(n);
+         report(EventType::InComplete, static_cast<uint8_t>(n | usb::EndpointDirectionIn));
+      }
       if(v & USB_EP_CTR_RX) {
          uint16_t size = countRx(n) & CountMask;
          if(v & USB_EP_SETUP) {
@@ -400,10 +410,6 @@ void UsbDevice::handleInterrupt() {
             clearCtrRx(n);
             report(EventType::Out, n, size);
          }
-      }
-      if(v & USB_EP_CTR_TX) {
-         clearCtrTx(n);
-         report(EventType::InComplete, static_cast<uint8_t>(n | usb::EndpointDirectionIn));
       }
    }
 
