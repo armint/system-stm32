@@ -56,7 +56,8 @@ struct Usart {
     * coding). The frame length is data bits + parity bit: 7E/7O use M = 0,
     * 8N uses M = 0, 8E/8O use M = 1.
     * Disables the USART for the change and restores UE afterwards. Wait for
-    * isTransferComplete() first, or a byte in transmission is cut off.
+    * isTransferComplete() first: M must not change during a transfer
+    * (RM0008 27.6.4), and UE = 0 stops the USART after the current byte.
     * @return false (nothing changed) for 7 data bits without parity: v1 has
     * no 7-bit frame.
     */

@@ -416,8 +416,8 @@ a flag for the bootloader entry that survives `NVIC_SystemReset()`.
 the parity and the stop bits, for example from a USB CDC line coding. The
 frame length is the data bits plus the parity bit. The function disables
 the USART for the change and then restores the enable bit. Wait for
-`isTransferComplete()` before the call, or the byte in transmission is cut
-off.
+`isTransferComplete()` before the call. The word length must not change
+during a transfer (RM0008 27.6.4 for STM32F1).
 
 | Format | USART v2 (L0, G0, WL) | USART v1 (STM32F1) |
 |--------|-----------------------|--------------------|
