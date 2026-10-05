@@ -225,6 +225,47 @@ add_subdirectory(path/to/system-stm32)
 option `OFF` (the default) for a bare-metal application with no RTOS,
 where `src/bare-metal/` is the only thing providing a runtime at all.
 
+## STM32F1: 72 MHz from HSE
+
+`Rcc::setClock72MhzHSE(hseHz)` sets the STM32F103 to its maximum clock
+speeds. The source is the HSE crystal through the PLL:
+
+| Clock | Frequency |
+|-------|-----------|
+| SYSCLK, AHB (HCLK), APB2 | 72 MHz |
+| APB1 | 36 MHz |
+| ADC | 12 MHz (APB2 / 6) |
+| USB | 48 MHz (PLL / 1.5) |
+
+The function calculates the PLL setting from the crystal frequency
+`hseHz`. It accepts any crystal from 4 MHz to 16 MHz that gives exactly
+72 MHz, for example 8 MHz (x 9), 12 MHz (x 6) or 16 MHz (/ 2, x 9).
+`hseHz` defaults to `HSE_VALUE`. Set the crystal frequency with
+`SYSTEM_STM32_HSE_VALUE`, so that `SystemCoreClockUpdate()` uses the same
+value.
+
+The function returns `false` in these cases:
+
+- No PLL setting gives exactly 72 MHz from `hseHz`.
+- HSE does not start within approximately 100 ms.
+- The PLL does not lock.
+
+After a failure, SYSCLK stays on HSI (8 MHz). The function does not write
+global variables, so you can call it before the DATA and BSS
+initialization. Call `SystemCoreClockUpdate()` after it.
+
+```cpp
+#include "peripherals/Rcc.h"
+
+int main() {
+   if(!Rcc::setClock72MhzHSE()) {
+      // SYSCLK is HSI (8 MHz). USB does not work without HSE.
+   }
+   SystemCoreClockUpdate();
+   // ...
+}
+```
+
 ## USB clock: HSI48 and CRS
 
 The USB full-speed peripheral needs a 48 MHz clock. The STM32L0 and the
