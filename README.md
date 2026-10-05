@@ -83,7 +83,10 @@ library) and, once installed, as `art::system-stm32`.
   because the F1 ADC has a different register block. It offers single
   software-triggered conversions, `ADCPRE` setup (ADCCLK at most 14 MHz),
   calibration and a VDDA measurement from Vrefint. Vrefint has no factory
-  calibration value on F1, so VDDA has a spread of about 3 %.
+  calibration value on F1. The datasheet gives 1.16 to 1.24 V (up to 85 °C)
+  and up to 1.26 V (105 °C). So VDDA from Vrefint has an error of about
+  ±3.3 % (+5 % at the highest temperatures), plus the ADC error. In the
+  worst case this is about ±110 mV at 3.3 V and ±120 mV at 3.6 V.
 - `src/utils/` — interrupt vector-table relocation and C++ member-function
   binding (`Interrupt`), GPIO interrupt dispatch (`GpioInterrupt`, not
   built for STM32WL and STM32F1 — see above).
