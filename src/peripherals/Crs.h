@@ -114,11 +114,16 @@ inline uint32_t getTrim() {
 
 // Result of the last SYNC event, from the CRS_ISR flags.
 enum class SyncStatus {
-   None,    // no SYNC event since the flags were last cleared
+   None,    // no SYNC event and no error since the flags were last cleared
    Ok,      // SYNCOKF: frequency error below the warning limit
    Warning, // SYNCWARNF: frequency error above the warning limit, still trimmable
    Error,   // ERRF: SYNC error, missed SYNC or trimming overflow (see Flag)
 };
+// With CEN set and no SYNC signal (no USB SOF: before the first SOF, during
+// suspend, after an unplug), the counter reaches the OUTRANGE limit
+// (128 * FELIM) and the hardware sets SYNCMISS, so ERRF. This is expected and
+// does not mean that HSI48 is broken. The flags are sticky: call clearFlags()
+// before a new status is read, e.g. after a USB reset or resume.
 
 // CRS_ISR flags. ERRF is the OR of SyncError, SyncMissed and TrimOverflow.
 enum class Flag : uint32_t {
@@ -137,7 +142,8 @@ inline bool isFlagSet(Flag flag) {
 
 /**
  * @brief Returns the worst status flagged since the flags were last cleared
- * (Error before Warning before Ok). Does not clear the flags.
+ * (Error before Warning before Ok). Does not clear the flags. Error with
+ * Flag::SyncMissed is normal while there is no SYNC signal (see SyncStatus).
  */
 inline SyncStatus getSyncStatus() {
    uint32_t isr = CRS->ISR;

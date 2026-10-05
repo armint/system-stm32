@@ -150,7 +150,7 @@ USB clock selection:
 | `Rcc::disableHSI48()` | Clears `HSI48ON` and `ENREF_HSI48` | Clears `HSI48ON` |
 | `Rcc::isHSI48Ready()` | Reads `RCC_CRRCR.HSI48RDY` | Reads `RCC_CR.HSI48RDY` |
 | `Rcc::setUSBClockSource()` | `RCC_CCIPR.HSI48SEL`: `PLL` or `HSI48` | `RCC_CCIPR2.USBSEL`: `HSI48`, `HSE` or `PLLQ` |
-| `Rcc::enableUSBClock()`, `Rcc::enableCRSClock()` | `RCC_APB1ENR` | `RCC_APBENR1` |
+| `Rcc::enableUSBClock()`, `Rcc::enableCRSClock()` | `RCC_APB1ENR` and the Sleep-mode bits in `RCC_APB1SMENR` | `RCC_APBENR1` |
 
 These functions exist only when the CMSIS device header defines the
 related register bits. STM32G071, STM32C0 and STM32WL have no HSI48, so
@@ -211,9 +211,19 @@ hw::Crs::enable();             // counter and automatic trimming on
 Rcc::enableUSBClock();
 ```
 
-The CRS reports `SyncStatus::None` until the host sends SOF packets. The
-host sends SOF packets after the USB bus reset, and only while the bus is
-not suspended. Without SOF packets, HSI48 runs at its last trimming value.
+The host sends SOF packets after the USB bus reset, and only while the
+bus is not suspended. Without SOF packets, HSI48 runs at its last trimming
+value.
+
+Without SOF packets, the CRS also reports an error. The frequency error
+counter reaches its OUTRANGE limit (128 × `FELIM`), and the hardware sets
+`SYNCMISS` and `ERRF` (RM0367 8.7.3, RM0444 6.7.3). Thus
+`getSyncStatus()` returns `SyncStatus::Error` with `Flag::SyncMissed`
+before the first SOF, during USB suspend and after an unplug. This is
+expected. It does not mean that HSI48 is broken.
+
+The flags stay set until `clearFlags()`. Call `clearFlags()` before you
+read a new status, for example after a USB reset or a resume.
 
 The CRS stops in Stop mode and loses its configuration in Standby mode.
 After Standby, run the sequence again.
