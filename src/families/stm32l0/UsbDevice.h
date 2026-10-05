@@ -37,7 +37,7 @@ namespace hw {
 // Requirements (see README "USB device driver"):
 //  - 48 MHz USB clock: Rcc::enableHSI48(), Rcc::setUSBClockSource(HSI48),
 //    CRS on USB SOF. Rcc::enableUSBClock() before begin().
-//  - APB clock >= 10 MHz (RM0367 32.5.2).
+//  - APB clock >= 10 MHz (RM0367 32.5.2, errata ES0292 2.16.1).
 //  - PA11/PA12 need no alternate-function setup; the transceiver takes them
 //    when the peripheral is powered up.
 //

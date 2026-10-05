@@ -258,7 +258,8 @@ driver.
 - A 48 MHz USB clock. On STM32L0, use HSI48 with the CRS on USB SOF. See
   [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs).
 - `Rcc::enableUSBClock()` before `begin()`.
-- An APB clock of 10 MHz or more (RM0367 section 32.5.2).
+- An APB clock of 10 MHz or more (RM0367 section 32.5.2, errata ES0292
+  2.16.1). A lower APB clock causes packet memory overrun or underrun.
 - PA11 (DM) and PA12 (DP) need no GPIO setup. The transceiver uses them
   when the peripheral is powered up.
 
@@ -336,10 +337,18 @@ bytes at offset 0) and the endpoint buffers. The driver allocates the
 buffers in sequence. An OUT buffer is rounded up to the `COUNTn_RX`
 block size: 2-byte blocks up to 62 bytes, 32-byte blocks above.
 
+The hardware also writes the CRC16 of a received packet into the OUT
+buffer, but never past the allocated size (`BL_SIZE` and `NUM_BLOCK`).
+These CRC bytes are wrong (errata ES0292 2.16.3), but the driver never
+reads them: `readOut()` copies only the payload.
+
 ### Limits
 
 - Endpoint numbers 0 to 7. Both directions of one number share one
   register, so they have the same type.
 - No isochronous and no double-buffered endpoints.
 - No remote wakeup, no Link Power Management (LPM) and no Battery
-  Charging Detection (BCD).
+  Charging Detection (BCD). Thus two USB errata of ES0292 do not apply:
+  2.16.2 (SUSP timing after resume signalling by the device) and 2.16.4
+  (BCD below -20 °C). A driver change that adds remote wakeup must mask
+  `SUSPM` for 3 ms after it signals resume (2.16.2 workaround).
