@@ -19,6 +19,10 @@ int main() {
    Interrupt::connectHandler(TIM2_IRQn, &onTim2);
    hw::Timer timer(TIM2);
    timer.enableCounter();
+   // Link the DWT delay code too.
+   delayuS(10);
+   delaymS(1);
+   delayCycles(100);
    for(;;) {
       __WFI();
    }
