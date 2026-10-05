@@ -70,8 +70,9 @@ library) and, once installed, as `art::system-stm32`.
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
-  `Adc`, `UsbDevice` (STM32L0 only), `GpioPin.cpp` and `Afio` (STM32F1
-  only), and the interrupt vector table in `vectors_stm32<family>xx.c`)
+  `Adc`, `UsbDevice` (STM32L0 and STM32F1), `GpioPin.cpp` and `Afio`
+  (STM32F1 only), and the interrupt vector table in
+  `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
   where one exists. CMake adds only the active family's directory to the
   include path, so `#include "Adc.h"` resolves to the right one
@@ -316,6 +317,7 @@ libArT.
 | Family | Driver | Status |
 |---|---|---|
 | STM32L0 with USB (L052, L053, L062, L063, L072, L073, L082, L083) | `src/families/stm32l0/UsbDevice.{h,cpp}` | Available. On L0 devices without USB (for example L071), the files compile to nothing. |
+| STM32F102 / F103 | `src/families/stm32f1/UsbDevice.{h,cpp}` | Available. Same peripheral as on STM32L0, with the differences in [STM32F1 differences](#stm32f1-differences). On F1 devices without USB (for example F101), the files compile to nothing. |
 | STM32G0B1 / G0C1 | — | Not yet. USB DRD peripheral: 2 KB packet memory with 32-bit access, `CHEP` registers. A new `src/families/stm32g0/UsbDevice.{h,cpp}` with the same interface is necessary. |
 | STM32G071, STM32C0, STM32WL | — | No USB peripheral |
 
@@ -328,10 +330,15 @@ driver.
 ### Requirements
 
 - A 48 MHz USB clock. On STM32L0, use HSI48 with the CRS on USB SOF. See
-  [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs).
-- `Rcc::enableUSBClock()` before `begin()`.
-- An APB clock of 10 MHz or more (RM0367 section 32.5.2, errata ES0292
-  2.16.1). A lower APB clock causes packet memory overrun or underrun.
+  [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs). On STM32F1, the
+  USB clock comes from the PLL: 72 MHz / 1.5 or 48 MHz / 1
+  (`RCC_CFGR.USBPRE`). Thus STM32F1 needs a crystal (HSE) for USB.
+- The USB bus clock enabled before `begin()` (`Rcc::enableUSBClock()` on
+  STM32L0, `RCC_APB1ENR.USBEN` on STM32F1).
+- On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
+  errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
+  underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section
+  23.4.2).
 - PA11 (DM) and PA12 (DP) need no GPIO setup. The transceiver uses them
   when the peripheral is powered up.
 
@@ -353,7 +360,8 @@ usb.connect();                   // D+ pull-up on: the host sees the device
 | Function | Purpose |
 |---|---|
 | `begin(callback, context)` / `end()` | Power-up sequence (RM0367 32.5.2), interrupt connection through `Interrupt::connectMemberHandler(USB_IRQn, ...)`, and power-down. |
-| `connect()` / `disconnect()` | Internal D+ pull-up (`USB_BCDR.DPPU`). |
+| `connect()` / `disconnect()` | D+ pull-up on or off. STM32L0: internal pull-up (`USB_BCDR.DPPU`). STM32F1: the board callback from `setPullupCallback()`. |
+| `setPullupCallback(callback, context)` | STM32F1 only. Sets the board function that switches the external D+ pull-up. |
 | `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
 | `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize`. |
 | `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
@@ -391,7 +399,8 @@ can run in the callback or later in the main loop, until the next
 
 Every public function can run in the event callback (USB interrupt) or in
 the main loop. `begin()` and `end()` are the exception: call them from the
-main loop only. The endpoint functions mask `USB_IRQn` while they run. Thus
+main loop only. The endpoint functions mask the USB interrupt (`USB_IRQn`
+on STM32L0, `USB_LP_CAN1_RX0_IRQn` on STM32F1) while they run. Thus
 a bus reset in the interrupt cannot interleave with `openEndpoint()` or
 `closeAllEndpoints()` in the main loop.
 
@@ -404,15 +413,16 @@ or `armOut()`.
 
 ### Packet memory
 
-The 1024 bytes of packet memory hold the buffer descriptor table (64
-bytes at offset 0) and the endpoint buffers. The driver allocates the
+The packet memory (1024 bytes on STM32L0, 512 bytes on STM32F1) holds
+the buffer descriptor table (64 bytes at offset 0) and the endpoint
+buffers. The driver allocates the
 buffers in sequence. An OUT buffer is rounded up to the `COUNTn_RX`
 block size: 2-byte blocks up to 62 bytes, 32-byte blocks above.
 
 The hardware also writes the CRC16 of a received packet into the OUT
 buffer, but never past the allocated size (`BL_SIZE` and `NUM_BLOCK`).
-These CRC bytes are wrong (errata ES0292 2.16.3), but the driver never
-reads them: `readOut()` copies only the payload.
+On STM32L0, these CRC bytes are wrong (errata ES0292 2.16.3), but the
+driver never reads them: `readOut()` copies only the payload.
 
 ### Limits
 
@@ -420,7 +430,38 @@ reads them: `readOut()` copies only the payload.
   register, so they have the same type.
 - No isochronous and no double-buffered endpoints.
 - No remote wakeup, no Link Power Management (LPM) and no Battery
-  Charging Detection (BCD). Thus two USB errata of ES0292 do not apply:
-  2.16.2 (SUSP timing after resume signalling by the device) and 2.16.4
-  (BCD below -20 °C). A driver change that adds remote wakeup must mask
+  Charging Detection (BCD). On STM32L0, two USB errata of ES0292 do not
+  apply: 2.16.2 (SUSP timing after resume signalling by the device) and
+  2.16.4 (BCD below -20 °C). A driver change that adds remote wakeup must mask
   `SUSPM` for 3 ms after it signals resume (2.16.2 workaround).
+
+### STM32F1 differences
+
+The STM32F1 driver is a copy of the STM32L0 driver. The register
+interface, the event model, the `USB_EPnR` toggle logic and the
+`COUNTn_RX` encoding are the same. These items are different:
+
+- Packet memory: 512 bytes. The CPU sees each 16-bit word at a 32-bit
+  stride. USB offset `o` is at `USB_PMAADDR + o * 2`. The buffer
+  descriptor table and the endpoint buffer addresses stay USB offsets.
+  Only 16-bit access is possible.
+- D+ pull-up: STM32F1 has no `USB_BCDR` and no internal pull-up. The board
+  has a 1.5 kΩ pull-up on D+, switched by a GPIO or fixed. Give the switch
+  function to `setPullupCallback()` before `connect()`. Without a callback,
+  `connect()` and `disconnect()` only change `isConnected()`.
+- Interrupt: `USB_LP_CAN1_RX0_IRQn`. `USB_HP_CAN1_TX_IRQn` is for
+  isochronous and double-buffered endpoints, which the driver does not
+  support.
+- bxCAN shares the packet memory. Do not use CAN together with USB.
+- No LPM and no BCD registers. `USB_CNTR_LPMODE` has the name
+  `USB_CNTR_LP_MODE` in the STM32F1 CMSIS header.
+
+```cpp
+void usbPullup(void *, bool enable) {
+   board::usbPullup.write(enable); // for example PC13 or PA2
+}
+
+usb.setPullupCallback(&usbPullup, nullptr);
+usb.begin(&onUsbEvent, nullptr);
+usb.connect();
+```
