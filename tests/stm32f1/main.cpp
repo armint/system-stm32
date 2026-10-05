@@ -1,6 +1,7 @@
 // Minimal STM32F1 test image. CI links it to prove that the F1 part of the
 // library builds, links and fits in memory. It never runs on hardware.
-// Extend it when more F1 drivers land (USART, ADC, USB).
+// Extend it when more F1 drivers land (USART, USB).
+#include <Adc.h>
 #include <Afio.h>
 #include <cmsis_device.h>
 #include <delaybusywait.h>
@@ -45,6 +46,23 @@ void exerciseGpio() {
    sink = Tdo::read();
 }
 
+// Links the F1 Adc code: clock setup, calibration, single conversion and the
+// VDDA measurement from Vrefint.
+void exerciseAdc() {
+   Adc::enableClock();
+   Adc::configureClock();
+   Adc adc(ADC1);
+   adc.enable();
+   if(!adc.calibrate())
+      return;
+   adc.setSamplingTime(Adc::PB0, Adc::SamplingCycles::Cycles55_5);
+   uint16_t raw = 0;
+   uint32_t vdda = 0;
+   if(adc.convert(Adc::PB0, raw) && adc.readSupplyMillivolts(vdda))
+      sink = Adc::toMillivolts(raw, vdda) > 0;
+   adc.disable();
+}
+
 void onTim2() {
    TIM2->SR = 0;
    ticks = ticks + 1;
@@ -53,6 +71,7 @@ void onTim2() {
 
 int main() {
    exerciseGpio();
+   exerciseAdc();
    Interrupt::connectHandler(TIM2_IRQn, &onTim2);
    hw::Timer timer(TIM2);
    timer.enableCounter();
