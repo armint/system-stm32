@@ -224,6 +224,20 @@ mixed `CNF` for one store. Use `GpioPin::configure()` for that change.
 The cycle count of one direction switch at 72 MHz is not measured yet.
 Measure it on hardware with the DWT cycle counter (`DWT->CYCCNT`).
 
+## Host tests
+
+`tests/host/` holds unit tests that run on the build machine, with fake
+registers. They test the code that needs no hardware. Today this is the
+STM32F1 GPIO code: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`,
+`toggle()`, and the address and store order of the `FastPin` direction
+switch. The CI job `host-tests` runs them.
+
+```sh
+cmake -S tests/host -B build-host
+cmake --build build-host
+ctest --test-dir build-host --output-on-failure
+```
+
 ## Bare-metal startup vs. an external RTOS
 
 Most of this library — peripheral drivers, interrupt binding, the vector

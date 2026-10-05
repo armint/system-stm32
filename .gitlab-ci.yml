@@ -93,6 +93,14 @@ build-f1-test-image:
         ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1;
       done
 
+# Host unit tests (tests/host): fake registers, no ARM toolchain needed.
+host-tests:
+  stage: build
+  script:
+    - cmake -S tests/host -B build-host -G "Unix Makefiles"
+    - cmake --build build-host -j$(nproc)
+    - ctest --test-dir build-host --output-on-failure
+
 # STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
 # branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
 # and VECTOR_TABLE_SIZE is only ever defined for STM32WL. Kept here
