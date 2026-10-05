@@ -438,8 +438,11 @@ does not have the functions for hardware that USART v1 does not have:
   oversampling.
 
 On USART v1, a read of SR followed by a read of DR clears the PE, FE, NE,
-ORE and IDLE flags. `clearFramingError()`, `clearIdleFlag()` and
-`clearAllStatusFlags()` therefore discard the byte in DR.
+ORE and IDLE flags. The hardware sets PE, FE, NE and ORE only together with
+RXNE. The normal receive path (`isRxRegisterNotEmpty()`, then `getData()`)
+therefore clears them. `clearFramingError()` and `clearIdleFlag()` also
+read DR, so they discard the byte in DR. `clearAllStatusFlags()` does not
+read DR. It clears only TC, LBD and CTS, so it cannot drop a received byte.
 
 ## USB clock: HSI48 and CRS
 

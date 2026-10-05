@@ -13,6 +13,7 @@
 // by a read of DR. The usual receive path (check a flag, then getData())
 // clears them as a side effect. TC, LBD and CTS are cleared by writing 0;
 // write 1 to the other bits, because writing 0 to RXNE would drop a byte.
+// Only clearFramingError() and clearIdleFlag() read DR on their own.
 
 #include <cmsis_device.h>
 #include <cstdint>
@@ -336,10 +337,13 @@ struct Usart {
       usart_.CR3 &= ~USART_CR3_HDSEL;
    }
 
-   // Clears PE, FE, NE, ORE, IDLE (SR/DR read sequence, discards DR) and
-   // TC, LBD, CTS (write 0).
+   // Clears the write-0 flags TC, LBD and CTS. It does not read DR: libart
+   // Serial calls this at the end of every USART interrupt, and a DR read
+   // there would drop a byte that arrived after the RXNE check. PE, FE, NE
+   // and ORE are only set together with RXNE (RM0008 27.6.1), so the SR read
+   // in isRxRegisterNotEmpty() plus getData() clears them. Use clearIdleFlag()
+   // for IDLE.
    void clearAllStatusFlags() const {
-      clearReadSequenceFlags();
       usart_.SR = ~(USART_SR_TC | USART_SR_LBD | USART_SR_CTS);
    }
 
