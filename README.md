@@ -145,7 +145,9 @@ Differences from the other families:
 
 `src/families/stm32f1/Afio.h` selects remapped pin sets in `AFIO_MAPR`
 (`remapUsart1()`, `remapUsart2()`, `remapUsart3()`, `remapSpi1()`,
-`remapI2c1()`, and `setRemap()` for other fields). `setSwjConfig()` sets
+`remapI2c1()`, and `setRemap()` for other fields). Some remaps need a
+larger package. On the 48-pin STM32F103C8/CB, the USART2 and USART3
+remaps are not available (RM0008 tables 52 and 53). `setSwjConfig()` sets
 the debug port. `SwjConfig::SwdOnly` turns off JTAG-DP and frees PA15,
 PB3 and PB4. SWD on PA13/PA14 continues to work. The `SWJ_CFG` bits are
 write-only, so `Afio` keeps the last written value in RAM. It writes this

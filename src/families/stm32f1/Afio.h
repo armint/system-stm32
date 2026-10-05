@@ -8,6 +8,10 @@
 // F1 has no per-pin AF number. Each peripheral has a default pin set and
 // zero or more remapped pin sets, selected in AFIO_MAPR (RM0008 section
 // 9.3 and 9.4.2). All functions enable the AFIO clock themselves.
+//
+// Some remaps need a larger package (RM0008 tables 52-56). On the 48-pin
+// STM32F103C8/CB, the USART2 remap and both USART3 remaps are not
+// available: their pins do not exist.
 
 namespace hw::Afio {
 
@@ -41,7 +45,7 @@ inline void remapUsart1(bool remap) {
 }
 
 // USART2: TX/RX/CTS/RTS/CK on PA2/PA3/PA0/PA1/PA4 (default) or
-// PD5/PD6/PD3/PD4/PD7 (remap).
+// PD5/PD6/PD3/PD4/PD7 (remap; 100- and 144-pin packages only).
 inline void remapUsart2(bool remap) {
    setRemap(AFIO_MAPR_USART2_REMAP, remap ? AFIO_MAPR_USART2_REMAP : 0);
 }
@@ -50,8 +54,10 @@ enum class Usart3Remap : uint32_t {
    // TX/RX/CK/CTS/RTS on PB10/PB11/PB12/PB13/PB14
    None = AFIO_MAPR_USART3_REMAP_NOREMAP,
    // TX/RX/CK on PC10/PC11/PC12, CTS/RTS on PB13/PB14
+   // (64-, 100- and 144-pin packages only)
    Partial = AFIO_MAPR_USART3_REMAP_PARTIALREMAP,
    // TX/RX/CK/CTS/RTS on PD8/PD9/PD10/PD11/PD12
+   // (100- and 144-pin packages only)
    Full = AFIO_MAPR_USART3_REMAP_FULLREMAP,
 };
 
@@ -65,7 +71,8 @@ inline void remapSpi1(bool remap) {
    setRemap(AFIO_MAPR_SPI1_REMAP, remap ? AFIO_MAPR_SPI1_REMAP : 0);
 }
 
-// I2C1: SCL/SDA on PB6/PB7 (default) or PB8/PB9 (remap).
+// I2C1: SCL/SDA on PB6/PB7 (default) or PB8/PB9 (remap; not on 36-pin
+// packages).
 inline void remapI2c1(bool remap) {
    setRemap(AFIO_MAPR_I2C1_REMAP, remap ? AFIO_MAPR_I2C1_REMAP : 0);
 }
