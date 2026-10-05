@@ -20,6 +20,9 @@ constexpr uint8_t kAhbShift[8] = {1, 2, 3, 4, 6, 7, 8, 9};
 constexpr uint8_t kApbShift[4] = {1, 2, 3, 4};
 
 uint32_t pclk2Hz() {
+   // SystemCoreClock can be stale, for example after Rcc::setClock72MhzHSE().
+   // The call only reads RCC.
+   SystemCoreClockUpdate();
    const uint32_t cfgr = RCC->CFGR;
    uint32_t hclk = SystemCoreClock;
    const uint32_t hpre = (cfgr & RCC_CFGR_HPRE) >> RCC_CFGR_HPRE_Pos;
@@ -47,10 +50,13 @@ uint32_t Adc::configureClock() {
 }
 
 void Adc::enable() const {
-   // Writing ADON while it is already 1 starts a conversion, so check first.
+   // Writing ADON while it is already 1 starts a conversion (RM0008), so check first.
    if(_adc.CR2 & ADC_CR2_ADON)
       return;
-   _adc.CR2 |= ADC_CR2_ADON;
+   // Set the software trigger, single conversion and right alignment in the
+   // same write as ADON. convert() then starts with SWSTART only, and no CR2
+   // write with ADON = 1 changes nothing (that would start a conversion).
+   _adc.CR2 = (_adc.CR2 & ~(ADC_CR2_CONT | ADC_CR2_ALIGN | ADC_CR2_DMA)) | ADC_CR2_EXTSEL | ADC_CR2_EXTTRIG | ADC_CR2_ADON;
    delayuS(2); // tSTAB is at most 1 us (datasheet)
 }
 
@@ -61,13 +67,23 @@ void Adc::disable() const {
    delayuS(4);
 }
 
-void Adc::calibrate() const {
+bool Adc::calibrate() const {
+   if(!(_adc.CR2 & ADC_CR2_ADON))
+      return false;
+   // These writes change RSTCAL or CAL, so they do not start a conversion.
    _adc.CR2 |= ADC_CR2_RSTCAL;
-   for(uint32_t i = 0; (_adc.CR2 & ADC_CR2_RSTCAL) && i < kPollLimit; i++) {
+   uint32_t i = 0;
+   while(_adc.CR2 & ADC_CR2_RSTCAL) {
+      if(++i > kPollLimit)
+         return false;
    }
    _adc.CR2 |= ADC_CR2_CAL;
-   for(uint32_t i = 0; (_adc.CR2 & ADC_CR2_CAL) && i < kPollLimit; i++) {
+   i = 0;
+   while(_adc.CR2 & ADC_CR2_CAL) {
+      if(++i > kPollLimit)
+         return false;
    }
+   return true;
 }
 
 void Adc::setSamplingTime(Channel channel, SamplingCycles cycles) const {
@@ -82,12 +98,13 @@ void Adc::setSamplingTime(Channel channel, SamplingCycles cycles) const {
 }
 
 bool Adc::convert(Channel channel, uint16_t &value) const {
+   if(!(_adc.CR2 & ADC_CR2_ADON))
+      return false;
    // Regular sequence of length 1 (L = 0) with the channel as the first conversion.
    _adc.SQR1 = 0;
    _adc.SQR3 = channel;
-   // Software trigger. Single conversion, right aligned.
-   _adc.CR2 = (_adc.CR2 & ~(ADC_CR2_EXTSEL | ADC_CR2_CONT | ADC_CR2_ALIGN | ADC_CR2_DMA)) | ADC_CR2_EXTSEL | ADC_CR2_EXTTRIG;
    _adc.SR = 0;
+   // The trigger mode was set in enable(). SWSTART changes CR2, so it starts exactly one conversion.
    _adc.CR2 |= ADC_CR2_SWSTART;
    uint32_t i = 0;
    while(!(_adc.SR & ADC_SR_EOC)) {

@@ -11,7 +11,7 @@
  *   Adc::configureClock();   // ADCPRE so that ADCCLK <= 14 MHz
  *   Adc adc(ADC1);
  *   adc.enable();
- *   adc.calibrate();
+ *   if(!adc.calibrate()) { ... }
  *   adc.setSamplingTime(Adc::Channel::PB0, Adc::SamplingCycles::Cycles55_5);
  *   uint16_t raw;
  *   if(adc.convert(Adc::Channel::PB0, raw)) { ... }
@@ -89,24 +89,32 @@ struct Adc {
 
    /**
     * Set ADCPRE (RCC_CFGR) to the smallest divider (2, 4, 6 or 8) that keeps
-    * ADCCLK at or below 14 MHz. The calculation uses SystemCoreClock and the
-    * AHB/APB2 prescalers in RCC_CFGR. Call it again after a clock change.
-    * No conversion may run while it changes.
+    * ADCCLK at or below 14 MHz. It calls SystemCoreClockUpdate() and uses
+    * the AHB/APB2 prescalers in RCC_CFGR, so it is correct directly after a
+    * clock change. It does not check the 0.6 MHz minimum ADCCLK: with PCLK2
+    * below 1.2 MHz the result is under the minimum. No conversion may run
+    * while it changes.
     *
     * @return The resulting ADCCLK in Hz.
     */
    static uint32_t configureClock();
 
-   /// Current ADCCLK in Hz, from SystemCoreClock and RCC_CFGR.
+   /// Current ADCCLK in Hz, from RCC_CFGR (it calls SystemCoreClockUpdate()).
    static uint32_t clockHz();
 
-   /// Switch the temperature sensor and Vrefint on (TSVREFE). ADC1 only.
+   /**
+    * Switch the temperature sensor and Vrefint on (TSVREFE). ADC1 only.
+    * It writes only if the bit changes: a CR2 write that changes nothing
+    * while ADON = 1 would start a conversion (RM0008).
+    */
    void enableInternalChannels() const {
-      _adc.CR2 |= ADC_CR2_TSVREFE;
+      if(!(_adc.CR2 & ADC_CR2_TSVREFE))
+         _adc.CR2 |= ADC_CR2_TSVREFE;
    }
 
    void disableInternalChannels() const {
-      _adc.CR2 &= ~ADC_CR2_TSVREFE;
+      if(_adc.CR2 & ADC_CR2_TSVREFE)
+         _adc.CR2 &= ~ADC_CR2_TSVREFE;
    }
 
    /// Power on the ADC (ADON) and wait for the stabilization time. Does nothing if it is on.
@@ -115,8 +123,12 @@ struct Adc {
    /// Power the ADC down.
    void disable() const;
 
-   /// Reset and run the calibration. The ADC must be enabled and must not convert.
-   void calibrate() const;
+   /**
+    * Reset and run the calibration. The ADC must be enabled and must not convert.
+    *
+    * @return false if the ADC is not enabled or the calibration did not end in a bounded time.
+    */
+   bool calibrate() const;
 
    /// Set the sample time of one channel. Do not call it during a conversion.
    void setSamplingTime(Channel channel, SamplingCycles cycles) const;
@@ -134,8 +146,10 @@ struct Adc {
     * Convert Vrefint and calculate the supply voltage (VDDA) in mV from it.
     * It switches the internal channels on and uses the longest sample time (the
     * Vrefint input needs at least 17.1 us). The reference is the typical
-    * 1.20 V, which has a spread of about +-3 % on the F1 (datasheet: 1.16 to
-    * 1.24 V), so VDDA has the same relative error.
+    * 1.20 V. The datasheet gives 1.16 to 1.24 V (-40 to 85 degC) and 1.16 to
+    * 1.26 V (up to 105 degC), so VDDA has -3.3 % / +3.3 % (+5 % at the
+    * highest temperatures) error, plus the ADC error of a few LSB. That is
+    * about +-110 mV at 3.3 V and +-120 mV at 3.6 V in the worst case.
     *
     * @param vddaMv Receives VDDA in mV when the function returns true.
     * @return false if the conversion failed or returned 0.
