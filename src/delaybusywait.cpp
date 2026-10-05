@@ -47,3 +47,23 @@ void delayuS(uint32_t usec) {
    : "r3"                     // clobbered registers
    );
 }
+
+void delayCycles(uint32_t cycles) {
+   if(cycles <= 170)
+      return;
+   cycles -= 170; // cycle count for method entry & exit
+   cycles /= 3;   // cycle count per iteration - should be 3 on Cortex M0+
+
+   if(!cycles)
+      return;
+
+   // Delay loop for Cortex M0 thumb2
+   asm volatile(
+   " mov r3, %[loops]\n"
+   "1: sub r3, #1\n"
+   " bne 1b\n\n"
+   :
+   : [loops] "r"(cycles)
+   : "r3"
+   );
+}
