@@ -98,9 +98,13 @@ class GpioPin {
          clear();
    }
 
-   // Toggle using ODR (Read-Modify-Write)
+   // Toggle: read ODR, then set or reset the pin through BSRR. ODR itself is
+   // not written, so a change to another pin of the port in an interrupt
+   // between the read and the write is not lost.
    void toggle() const {
-      port->ODR ^= (1UL << pin);
+      uint32_t mask = 1UL << pin;
+      uint32_t odr = port->ODR;
+      port->BSRR = ((odr & mask) << 16) | (~odr & mask);
    }
 
    // =============================================================
