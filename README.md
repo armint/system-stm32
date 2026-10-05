@@ -13,7 +13,7 @@ sources with `#ifdef STM32xx`.
 | `STM32L0`      | cmsis\_device\_l0 v1.9.4 | Cortex-M0+ | built in CI |
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
-| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); GPIO, EXTI, USART, I2C and RTC not ported (see below) |
+| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, USART, I2C and RTC not ported (see below) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -58,11 +58,11 @@ library) and, once installed, as `art::system-stm32`.
   whole-family differences is not — that belongs below. `GpioInterrupt` in
   `src/utils/` is not yet ported to STM32WL and is excluded from the build
   for that family (see `_WL_EXCLUDE` in `CMakeLists.txt`). STM32F1 has
-  older GPIO, EXTI, USART, I2C and RTC peripherals. The build excludes
-  `GpioPin`, `Exti`, `Usart`, `I2c`, `Rtc` and `GpioInterrupt` for STM32F1
-  (see `_F1_EXCLUDE` in `CMakeLists.txt`). `FastPin` is a header-only
-  `GpioPin` for bit-bang loops. Port and pin are template arguments, so
-  each access is one `BSRR` store or one `IDR` load.
+  older EXTI, USART, I2C and RTC peripherals. The build excludes `Exti`,
+  `Usart`, `I2c`, `Rtc` and `GpioInterrupt` for STM32F1 (see `_F1_EXCLUDE`
+  in `CMakeLists.txt`). `FastPin` is a header-only `GpioPin` for bit-bang
+  loops. Port and pin are template arguments, so each access is one
+  `BSRR` store or one `IDR` load.
 - `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
   The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
   STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
@@ -70,8 +70,8 @@ library) and, once installed, as `art::system-stm32`.
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
-  `Adc`, `UsbDevice` (STM32L0 only), and the interrupt vector table in
-  `vectors_stm32<family>xx.c`)
+  `Adc`, `UsbDevice` (STM32L0 only), `GpioPin.cpp` (STM32F1
+  only), and the interrupt vector table in `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
   where one exists. CMake adds only the active family's directory to the
   include path, so `#include "Adc.h"` resolves to the right one
@@ -110,6 +110,38 @@ library) and, once installed, as `art::system-stm32`.
   the vector table to `SRAM_BASE`, and VTOR needs that copy 256-byte
   aligned. The scripts start FLASH at 0x08000000. A consumer with a
   bootloader supplies its own script with a different FLASH origin.
+
+## STM32F1 GPIO
+
+STM32F1 has no `MODER`, `OTYPER`, `OSPEEDR`, `PUPDR` or `AFR` registers.
+Each pin has one 4-bit `CNF`/`MODE` field in `CRL` or `CRH` (RM0008
+section 9.1). `src/families/stm32f1/GpioPin.cpp` maps the `GpioPin` enums
+to this field:
+
+| `GpioPin` setting | F1 `CNF`/`MODE` |
+|---|---|
+| `Mode::Analog` | analog input |
+| `Mode::Input`, `Pull::None` | floating input |
+| `Mode::Input`, `Pull::Up` / `Pull::Down` | pull input; `ODR` = 1 / 0 |
+| `Mode::Output` | general-purpose output, push-pull or open-drain |
+| `Mode::Alternate` | alternate-function output, push-pull or open-drain |
+| `Speed::Low`, `Speed::Medium` | 2 MHz |
+| `Speed::High` | 10 MHz |
+| `Speed::VeryHigh` | 50 MHz |
+
+Differences from the other families:
+
+- Outputs have no pull resistors. `Pull::Up` or `Pull::Down` on an output
+  or analog pin fails an `assert()`.
+- `setOutputType()`, `setSpeed()` and `setAlternateFunction()` have no
+  effect on an input pin. `setPull()` has no effect on an output pin.
+  Call `setMode()` first, or use `configure()`. `configure()` writes the
+  whole field at once.
+- `setAlternateFunction()` ignores the AF number. It changes an output pin
+  to an alternate-function output. An alternate-function input (for
+  example USART RX or SPI MISO) uses `Mode::Input`.
+- A pull input sets the `ODR` bit. A later change to an output drives
+  that level.
 
 ## Bare-metal startup vs. an external RTOS
 
