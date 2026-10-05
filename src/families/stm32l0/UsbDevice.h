@@ -41,6 +41,20 @@ namespace hw {
 //  - PA11/PA12 need no alternate-function setup; the transceiver takes them
 //    when the peripheral is powered up.
 //
+// Concurrency: every public function may run in the event callback (USB
+// interrupt) or in the main loop. openEndpoint(), closeAllEndpoints(),
+// startIn(), armOut(), readOut(), setStall() and setNak() mask USB_IRQn
+// while they run (Interrupt::BlockingSection), so a bus RESET in the
+// interrupt cannot interleave with them. begin() and end() are for the main
+// loop only.
+//
+// USB_EPnR STAT bits are toggle bits, so a status change is a read and an
+// XOR write. If the hardware completes a transaction between the read and
+// the write, the result is wrong. This can happen only on a VALID endpoint.
+// setStall() and setNak() are race-free on an endpoint that is not VALID
+// (NAK after Out/InComplete/Setup, or not armed yet). Do not use them to
+// cancel a pending startIn() or armOut().
+//
 // Limits: 8 endpoint registers (endpoint numbers 0..7), 1024 bytes of packet
 // memory, no isochronous and no double-buffered endpoints.
 class UsbDevice {
@@ -120,14 +134,15 @@ class UsbDevice {
     * @brief Sets or clears STALL on one direction of an endpoint. Clearing
     * STALL sets NAK and resets the data toggle to DATA0 (CLEAR_FEATURE
     * ENDPOINT_HALT, USB 2.0 section 9.4.5). A STALL on EP0 ends with the
-    * next SETUP packet.
+    * next SETUP packet. Race-free only if the endpoint is not VALID (see the
+    * class comment).
     */
    void setStall(uint8_t address, bool stall);
    bool isStalled(uint8_t address) const;
 
    /**
-    * @brief Sets NAK on one direction of an endpoint, for example to take
-    * back a startIn() or armOut() that the host has not served yet.
+    * @brief Sets NAK on one direction of an endpoint. Race-free only if the
+    * endpoint is not VALID (see the class comment).
     */
    void setNak(uint8_t address);
 

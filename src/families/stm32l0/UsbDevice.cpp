@@ -202,6 +202,7 @@ uint16_t UsbDevice::allocate(uint16_t bytes) {
 }
 
 bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize) {
+   Interrupt::BlockingSection block(USB_IRQn);
    uint8_t n = usb::endpointNumber(address);
    Direction *dir = direction(address);
    if(dir == nullptr || type == EndpointType::Isochronous || (type == EndpointType::Control && n != 0) ||
@@ -246,6 +247,7 @@ bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t m
 }
 
 void UsbDevice::closeAllEndpoints() {
+   Interrupt::BlockingSection block(USB_IRQn);
    for(uint8_t n = 1; n < EndpointCount; ++n) {
       setTxStatus(n, USB_EP_TX_DIS);
       setRxStatus(n, USB_EP_RX_DIS);
@@ -278,6 +280,7 @@ void UsbDevice::resetEndpoints() {
 }
 
 bool UsbDevice::startIn(uint8_t address, std::span<const uint8_t> data) {
+   Interrupt::BlockingSection block(USB_IRQn);
    if(!usb::isInEndpoint(address)) {
       return false;
    }
@@ -295,6 +298,7 @@ bool UsbDevice::startIn(uint8_t address, std::span<const uint8_t> data) {
 }
 
 bool UsbDevice::armOut(uint8_t address) {
+   Interrupt::BlockingSection block(USB_IRQn);
    const Direction *dir = direction(address);
    if(usb::isInEndpoint(address) || dir == nullptr || !dir->open) {
       return false;
@@ -304,6 +308,7 @@ bool UsbDevice::armOut(uint8_t address) {
 }
 
 uint16_t UsbDevice::readOut(uint8_t address, std::span<uint8_t> buffer) const {
+   Interrupt::BlockingSection block(USB_IRQn);
    const Direction *dir = direction(address);
    if(usb::isInEndpoint(address) || dir == nullptr || !dir->open) {
       return 0;
@@ -324,6 +329,7 @@ uint16_t UsbDevice::readOut(uint8_t address, std::span<uint8_t> buffer) const {
 }
 
 void UsbDevice::setStall(uint8_t address, bool stall) {
+   Interrupt::BlockingSection block(USB_IRQn);
    const Direction *dir = direction(address);
    if(dir == nullptr || !dir->open) {
       return;
@@ -359,6 +365,7 @@ bool UsbDevice::isStalled(uint8_t address) const {
 }
 
 void UsbDevice::setNak(uint8_t address) {
+   Interrupt::BlockingSection block(USB_IRQn);
    const Direction *dir = direction(address);
    if(dir == nullptr || !dir->open) {
       return;

@@ -314,6 +314,21 @@ answers NAK until the next `armOut()`. For every endpoint, `readOut()`
 can run in the callback or later in the main loop, until the next
 `armOut()` of that endpoint. EP0 is the only control endpoint.
 
+### Interrupt and main loop
+
+Every public function can run in the event callback (USB interrupt) or in
+the main loop. `begin()` and `end()` are the exception: call them from the
+main loop only. The endpoint functions mask `USB_IRQn` while they run. Thus
+a bus reset in the interrupt cannot interleave with `openEndpoint()` or
+`closeAllEndpoints()` in the main loop.
+
+The endpoint status bits in `USB_EPnR` are toggle bits. A status change is
+a read and an XOR write. If the hardware completes a transaction between
+the read and the write, the result is wrong. This can occur only on a VALID
+endpoint. Thus `setStall()` and `setNak()` are race-free only on an
+endpoint that is not VALID. Do not use them to cancel a pending `startIn()`
+or `armOut()`.
+
 ### Packet memory
 
 The 1024 bytes of packet memory hold the buffer descriptor table (64
