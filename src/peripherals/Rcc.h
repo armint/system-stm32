@@ -124,9 +124,16 @@ inline void setHSIPrescaler(HSIPrescaler prescaler) {
 #endif
 
 
+#if defined(RCC_ICSCR_HSITRIM)
 inline void setHSITrim(uint32_t trim) {
    RCC->ICSCR = (RCC->ICSCR & ~RCC_ICSCR_HSITRIM) | (trim << RCC_ICSCR_HSITRIM_Pos);
 }
+#elif defined(RCC_CR_HSITRIM)
+// STM32F1 has no ICSCR; HSITRIM lives in RCC_CR.
+inline void setHSITrim(uint32_t trim) {
+   RCC->CR = (RCC->CR & ~RCC_CR_HSITRIM) | (trim << RCC_CR_HSITRIM_Pos);
+}
+#endif
 
 #if defined(RCC_CR_HSIDIV)
 inline HSIPrescaler getHSIPrescaler() {

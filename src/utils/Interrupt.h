@@ -5,6 +5,9 @@
 #if defined(STM32L0) || defined(STM32G0)
 // STM32L0 and STM32G0 processors have 32 interrupt vectors + 16 cortex-m vectors
 #define VECTOR_TABLE_SIZE 48
+#elif defined(STM32F1)
+// STM32F103 medium density has 43 interrupt vectors + 16 cortex-m vectors
+#define VECTOR_TABLE_SIZE 59
 #endif
 
 namespace Interrupt {
