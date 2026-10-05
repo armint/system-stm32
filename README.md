@@ -282,7 +282,7 @@ usb.connect();                   // D+ pull-up on: the host sees the device
 | `begin(callback, context)` / `end()` | Power-up sequence (RM0367 32.5.2), interrupt connection through `Interrupt::connectMemberHandler(USB_IRQn, ...)`, and power-down. |
 | `connect()` / `disconnect()` | Internal D+ pull-up (`USB_BCDR.DPPU`). |
 | `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
-| `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. |
+| `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize`. |
 | `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
 | `startIn(address, data)` | Sends one packet (0 to `maxPacketSize` bytes). Returns `false` while the previous packet is not sent. |
 | `armOut(address)` / `readOut(address, buffer)` | Accepts the next OUT packet / copies the received packet. |

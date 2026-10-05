@@ -99,7 +99,8 @@ class UsbDevice {
     * @return false for endpoint number >= EndpointCount, isochronous type,
     * control type on an endpoint other than 0, maxPacketSize 0 or > 64 (the full-speed limit for control, bulk and
     * interrupt endpoints), a type that does not match the other direction,
-    * or not enough packet memory.
+    * a direction that is already open with another maxPacketSize (call
+    * closeAllEndpoints() first), or not enough packet memory.
     */
    [[nodiscard]] bool openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize);
 

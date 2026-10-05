@@ -216,8 +216,12 @@ bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t m
    }
 
    bool in = usb::isInEndpoint(address);
-   // Reuse the buffer if the direction is reopened with the same size.
-   if(!dir->open || dir->maxPacketSize != maxPacketSize) {
+   // Reopening with the same size reuses the buffer. A different size would
+   // need a new buffer and leak the old one until closeAllEndpoints().
+   if(dir->open && dir->maxPacketSize != maxPacketSize) {
+      return false;
+   }
+   if(!dir->open) {
       uint16_t bytes = in ? maxPacketSize : rxBufferSize(maxPacketSize).pmaBytes;
       uint16_t pma = allocate(bytes);
       if(pma == 0) {
