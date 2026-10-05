@@ -502,6 +502,48 @@ inline void disableGPIOHClock() {
 }
 #endif
 
+// STM32F1: GPIO ports are on APB2 (RCC_APB2ENR_IOPxEN)
+#if defined(RCC_APB2ENR_IOPAEN)
+inline void enableGPIOAClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
+}
+inline void disableGPIOAClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPBEN)
+inline void enableGPIOBClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPBEN);
+}
+inline void disableGPIOBClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPBEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPCEN)
+inline void enableGPIOCClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPCEN);
+}
+inline void disableGPIOCClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPCEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPDEN)
+inline void enableGPIODClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPDEN);
+}
+inline void disableGPIODClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPDEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPEEN)
+inline void enableGPIOEClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPEEN);
+}
+inline void disableGPIOEClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPEEN);
+}
+#endif
+
 // DMA
 #if defined(RCC_AHBENR_DMA1EN)
 inline void enableDMA1Clock() {
@@ -567,6 +609,16 @@ inline void disableSYSCFGClockInSleepMode() {
 }
 #endif
 
+// AFIO (STM32F1 alternate function I/O: remap, EXTI line selection)
+#if defined(RCC_APB2ENR_AFIOEN)
+inline void enableAFIOClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_AFIOEN);
+}
+inline void disableAFIOClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_AFIOEN);
+}
+#endif
+
 // PWR
 #if defined(RCC_APB1ENR_PWREN) && defined(RCC_APB1SMENR_PWRSMEN)
 inline void enablePWRClock() {
@@ -603,6 +655,16 @@ inline void enablePWRClockInSleepMode() {
 }
 inline void disablePWRClockInSleepMode() {
    detail::clearBit(RCC->APB1SMENR, RCC_APB1SMENR_PWRSMEN);
+}
+#endif
+
+// BKP (STM32F1 backup registers)
+#if defined(RCC_APB1ENR_BKPEN)
+inline void enableBKPClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_BKPEN);
+}
+inline void disableBKPClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_BKPEN);
 }
 #endif
 
@@ -1108,6 +1170,14 @@ inline void disableTIM3Clock() {
    detail::clearBit(RCC->APBENR1, RCC_APBENR1_TIM3EN);
 }
 #endif
+#if defined(RCC_APB1ENR_TIM4EN)
+inline void enableTIM4Clock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_TIM4EN);
+}
+inline void disableTIM4Clock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_TIM4EN);
+}
+#endif
 #if defined(RCC_APB1ENR_TIM6EN)
 inline void enableTIM6Clock() {
    detail::setBit(RCC->APB1ENR, RCC_APB1ENR_TIM6EN);
@@ -1185,7 +1255,7 @@ inline void disableTIM22Clock() {
 }
 #endif
 
-// G0-series timers on APB2 (TIM1, TIM14, TIM15, TIM16, TIM17)
+// TIM1 on APB2: G0 (APBENR2), F1 and WL (APB2ENR)
 #if defined(RCC_APBENR2_TIM1EN)
 inline void enableTIM1Clock() {
    detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM1EN);
@@ -1193,7 +1263,16 @@ inline void enableTIM1Clock() {
 inline void disableTIM1Clock() {
    detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM1EN);
 }
+#elif defined(RCC_APB2ENR_TIM1EN)
+inline void enableTIM1Clock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_TIM1EN);
+}
+inline void disableTIM1Clock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_TIM1EN);
+}
 #endif
+
+// G0-series timers on APB2 (TIM14, TIM15, TIM16, TIM17)
 #if defined(RCC_APBENR2_TIM14EN)
 inline void enableTIM14Clock() {
    detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM14EN);
