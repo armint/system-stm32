@@ -89,7 +89,9 @@ build-f1-test-image:
         -D STM32_DEVICE=STM32F103xB
         -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON
     - cmake --build build -j$(nproc)
-    - ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/test-image-f103xB | grep -q "^08000000 T g_pfnVectors$"
+    - for image in test-image-f103x8 test-image-f103xB; do
+        ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1;
+      done
 
 # STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
 # branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
