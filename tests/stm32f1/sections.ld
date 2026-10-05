@@ -1,4 +1,12 @@
 /*
+ * Copy of ldscripts/sections.ld from the universal-oven-controller-firmware
+ * repository (commit 9111e7a), which is the µOS++ default Cortex-M script.
+ * It may drift from the script that real firmware uses. Compare it with
+ * the original when you update it.
+ *
+ * Original header follows.
+ */
+/*
  * Default linker script for Cortex-M (it includes specifics for STM32F[34]xx).
  * 
  * To make use of the multi-region initialisations, define
