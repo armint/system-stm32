@@ -76,7 +76,7 @@ library) and, once installed, as `art::system-stm32`.
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
-  `Adc`, `UsbDevice` (STM32L0 and STM32F1), `GpioPin.cpp` and `Afio`
+  `Adc`, `UsbDevice` (STM32L0 and STM32F1), `GpioPin.cpp`, `Afio` and `Bkp`
   (STM32F1 only), and the interrupt vector table in
   `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
@@ -265,6 +265,17 @@ int main() {
    // ...
 }
 ```
+
+### STM32F1 backup registers
+
+`Bkp.h` (STM32F1 only) gives access to backup data register 1
+(`BKP_DR1`). The backup registers keep their content over a system reset.
+With VBAT supplied, they also keep it over a power loss. A typical use is
+a flag for the bootloader entry that survives `NVIC_SystemReset()`.
+
+1. Call `hw::Bkp::enable()`. It enables the PWR and BKP clocks and sets
+   `PWR_CR.DBP`.
+2. Use `hw::Bkp::readDR1()` and `hw::Bkp::writeDR1()`.
 
 ## USB clock: HSI48 and CRS
 
