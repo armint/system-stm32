@@ -1816,10 +1816,11 @@ inline void setClock64MhzHSI() {
 
 // Configure system clock to 72 MHz from the HSE crystal via PLL (STM32F1 series).
 // - Enables HSE and waits until it is ready (bounded wait)
-// - Sets FLASH latency to 2 wait states (required for 48..72 MHz) and enables prefetch
 // - Sets AHB=/1 (72 MHz), APB1=/2 (36 MHz, the APB1 maximum), APB2=/1 (72 MHz)
 //   and ADC=/6 (12 MHz, the ADC maximum is 14 MHz)
 // - Sets the USB prescaler to /1.5 => 72 MHz / 1.5 = 48 MHz USB clock
+// - Sets FLASH latency to 2 wait states (required for 48..72 MHz), enables
+//   prefetch and disables half-cycle access
 // - Configures PLL: source HSE (/2 for a 16 MHz crystal), MUL = 72 MHz / PLL input,
 //   e.g. 12 MHz * 6 (Versaloon) or 8 MHz * 9 (ST-Link/V2)
 // - Switches SYSCLK to PLL and waits until ready
@@ -1834,7 +1835,8 @@ inline void setClock64MhzHSI() {
 // It does not access global variables, so it can run before DATA/BSS init.
 #if defined(RCC_CFGR_PLLMULL) && defined(RCC_CFGR_PLLXTPRE) && defined(RCC_CFGR_USBPRE) &&         \
 defined(RCC_CFGR_ADCPRE_DIV6) && defined(RCC_CR_HSEON) && defined(RCC_CR_HSERDY) && defined(RCC_CR_PLLON) && \
-defined(RCC_CR_PLLRDY) && defined(RCC_CFGR_SWS_PLL) && defined(FLASH_ACR_PRFTBE)
+defined(RCC_CR_PLLRDY) && defined(RCC_CFGR_SWS_PLL) && defined(FLASH_ACR_PRFTBE) && \
+defined(FLASH_ACR_HLFCYA)
 namespace detail {
 // RCC_CFGR PLL bits (PLLSRC, PLLXTPRE, PLLMULL) for 72 MHz from an HSE crystal
 // of hseHz, or std::nullopt if no PLL setting gives exactly 72 MHz.
@@ -1892,13 +1894,15 @@ constexpr uint32_t PLLReadyLoops = 10000;
       }
    }
 
-   // Two wait states for 48..72 MHz, prefetch buffer on (it is on after reset;
-   // it may only change while SYSCLK < 24 MHz, which is the case here)
-   FLASH->ACR = (FLASH->ACR & ~FLASH_ACR_LATENCY) | (2UL << FLASH_ACR_LATENCY_Pos) | FLASH_ACR_PRFTBE;
-
-   // Prescalers: AHB=1, APB1=2, APB2=1, ADC=6, USB=1.5 (USBPRE = 0)
+   // Prescalers: AHB=1, APB1=2, APB2=1, ADC=6, USB=1.5 (USBPRE = 0).
+   // Set before FLASH_ACR: PRFTBE may only change with HPRE = /1 (RM0008 3.3.3).
    RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE1 | RCC_CFGR_PPRE2 | RCC_CFGR_ADCPRE | RCC_CFGR_USBPRE)) |
                (RCC_CFGR_HPRE_DIV1 | RCC_CFGR_PPRE1_DIV2 | RCC_CFGR_PPRE2_DIV1 | RCC_CFGR_ADCPRE_DIV6);
+
+   // Two wait states for 48..72 MHz, prefetch buffer on (it is on after reset;
+   // it may only change while SYSCLK < 24 MHz, which is the case here), and
+   // no half-cycle access (only allowed up to 8 MHz, never from the PLL)
+   FLASH->ACR = (FLASH->ACR & ~(FLASH_ACR_LATENCY | FLASH_ACR_HLFCYA)) | (2UL << FLASH_ACR_LATENCY_Pos) | FLASH_ACR_PRFTBE;
 
    // Disable PLL if running (it is not SYSCLK here)
    if(RCC->CR & RCC_CR_PLLON) {
