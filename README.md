@@ -169,6 +169,22 @@ write-only, so `Afio` keeps the last written value in RAM. It writes this
 value again with each remap. Call `setSwjConfig()` before the first
 remap.
 
+### Interrupt safety
+
+`CRL` and `CRH` hold the fields of 8 pins each. Thus each `GpioPin`
+configuration change on STM32F1 is a read-modify-write of a shared
+register. Each change runs in a short critical section (`PRIMASK`). Thus
+an interrupt that configures another pin of the same register cannot
+lose a change, or lose its own change.
+
+On the other families, the `GpioPin` setters do a read-modify-write of
+`MODER`, `OTYPER`, `OSPEEDR`, `PUPDR` and `AFR` without a critical section.
+There, change the configuration of one port from one context only (for
+example the main loop), or disable interrupts around the change.
+
+`set()`, `clear()`, `write()` and `toggle()` on every family write
+`BSRR` only. They never write `ODR`, so they are safe in any context.
+
 ## Bare-metal startup vs. an external RTOS
 
 Most of this library — peripheral drivers, interrupt binding, the vector
