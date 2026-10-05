@@ -102,6 +102,8 @@ library) and, once installed, as `art::system-stm32`.
   the vector table to `SRAM_BASE`, and VTOR needs that copy 256-byte
   aligned. The scripts start FLASH at 0x08000000. A consumer with a
   bootloader supplies its own script with a different FLASH origin.
+  `install()` copies the scripts to `share/system-stm32/ldscripts` in the
+  install prefix.
 
 ## Bare-metal startup vs. an external RTOS
 

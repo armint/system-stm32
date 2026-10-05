@@ -253,6 +253,9 @@ install(TARGETS system-stm32
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+# Memory linker scripts. A consumer of the installed package adds
+# -L<prefix>/share/system-stm32/ldscripts and -T<script>.
+install(DIRECTORY ldscripts/ DESTINATION ${CMAKE_INSTALL_DATADIR}/system-stm32/ldscripts)
 
 # Install the CMSIS headers so consumers can include them from the installed package
 install(DIRECTORY ${cmsis_device_SOURCE_DIR}/Include/
