@@ -1,11 +1,12 @@
 #pragma once
 
 #include "peripherals/GpioPin.h"
+#include <array>
 #include <cmsis_device.h>
 #include <cstdint>
 
-// STM32F1 pin configuration encoding (RM0008 9.2.1, Table 20), used by
-// GpioPin (families/stm32f1/GpioPin.cpp).
+// STM32F1 pin configuration encoding (RM0008 9.2.1, Table 20), shared by
+// GpioPin (families/stm32f1/GpioPin.cpp) and the FastPin direction switch.
 //
 // Each pin has one 4-bit field in CRL (pins 0-7) or CRH (pins 8-15):
 // CNF[1:0] in the upper two bits and MODE[1:0] in the lower two bits.
@@ -85,6 +86,59 @@ constexpr uint32_t configRegisterOffset(uint8_t pin) {
 
 constexpr uint32_t configShift(uint8_t pin) {
    return (pin & 0x07U) * 4U;
+}
+
+// Cortex-M3 peripheral bit-band alias of one register bit (RM0008 3.3.2).
+// A store to the alias changes only that bit. The core does it as one
+// locked read-modify-write of the register inside one instruction, so an
+// interrupt cannot split it (Cortex-M3 TRM, "Bit-banding"). Only the CPU
+// can use the alias, not DMA.
+constexpr uintptr_t bitBandAlias(uintptr_t registerAddress, uint32_t bit) {
+   return PERIPH_BB_BASE + (registerAddress - PERIPH_BASE) * 32U + bit * 4U;
+}
+
+struct BitWrite {
+   uint8_t bit;   // 0..3 inside the 4-bit field: 0-1 MODE, 2-3 CNF
+   uint8_t value; // 0 or 1
+};
+
+/**
+ * @brief The order in which the FastPin direction switch writes the four
+ * field bits, one bit-band store each.
+ *
+ * The order depends only on the target, because the old state is not
+ * known at compile time:
+ *  - Target is an output: the CNF bits first, then MODE. While MODE is
+ *    still 00, the pin stays an input; only the input kind changes. From
+ *    the first MODE bit on, the pin drives with the target CNF; only the
+ *    speed can be wrong until the last store.
+ *  - Target is an input: the MODE bits first, so the pin stops driving as
+ *    soon as possible. Then CNF selects the input kind.
+ *  - Inside each pair, the bits that become 0 go first. An intermediate
+ *    pair is then (old AND target), so it never has a bit that neither the
+ *    old nor the target state has. Thus the reserved input state (CNF 11,
+ *    MODE 00) cannot occur, unless the target CNF is 11 (alternate
+ *    open-drain).
+ *
+ * Example: push-pull 50 MHz (0011) to floating input (0100) passes through
+ * 0010 (push-pull 2 MHz) and 0000 (analog input).
+ *
+ * This holds for a switch between an input and an output (the SWD
+ * turnaround). A change between two outputs with a different CNF can drive
+ * with a mixed CNF for one store. Use GpioPin::configure() for that.
+ */
+constexpr std::array<BitWrite, 4> writeOrder(uint8_t config) {
+   auto bitOf = [config](uint8_t bit) { return BitWrite{ bit, static_cast<uint8_t>((config >> bit) & 1U) }; };
+   // The two bits of one pair (lowBit, lowBit + 1), the 0 first.
+   auto pair = [&bitOf](uint8_t lowBit) {
+      BitWrite low = bitOf(lowBit);
+      BitWrite high = bitOf(static_cast<uint8_t>(lowBit + 1));
+      return high.value < low.value ? std::array<BitWrite, 2>{ high, low } : std::array<BitWrite, 2>{ low, high };
+   };
+   bool toOutput = (config & 0x3U) != MODE_INPUT;
+   auto first = pair(toOutput ? 2 : 0);
+   auto second = pair(toOutput ? 0 : 2);
+   return { first[0], first[1], second[0], second[1] };
 }
 
 } // namespace hw::gpio_f1

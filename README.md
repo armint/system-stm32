@@ -62,7 +62,8 @@ library) and, once installed, as `art::system-stm32`.
   `Usart`, `I2c`, `Rtc` and `GpioInterrupt` for STM32F1 (see `_F1_EXCLUDE`
   in `CMakeLists.txt`). `FastPin` is a header-only `GpioPin` for bit-bang
   loops. Port and pin are template arguments, so each access is one
-  `BSRR` store or one `IDR` load.
+  `BSRR` store or one `IDR` load. On STM32F1, `FastPin` also switches the
+  pin direction (see [FastPin direction switch](#fastpin-direction-switch)).
 - `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
   The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
   STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
@@ -184,6 +185,44 @@ example the main loop), or disable interrupts around the change.
 
 `set()`, `clear()`, `write()` and `toggle()` on every family write
 `BSRR` only. They never write `ODR`, so they are safe in any context.
+
+### FastPin direction switch
+
+On STM32F1, `FastPin` can change the pin configuration fast, for example
+the SWDIO direction at each SWD turnaround:
+
+```cpp
+using Swdio = hw::FastPin<GPIOB_BASE, 4>;
+
+Swdio::setInput();  // floating input
+Swdio::setOutput(); // push-pull output, 50 MHz
+Swdio::setConfig<hw::gpio_f1::pinConfig(hw::GpioPin::Mode::Input, hw::GpioPin::OutputType::PushPull,
+                                        hw::GpioPin::Pull::Up)>(); // any field value
+```
+
+Each call is four stores to the Cortex-M3 bit-band aliases of the four
+`CNF`/`MODE` bits (RM0008 section 3.3.2). The addresses and values are
+constants. With `-Os`, one call is 7 instructions: one address load,
+two value loads and four stores. There is no function call, no branch and
+no read-modify-write in software. Each bit-band store changes one bit in
+one locked bus access, so an interrupt cannot lose a change to another
+pin. The calls do not change `ODR`. For a pull input, set the pull
+direction with `set()` or `clear()`.
+
+The store order prevents bad intermediate states for a change between an
+input and an output (see `gpio_f1::writeOrder()` in
+`src/families/stm32f1/GpioConfig.h`):
+
+- Input to output: the pin drives only with the target `CNF`.
+- Output to input: the pin stops driving with the first store.
+- The reserved input state (`CNF` 11, `MODE` 00) does not occur, except
+  for a target with `CNF` 11 (alternate open-drain).
+
+A change between two outputs with a different `CNF` can drive with a
+mixed `CNF` for one store. Use `GpioPin::configure()` for that change.
+
+The cycle count of one direction switch at 72 MHz is not measured yet.
+Measure it on hardware with the DWT cycle counter (`DWT->CYCCNT`).
 
 ## Bare-metal startup vs. an external RTOS
 
