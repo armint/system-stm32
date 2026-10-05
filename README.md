@@ -13,7 +13,7 @@ sources with `#ifdef STM32xx`.
 | `STM32L0`      | cmsis\_device\_l0 v1.9.4 | Cortex-M0+ | built in CI |
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
-| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, USART, I2C and RTC not ported; ADC in `families/stm32f1` (see below) |
+| `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -122,6 +122,10 @@ library) and, once installed, as `art::system-stm32`.
   loops. Port and pin are template arguments, so each access is one
   `BSRR` store or one `IDR` load. On STM32F1, `FastPin` also switches the
   pin direction (see [FastPin direction switch](#fastpin-direction-switch)).
+  The USART v1 driver for STM32F1 is in
+  `src/families/stm32f1/UsartV1.{h,cpp}`. `peripherals/Usart.h` includes
+  it when the CMSIS header defines `USART_SR_RXNE`. See
+  [USART frame format](#usart-frame-format).
 - `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
   The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
   STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
@@ -405,6 +409,37 @@ a flag for the bootloader entry that survives `NVIC_SystemReset()`.
 1. Call `hw::Bkp::enable()`. It enables the PWR and BKP clocks and sets
    `PWR_CR.DBP`.
 2. Use `hw::Bkp::readDR1()` and `hw::Bkp::writeDR1()`.
+
+## USART frame format
+
+`hw::Usart::setFrameFormat(dataBits, parity, stopBits)` sets the data bits,
+the parity and the stop bits, for example from a USB CDC line coding. The
+frame length is the data bits plus the parity bit. The function disables
+the USART for the change and then restores the enable bit. Wait for
+`isTransferComplete()` before the call, or the byte in transmission is cut
+off.
+
+| Format | USART v2 (L0, G0, WL) | USART v1 (STM32F1) |
+|--------|-----------------------|--------------------|
+| 7 data bits, no parity | 7-bit frame | not supported, returns `false` |
+| 7 data bits, even or odd parity | 8-bit frame | 8-bit frame |
+| 8 data bits, no parity | 8-bit frame | 8-bit frame |
+| 8 data bits, even or odd parity | 9-bit frame | 9-bit frame |
+
+`getData()` removes the received parity bit from a 7-bit + parity frame.
+
+The STM32F1 `Usart` class has the same interface as the v2 class, but it
+does not have the functions for hardware that USART v1 does not have:
+
+- Clock source selection: USART1 uses APB2, the other USARTs use APB1.
+- Receiver timeout. `isReceiverTimeoutFlag()` always returns `false`, so
+  that shared receive code compiles.
+- RS485 driver enable, auto baud rate, pin swap, prescaler and 8x
+  oversampling.
+
+On USART v1, a read of SR followed by a read of DR clears the PE, FE, NE,
+ORE and IDLE flags. `clearFramingError()`, `clearIdleFlag()` and
+`clearAllStatusFlags()` therefore discard the byte in DR.
 
 ## USB clock: HSI48 and CRS
 

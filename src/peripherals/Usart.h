@@ -2,6 +2,11 @@
 
 #include <cmsis_device.h>
 
+#if defined(USART_SR_RXNE)
+// USART v1 (STM32F1): SR/DR register set, in the family directory
+#include "UsartV1.h"
+#else
+
 #if defined(STM32C0)
 #define USART_CR1_RXNEIE USART_CR1_RXNEIE_RXFNEIE
 #define USART_CR1_TXEIE USART_CR1_TXEIE_TXFNFIE
@@ -525,3 +530,5 @@ struct Usart {
 };
 
 } // namespace hw
+
+#endif // USART_SR_RXNE
