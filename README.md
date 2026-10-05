@@ -367,9 +367,10 @@ usb.connect();                   // D+ pull-up on: the host sees the device
 
 | Function | Purpose |
 |---|---|
-| `begin(callback, context)` / `end()` | Power-up sequence (RM0367 32.5.2), interrupt connection through `Interrupt::connectMemberHandler(USB_IRQn, ...)`, and power-down. |
+| `begin(callback, context)` / `end()` | Power-up sequence (STM32L0: RM0367 32.5.2; STM32F1: RM0008 23.4.2), interrupt connection through `Interrupt::connectMemberHandler()` (STM32L0: `USB_IRQn`; STM32F1: `USB_LP_CAN1_RX0_IRQn`), and power-down. |
 | `connect()` / `disconnect()` | D+ pull-up on or off. STM32L0: internal pull-up (`USB_BCDR.DPPU`). STM32F1: the board callback from `setPullupCallback()`. |
 | `setPullupCallback(callback, context)` | STM32F1 only. Sets the board function that switches the external D+ pull-up. |
+| `isConnected()` | STM32L0: the state of `USB_BCDR.DPPU`. STM32F1: the state that the last `connect()` or `disconnect()` requested. |
 | `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
 | `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize`. |
 | `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
@@ -457,6 +458,9 @@ interface, the event model, the `USB_EPnR` toggle logic and the
   has a 1.5 kΩ pull-up on D+, switched by a GPIO or fixed. Give the switch
   function to `setPullupCallback()` before `connect()`. Without a callback,
   `connect()` and `disconnect()` only change `isConnected()`.
+- `isConnected()` reports the requested state, not the bus state. With a
+  fixed pull-up, the host sees the device from power-on, before `begin()`.
+  `isConnected()` is still `false` until `connect()`.
 - Interrupt: `USB_LP_CAN1_RX0_IRQn`. `USB_HP_CAN1_TX_IRQn` is for
   isochronous and double-buffered endpoints, which the driver does not
   support.
