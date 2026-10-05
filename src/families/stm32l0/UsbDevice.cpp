@@ -204,7 +204,8 @@ uint16_t UsbDevice::allocate(uint16_t bytes) {
 bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize) {
    uint8_t n = usb::endpointNumber(address);
    Direction *dir = direction(address);
-   if(dir == nullptr || type == EndpointType::Isochronous || maxPacketSize == 0 || maxPacketSize > 64) {
+   if(dir == nullptr || type == EndpointType::Isochronous || (type == EndpointType::Control && n != 0) ||
+      maxPacketSize == 0 || maxPacketSize > 64) {
       return false;
    }
    Endpoint &ep = _endpoints[n];
@@ -307,11 +308,18 @@ uint16_t UsbDevice::readOut(uint8_t address, std::span<uint8_t> buffer) const {
    if(usb::isInEndpoint(address) || dir == nullptr || !dir->open) {
       return 0;
    }
-   uint16_t size = countRx(usb::endpointNumber(address)) & CountMask;
+   uint8_t n = usb::endpointNumber(address);
+   uint16_t size = n == 0 ? _ep0OutSize : countRx(n) & CountMask;
    if(size > buffer.size()) {
       size = static_cast<uint16_t>(buffer.size());
    }
-   copyFromPma(dir->pmaAddress, buffer.data(), size);
+   if(n == 0) {
+      for(uint16_t i = 0; i < size; ++i) {
+         buffer[i] = _ep0Out[i];
+      }
+   } else {
+      copyFromPma(dir->pmaAddress, buffer.data(), size);
+   }
    return size;
 }
 
@@ -407,6 +415,12 @@ void UsbDevice::handleInterrupt() {
                _callback(_context, event);
             }
          } else {
+            if(n == 0) {
+               // Same reason as SETUP: copy before CTR_RX is cleared. While
+               // CTR_RX is set, the hardware discards a new SETUP.
+               _ep0OutSize = size > Ep0MaxPacketSize ? Ep0MaxPacketSize : size;
+               copyFromPma(_endpoints[0].out.pmaAddress, _ep0Out, _ep0OutSize);
+            }
             clearCtrRx(n);
             report(EventType::Out, n, size);
          }

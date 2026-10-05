@@ -21,9 +21,14 @@ namespace hw {
 //
 // Flow control: an OUT endpoint answers NAK until armOut(), and the hardware
 // sets it back to NAK after each received packet. An IN endpoint answers NAK
-// until startIn(). Received data stays in packet memory until the next
-// armOut(), so readOut() can run in the interrupt callback or later in the
-// main loop.
+// until startIn(). readOut() can run in the interrupt callback or later in
+// the main loop, until the next armOut() of that endpoint:
+//  - Bulk and interrupt endpoints: the data stays in packet memory, because
+//    the endpoint answers NAK until armOut().
+//  - EP0 (the only control endpoint): a control endpoint accepts a new SETUP
+//    while it answers NAK, and that SETUP overwrites the EP0 OUT buffer. So
+//    the interrupt handler copies each EP0 OUT packet into a 64-byte buffer
+//    in RAM, and readOut(0x00) reads from that copy.
 //
 // After a SETUP packet the hardware sets both directions of that control
 // endpoint to NAK (RM0367 32.5.2 "Control transfers"). The layer above then
@@ -78,7 +83,7 @@ class UsbDevice {
     * NAK. Both directions of one endpoint number share one register and must
     * have the same type.
     * @return false for endpoint number >= EndpointCount, isochronous type,
-    * maxPacketSize 0 or > 64 (the full-speed limit for control, bulk and
+    * control type on an endpoint other than 0, maxPacketSize 0 or > 64 (the full-speed limit for control, bulk and
     * interrupt endpoints), a type that does not match the other direction,
     * or not enough packet memory.
     */
@@ -105,7 +110,8 @@ class UsbDevice {
    bool armOut(uint8_t address);
 
    /**
-    * @brief Copies the last received OUT packet out of packet memory.
+    * @brief Copies the last received OUT packet (EP0: from the RAM copy, see
+    * the class comment).
     * @return the number of bytes copied: min(received size, buffer.size()).
     */
    uint16_t readOut(uint8_t address, std::span<uint8_t> buffer) const;
@@ -171,6 +177,8 @@ class UsbDevice {
    void *_context = nullptr;
    Endpoint _endpoints[EndpointCount] = {};
    uint16_t _pmaNext = BtableSize;
+   uint8_t _ep0Out[Ep0MaxPacketSize] = {};
+   uint16_t _ep0OutSize = 0;
 
    void resetEndpoints();
    void report(usb::EventType type, uint8_t endpoint, uint16_t size = 0);

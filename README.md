@@ -301,11 +301,18 @@ The interrupt handler reports these events through the callback:
 | `Suspend` | No bus activity for 3 ms. This also occurs when the cable is pulled. The driver sets `FSUSP`. |
 | `Resume` | Bus activity after `Suspend`. |
 
-The driver copies a SETUP packet out of packet memory in the interrupt.
 A control endpoint accepts the next SETUP packet even while it answers
-NAK, so a later copy could read a newer packet. OUT data stays in packet
-memory until the next `armOut()`. Thus `readOut()` can run in the
-callback or later in the main loop.
+NAK. That SETUP overwrites the EP0 OUT buffer in packet memory. Thus the
+interrupt handler copies these packets before it clears the `CTR_RX` flag:
+
+- A SETUP packet goes into `Event::setup`.
+- An EP0 OUT packet goes into a 64-byte buffer in RAM. `readOut(0x00)`
+  reads from this copy.
+
+Bulk and interrupt OUT data stays in packet memory, because the endpoint
+answers NAK until the next `armOut()`. For every endpoint, `readOut()`
+can run in the callback or later in the main loop, until the next
+`armOut()` of that endpoint. EP0 is the only control endpoint.
 
 ### Packet memory
 
