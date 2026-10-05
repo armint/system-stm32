@@ -55,7 +55,8 @@ library) and, once installed, as `art::system-stm32`.
   `src/utils/` is not yet ported to STM32WL and is excluded from the build
   for that family (see `_WL_EXCLUDE` in `CMakeLists.txt`).
 - `src/families/<family>/` — family-specific implementations (currently
-  `Adc`, and the interrupt vector table in `vectors_stm32<family>xx.c`)
+  `Adc`, `UsbDevice` (STM32L0 only), and the interrupt vector table in
+  `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
   where one exists. CMake adds only the active family's directory to the
   include path, so `#include "Adc.h"` resolves to the right one
@@ -229,3 +230,94 @@ read a new status, for example after a USB reset or a resume.
 
 The CRS stops in Stop mode and loses its configuration in Standby mode.
 After Standby, run the sequence again.
+
+## USB device driver
+
+`hw::UsbDevice` drives the USB full-speed device peripheral. It is
+packet-level only. It knows nothing about descriptors, standard requests
+or USB classes. That logic lives above the driver (libArT `usb::Device`
+and the libart-stm32 controller). This library does not depend on
+libArT.
+
+### Family split
+
+| Family | Driver | Status |
+|---|---|---|
+| STM32L0 with USB (L052, L053, L062, L063, L072, L073, L082, L083) | `src/families/stm32l0/UsbDevice.{h,cpp}` | Available. On L0 devices without USB (for example L071), the files compile to nothing. |
+| STM32G0B1 / G0C1 | — | Not yet. USB DRD peripheral: 2 KB packet memory with 32-bit access, `CHEP` registers. A new `src/families/stm32g0/UsbDevice.{h,cpp}` with the same interface is necessary. |
+| STM32G071, STM32C0, STM32WL | — | No USB peripheral |
+
+The family-neutral types are in `src/peripherals/UsbDeviceTypes.h`
+(namespace `hw::usb`): `Event`, `EventType`, `EndpointType` and
+`EventCallback`. Every family driver uses these types and has the same
+public interface. Thus a new family driver needs no change above the
+driver.
+
+### Requirements
+
+- A 48 MHz USB clock. On STM32L0, use HSI48 with the CRS on USB SOF. See
+  [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs).
+- `Rcc::enableUSBClock()` before `begin()`.
+- An APB clock of 10 MHz or more (RM0367 section 32.5.2).
+- PA11 (DM) and PA12 (DP) need no GPIO setup. The transceiver uses them
+  when the peripheral is powered up.
+
+### Use
+
+```cpp
+#include "UsbDevice.h"
+
+hw::UsbDevice usb;
+
+void onUsbEvent(void *context, const hw::usb::Event &event) {
+   // Called in the USB interrupt: copy the event into a queue.
+}
+
+usb.begin(&onUsbEvent, nullptr); // power-up, reset, IRQ on; still detached
+usb.connect();                   // D+ pull-up on: the host sees the device
+```
+
+| Function | Purpose |
+|---|---|
+| `begin(callback, context)` / `end()` | Power-up sequence (RM0367 32.5.2), interrupt connection through `Interrupt::connectMemberHandler(USB_IRQn, ...)`, and power-down. |
+| `connect()` / `disconnect()` | Internal D+ pull-up (`USB_BCDR.DPPU`). |
+| `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
+| `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. |
+| `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
+| `startIn(address, data)` | Sends one packet (0 to `maxPacketSize` bytes). Returns `false` while the previous packet is not sent. |
+| `armOut(address)` / `readOut(address, buffer)` | Accepts the next OUT packet / copies the received packet. |
+| `setStall(address, stall)` / `isStalled(address)` / `setNak(address)` | Endpoint status. Clearing STALL also resets the data toggle to DATA0. |
+
+### Events
+
+The interrupt handler reports these events through the callback:
+
+| `EventType` | Meaning |
+|---|---|
+| `Reset` | USB bus reset. The driver opens EP0 again (64 bytes, OUT VALID) and sets the address to 0. Other endpoints are closed. |
+| `Setup` | SETUP packet. `Event::setup` holds the 8 bytes. Both directions of the endpoint are then NAK. |
+| `Out` | OUT packet with `Event::size` bytes. The endpoint answers NAK until the next `armOut()`. |
+| `InComplete` | The host acknowledged the IN packet. The endpoint answers NAK until the next `startIn()`. |
+| `Suspend` | No bus activity for 3 ms. This also occurs when the cable is pulled. The driver sets `FSUSP`. |
+| `Resume` | Bus activity after `Suspend`. |
+
+The driver copies a SETUP packet out of packet memory in the interrupt.
+A control endpoint accepts the next SETUP packet even while it answers
+NAK, so a later copy could read a newer packet. OUT data stays in packet
+memory until the next `armOut()`. Thus `readOut()` can run in the
+callback or later in the main loop.
+
+### Packet memory
+
+The 1024 bytes of packet memory hold the buffer descriptor table (64
+bytes at offset 0) and the endpoint buffers. The driver allocates the
+buffers in sequence. An OUT buffer is rounded up to the `COUNTn_RX`
+block size: 2-byte blocks up to 62 bytes, 32-byte blocks above.
+
+### Limits
+
+- Endpoint numbers 0 to 7. Both directions of one number share one
+  register, so they have the same type.
+- No isochronous and no double-buffered endpoints.
+- No remote wakeup, no Link Power Management (LPM) and no Battery
+  Charging Detection (BCD).
