@@ -3,11 +3,13 @@
 // Extend it when more F1 drivers land (USART).
 #include <Adc.h>
 #include <Afio.h>
+#include <Bkp.h>
 #include <UsbDevice.h>
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/FastPin.h>
 #include <peripherals/GpioPin.h>
+#include <peripherals/Rcc.h>
 #include <peripherals/Timer.h>
 #include <utils/Interrupt.h>
 
@@ -20,7 +22,9 @@ using Tdo = hw::FastPin<GPIOA_BASE, 6>;
 
 // Links the F1 GpioPin (CRL/CRH), Afio and FastPin code.
 void exerciseGpio() {
-   RCC->APB2ENR |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN | RCC_APB2ENR_IOPCEN;
+   Rcc::enableGPIOAClock();
+   Rcc::enableGPIOBClock();
+   Rcc::enableGPIOCClock();
    hw::Afio::setSwjConfig(hw::Afio::SwjConfig::SwdOnly);
    hw::Afio::remapSpi1(true);
 
@@ -105,7 +109,8 @@ void usbPullup(void *, bool enable) {
 }
 
 void exerciseUsb() {
-   RCC->APB1ENR |= RCC_APB1ENR_USBEN;
+   // After Rcc::setClock72MhzHSE() in main(): USBPRE must be set first.
+   Rcc::enableUSBClock();
    usb.setPullupCallback(&usbPullup, nullptr);
    usb.begin(&onUsbEvent, nullptr);
    usb.connect();
@@ -119,6 +124,19 @@ void onTim2() {
 } // namespace
 
 int main() {
+   // 72 MHz from HSE (HSE_VALUE, 12 MHz in the CI job); stays on HSI on failure
+   static_cast<void>(Rcc::setClock72MhzHSE());
+   SystemCoreClockUpdate();
+
+   Rcc::enableTIM1Clock();
+   Rcc::enableTIM4Clock();
+
+   // Backup register round trip (bootloader entry flag)
+   hw::Bkp::enable();
+   if(hw::Bkp::readDR1() != 0xB007) {
+      hw::Bkp::writeDR1(0xB007);
+   }
+
    exerciseGpio();
    exerciseAdc();
    exerciseUsb();

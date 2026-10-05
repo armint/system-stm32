@@ -93,6 +93,7 @@ build-f1-test-image:
         -D STM32_FAMILY=STM32F1
         -D STM32_DEVICE=STM32F103xB
         -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON
+        -D SYSTEM_STM32_HSE_VALUE=12000000
     - cmake --build build -j$(nproc)
     - for image in test-image-f103x8 test-image-f103xB; do
         ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1;
