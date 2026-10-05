@@ -45,6 +45,12 @@ downstream projects mentioned below consume it), or `install()` it and
   separate define for the 64 KB part.
 - `SYSTEM_STM32_EXCLUDE_STARTUP` — see [Bare-metal startup vs. an external
   RTOS](#bare-metal-startup-vs-an-external-rtos) below. Defaults to `OFF`.
+- `SYSTEM_STM32_HSE_VALUE` — the HSE crystal frequency in Hz, for example
+  `12000000`. CMake gives it to the target and to its consumers as the
+  `HSE_VALUE` define. The CMSIS `SystemCoreClockUpdate()` and the `Rcc`
+  clock recipes both use it. A wrong value gives a wrong `SystemCoreClock`
+  after a switch to HSE or to the HSE PLL. Empty (the default) keeps the
+  family default. On `STM32F1` the default is 8 MHz.
 
 The library is added as the `system-stm32` CMake target (an `OBJECT`
 library) and, once installed, as `art::system-stm32`.

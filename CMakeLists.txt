@@ -208,6 +208,24 @@ add_library(system-stm32 OBJECT ${PROJECT_SOURCES} ${STM32_SOURCES})
 # Select device and family macros for CMSIS headers so sources compile
 target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY} ${STM32_DEVICE})
 
+# HSE_VALUE must be the same in every TU: the CMSIS system_stm32xxxx.c uses
+# it in SystemCoreClockUpdate() and Rcc.h uses it in the clock recipes.
+# Each of them has its own fallback when HSE_VALUE is not defined (8 MHz in
+# the CMSIS file, 48 MHz in Rcc.h), so the value goes onto the target as a
+# PUBLIC define. Empty keeps the old behaviour, except on STM32F1: there the
+# 72 MHz recipe runs from HSE, so the CMSIS default (8 MHz) is made explicit
+# to keep Rcc.h and SystemCoreClockUpdate() in agreement.
+set(SYSTEM_STM32_HSE_VALUE "" CACHE STRING
+    "HSE crystal frequency in Hz (e.g. 12000000). Empty: family default")
+if(SYSTEM_STM32_HSE_VALUE)
+    if(NOT SYSTEM_STM32_HSE_VALUE MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR "SYSTEM_STM32_HSE_VALUE must be a frequency in Hz, got '${SYSTEM_STM32_HSE_VALUE}'")
+    endif()
+    target_compile_definitions(system-stm32 PUBLIC HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}UL)
+elseif(STM32_FAMILY STREQUAL "STM32F1")
+    target_compile_definitions(system-stm32 PUBLIC HSE_VALUE=8000000UL)
+endif()
+
 # STM32WL uses SRAM1_BASE (no generic SRAM_BASE alias) and has 78 vectors
 # (16 core exceptions + 62 device IRQs).
 if(STM32_FAMILY STREQUAL "STM32WL")
