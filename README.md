@@ -185,6 +185,8 @@ and STM32G0B1/G0C1, because the CRS registers are the same on both
 families. Only the `TRIM` field width differs: 6 bits on L0, 7 bits on
 G0. `hw::Crs::TrimMax` and `hw::Crs::TrimDefault` get the width from the
 CMSIS header. The driver exists only when the CMSIS header defines `CRS`.
+The driver is header-only. `Crs.cpp` only includes the header, so every
+library build and every CI job compiles it.
 
 | Function | Purpose |
 |---|---|
