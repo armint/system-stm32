@@ -184,6 +184,8 @@ if(STM32_FAMILY STREQUAL "STM32F1")
         "${PROJECT_SOURCE_DIR}/src/peripherals/Rtc.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
         "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
+        # The Cortex-M0+ busy loop; F1 has its own DWT version in families/stm32f1.
+        "${PROJECT_SOURCE_DIR}/src/delaybusywait.cpp"
     )
     foreach(_excl ${_F1_EXCLUDE})
         list(REMOVE_ITEM PROJECT_SOURCES "${_excl}")

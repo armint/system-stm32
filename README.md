@@ -61,6 +61,12 @@ library) and, once installed, as `art::system-stm32`.
   older GPIO, EXTI, USART, I2C and RTC peripherals. The build excludes
   `GpioPin`, `Exti`, `Usart`, `I2c`, `Rtc` and `GpioInterrupt` for STM32F1
   (see `_F1_EXCLUDE` in `CMakeLists.txt`).
+- `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
+  The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
+  STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
+  `src/families/stm32f1/delaybusywait.cpp`. The delay is then exact to a few
+  cycles, also with flash wait states. The code enables the counter on its
+  own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
   `Adc`, `UsbDevice` (STM32L0 only), and the interrupt vector table in
   `vectors_stm32<family>xx.c`)

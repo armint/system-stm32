@@ -47,3 +47,26 @@ void delayuS(uint32_t usec) {
    : "r3"                     // clobbered registers
    );
 }
+
+void delayCycles(uint32_t cycles) {
+   // Estimated cycle count for method entry & exit. There is no division
+   // here, unlike in delayuS(), so this is much less than 170.
+   constexpr uint32_t kOverheadCycles = 10;
+   if(cycles <= kOverheadCycles)
+      return;
+   cycles -= kOverheadCycles;
+   cycles /= 3;   // cycle count per iteration - should be 3 on Cortex M0+
+
+   if(!cycles)
+      return;
+
+   // Delay loop for Cortex M0 thumb2
+   asm volatile(
+   " mov r3, %[loops]\n"
+   "1: sub r3, #1\n"
+   " bne 1b\n\n"
+   :
+   : [loops] "r"(cycles)
+   : "r3"
+   );
+}
