@@ -80,6 +80,25 @@ void Usart::setParity(Parity parity) const {
    }
 }
 
+bool Usart::setFrameFormat(DataBits dataBits, Parity parity, StopBits stopBits) const {
+   // Frame = data bits + parity bit. M1:M0 = 10: 7 bits, 00: 8 bits, 01: 9 bits
+   uint32_t cr1Bits = static_cast<uint32_t>(parity);
+   if(dataBits == DataBits::Seven && parity == Parity::None) {
+      cr1Bits |= USART_CR1_M1;
+   } else if(dataBits == DataBits::Eight && parity != Parity::None) {
+      cr1Bits |= USART_CR1_M0;
+   }
+
+   const bool wasEnabled = isEnabled();
+   disable();
+   usart_.CR1 = (usart_.CR1 & ~(USART_CR1_PCE | USART_CR1_PS | USART_CR1_M0 | USART_CR1_M1)) | cr1Bits;
+   setStopBits(stopBits);
+   if(wasEnabled) {
+      enable();
+   }
+   return true;
+}
+
 void Usart::configureRs485DriverEnable(bool activeHigh, uint8_t assertionTime, uint8_t deassertionTime) const {
    // Must disable USART to change these settings
    bool wasEnabled = (usart_.CR1 & USART_CR1_UE);
