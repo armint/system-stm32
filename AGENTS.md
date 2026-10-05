@@ -8,6 +8,7 @@ This library provides the Hardware Abstraction Layer (HAL), startup code, and pe
 - **Startup**: Linker scripts and startup code (`startup.cpp`, `vectors_*.c`).
 - **Peripherals**: Drivers for ADC, DMA, EXTI, GPIO, USART, Clock control and Timers, and the Clock Recovery System (CRS).
 - **USB clocking**: USB needs a 48 MHz clock. On STM32L0 and STM32G0B1/G0C1 this is HSI48, trimmed by the CRS from USB SOF. `Rcc::enableHSI48()` and `Rcc::setUSBClockSource()` hide the register differences between the families (L0: `RCC_CRRCR`, `RCC_CCIPR`, `SYSCFG_CFGR3.ENREF_HSI48`; G0: `RCC_CR`, `RCC_CCIPR2`). `peripherals/Crs.h` is shared, because the CRS registers are the same. See the README section "USB clock: HSI48 and CRS".
+- **USB device**: `hw::UsbDevice` is family-specific. Today only `src/families/stm32l0/UsbDevice.{h,cpp}` exists. A future G0B1 driver goes to `src/families/stm32g0/` with the same public interface and the shared types in `peripherals/UsbDeviceTypes.h`. The driver is packet-level and must not depend on libArT. The interrupt handler only decodes events and reports them through the callback; no protocol logic in the ISR. See the README section "USB device driver".
 - **System**: Delay functions, interrupt handling, and hardware initialization.
 
 ## Guidelines
