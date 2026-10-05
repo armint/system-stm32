@@ -70,7 +70,7 @@ library) and, once installed, as `art::system-stm32`.
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
-  `Adc`, `UsbDevice` (STM32L0 only), `GpioPin.cpp` (STM32F1
+  `Adc`, `UsbDevice` (STM32L0 only), `GpioPin.cpp` and `Afio` (STM32F1
   only), and the interrupt vector table in `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
   where one exists. CMake adds only the active family's directory to the
@@ -142,6 +142,15 @@ Differences from the other families:
   example USART RX or SPI MISO) uses `Mode::Input`.
 - A pull input sets the `ODR` bit. A later change to an output drives
   that level.
+
+`src/families/stm32f1/Afio.h` selects remapped pin sets in `AFIO_MAPR`
+(`remapUsart1()`, `remapUsart2()`, `remapUsart3()`, `remapSpi1()`,
+`remapI2c1()`, and `setRemap()` for other fields). `setSwjConfig()` sets
+the debug port. `SwjConfig::SwdOnly` turns off JTAG-DP and frees PA15,
+PB3 and PB4. SWD on PA13/PA14 continues to work. The `SWJ_CFG` bits are
+write-only, so `Afio` keeps the last written value in RAM. It writes this
+value again with each remap. Call `setSwjConfig()` before the first
+remap.
 
 ## Bare-metal startup vs. an external RTOS
 
