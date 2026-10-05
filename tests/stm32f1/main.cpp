@@ -1,6 +1,5 @@
 // Minimal STM32F1 test image. CI links it to prove that the F1 part of the
 // library builds, links and fits in memory. It never runs on hardware.
-// Extend it when more F1 drivers land (USART).
 #include <Adc.h>
 #include <Afio.h>
 #include <Bkp.h>
@@ -11,6 +10,7 @@
 #include <peripherals/GpioPin.h>
 #include <peripherals/Rcc.h>
 #include <peripherals/Timer.h>
+#include <peripherals/Usart.h>
 #include <utils/Interrupt.h>
 
 namespace {
@@ -117,6 +117,16 @@ void exerciseUsb() {
    sink = usb.isConnected() && !usb.isStalled(0x81);
 }
 
+volatile uint8_t lastRx;
+
+void onUsart1() {
+   const hw::Usart usart(USART1);
+   if(usart.isRxRegisterNotEmpty()) {
+      lastRx = usart.getData();
+   }
+   usart.clearAllStatusFlags();
+}
+
 void onTim2() {
    TIM2->SR = 0;
    ticks = ticks + 1;
@@ -147,6 +157,19 @@ int main() {
    delayuS(10);
    delaymS(1);
    delayCycles(100);
+
+   // USART v1: line coding as set by a USB CDC host
+   Rcc::enableUSART1Clock();
+   const hw::Usart usart(USART1);
+   usart.configure(115200);
+   static_cast<void>(usart.setFrameFormat(hw::Usart::DataBits::Seven, hw::Usart::Parity::Even,
+                                          hw::Usart::StopBits::StopBits_2));
+   usart.enableRx();
+   usart.enableTx();
+   usart.enableRxNotEmptyInterrupt();
+   Interrupt::connectHandler(USART1_IRQn, &onUsart1);
+   usart.enable();
+   usart.setData('U');
    for(;;) {
       __WFI();
    }

@@ -143,8 +143,8 @@ build-exclude-startup:
 # Links the STM32F1 test image (tests/stm32f1) for both memory scripts. This
 # catches link and layout errors that the library-only build cannot see:
 # missing symbols, a vector table that does not fit, a section overflow.
-# Extend the image when more F1 drivers land (USART). The C++17 image links
-# the UsbDevice calls with span_compat::span.
+# The image links GPIO, ADC, USART v1, USB, BKP and the delay code. The
+# C++17 image links the UsbDevice calls with span_compat::span.
 build-f1-test-image:
   stage: build
   variables:
