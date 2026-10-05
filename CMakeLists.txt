@@ -50,21 +50,29 @@ set(cmsis_device_SOURCE_DIR "${${_cmsis_device_name}_SOURCE_DIR}")
 
 # STM32WL uses a Cortex-M4 application core; all other supported families use Cortex-M0+.
 if (STM32_FAMILY STREQUAL "STM32WL")
-    set(_cmsis_core_tag "v5.4.0_cm4")
+    set(_cmsis_core_variant "cm4")
 else()
-    set(_cmsis_core_tag "v5.4.0_cm0")
+    set(_cmsis_core_variant "cm0")
 endif()
 
+# Like the device package, the core checkout gets a core-specific
+# FetchContent name. A shared FETCHCONTENT_BASE_DIR would otherwise hand a
+# Cortex-M0+ checkout to a Cortex-M3 or Cortex-M4 build.
+set(_cmsis_core_name "cmsis_core_${_cmsis_core_variant}")
+
 FetchContent_Declare(
-        cmsis_core
+        ${_cmsis_core_name}
         GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_core.git
-        GIT_TAG ${_cmsis_core_tag}
+        GIT_TAG v5.4.0_${_cmsis_core_variant}
 )
 
-FetchContent_GetProperties(cmsis_core)
-if (NOT cmsis_core_POPULATED)
-    FetchContent_MakeAvailable(cmsis_core)
+FetchContent_GetProperties(${_cmsis_core_name})
+if (NOT ${_cmsis_core_name}_POPULATED)
+    FetchContent_MakeAvailable(${_cmsis_core_name})
 endif ()
+
+# Alias for the rest of this file
+set(cmsis_core_SOURCE_DIR "${${_cmsis_core_name}_SOURCE_DIR}")
 
 project(system-stm32
         LANGUAGES C CXX ASM
