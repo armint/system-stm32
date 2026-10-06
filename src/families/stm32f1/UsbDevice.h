@@ -60,10 +60,9 @@ namespace hw {
 // Concurrency: every public function may run in the event callback (USB
 // interrupt) or in the main loop. openEndpoint(), closeAllEndpoints(),
 // startIn(), armOut(), readOut(), setStall() and setNak() mask
-// USB_LP_CAN1_RX0_IRQn
-// while they run (Interrupt::BlockingSection), so a bus RESET in the
-// interrupt cannot interleave with them. begin() and end() are for the main
-// loop only.
+// USB_LP_CAN1_RX0_IRQn while they run (Interrupt::BlockingSection), so a
+// bus RESET in the interrupt cannot interleave with them. begin() and end()
+// are for the main loop only.
 //
 // USB_EPnR STAT bits are toggle bits, so a status change is a read and an
 // XOR write. If the hardware completes a transaction between the read and
@@ -104,6 +103,11 @@ class UsbDevice {
     * @brief Sets the board function that switches the D+ pull-up. Call it
     * before connect(). Without a callback, connect() and disconnect() only
     * change isConnected(); use this for a board with a fixed pull-up.
+    *
+    * isConnected() reports the state that connect()/disconnect() requested,
+    * not the bus state. With a fixed pull-up, the host sees the device from
+    * power-on, before begin(), while isConnected() is false until
+    * connect().
     */
    void setPullupCallback(PullupCallback callback, void *context);
 
