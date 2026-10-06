@@ -78,6 +78,7 @@ struct FastPin {
    template <uint8_t Config>
    [[gnu::always_inline]] static inline void setConfig() {
       static_assert(Config <= 0xF, "CNF/MODE field is 4 bits");
+      static_assert(Config != 0b1100, "CNF 11 with MODE 00 is reserved (RM0008 9.2.1)");
       writeBits<Config>(std::make_index_sequence<4>{});
    }
 
