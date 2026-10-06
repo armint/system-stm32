@@ -30,7 +30,8 @@ Each family builds in two legs:
   library build runs. The job fails if CMake does not use span-compat with
   `SPAN_COMPAT_USE_STD_SPAN=0`.
 
-The C++17 jobs clone the private span-compat repository
+The STM32F1 test image links at both standards. The C0 job also runs at
+both standards. The C++17 jobs clone the private span-compat repository
 with the CI job token. Thus span-compat must allow job tokens from this
 project.
 
