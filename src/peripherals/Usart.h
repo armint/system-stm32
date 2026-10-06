@@ -2,6 +2,11 @@
 
 #include <cmsis_device.h>
 
+#if defined(USART_SR_RXNE)
+// USART v1 (STM32F1): SR/DR register set, in the family directory
+#include "UsartV1.h"
+#else
+
 #if defined(STM32C0)
 #define USART_CR1_RXNEIE USART_CR1_RXNEIE_RXFNEIE
 #define USART_CR1_TXEIE USART_CR1_TXEIE_TXFNFIE
@@ -24,6 +29,12 @@ struct Usart {
       None = 0,
       Even = USART_CR1_PCE,
       Odd = (USART_CR1_PCE | USART_CR1_PS),
+   };
+
+   // Data bits without the parity bit
+   enum class DataBits {
+      Seven = 7,
+      Eight = 8,
    };
 
 #if defined(USART_PRESC_PRESCALER)
@@ -68,6 +79,18 @@ struct Usart {
    Usart &operator=(Usart &&) = delete;
 
    void configure(uint32_t baudRate = 115200, Parity parity = Parity::None, StopBits stopBits = StopBits::StopBits_1) const;
+
+   /**
+    * @brief Sets data bits, parity and stop bits (e.g. from a USB CDC line
+    * coding). The frame length is data bits + parity bit (M1/M0: 7, 8 or 9
+    * bits).
+    * Disables the USART for the change (M, PCE and PS are only writable
+    * with UE = 0) and restores UE afterwards. Wait for isTransferComplete()
+    * first, or a byte in transmission is cut off.
+    * @return true; the return value exists for the USART v1 variant, which
+    * has no 7-bit frame.
+    */
+   [[nodiscard]] bool setFrameFormat(DataBits dataBits, Parity parity, StopBits stopBits) const;
 
    /**
     * @brief Configures Hardware Driver Enable for RS485.
@@ -143,8 +166,14 @@ struct Usart {
       usart_.CR3 |= USART_CR3_DMAR;
    }
 
+   // With parity in an 8-bit frame (7 data bits), RDR bit 7 is the received
+   // parity bit, so it is masked off. In a 9-bit frame the cast drops it.
    inline uint8_t getData() const {
-      return usart_.RDR;
+      const uint32_t rdr = usart_.RDR;
+      if((usart_.CR1 & (USART_CR1_PCE | USART_CR1_M0 | USART_CR1_M1)) == USART_CR1_PCE) {
+         return static_cast<uint8_t>(rdr & 0x7FU);
+      }
+      return static_cast<uint8_t>(rdr);
    }
 
    inline void setData(uint8_t data) const {
@@ -501,3 +530,5 @@ struct Usart {
 };
 
 } // namespace hw
+
+#endif // USART_SR_RXNE
