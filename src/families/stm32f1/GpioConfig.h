@@ -113,12 +113,14 @@ struct BitWrite {
  *    the first MODE bit on, the pin drives with the target CNF; only the
  *    speed can be wrong until the last store.
  *  - Target is an input: the MODE bits first, so the pin stops driving as
- *    soon as possible. Then CNF selects the input kind.
+ *    soon as possible: after the MODE stores (at most two), before CNF
+ *    changes. Then CNF selects the input kind.
  *  - Inside each pair, the bits that become 0 go first. An intermediate
  *    pair is then (old AND target), so it never has a bit that neither the
  *    old nor the target state has. Thus the reserved input state (CNF 11,
- *    MODE 00) cannot occur, unless the target CNF is 11 (alternate
- *    open-drain).
+ *    MODE 00) cannot occur, unless the old or the target CNF is 11
+ *    (alternate open-drain). Example: alternate open-drain 50 MHz (1111)
+ *    to an input passes through 1110 and then 1100 (reserved).
  *
  * Example: push-pull 50 MHz (0011) to floating input (0100) passes through
  * 0010 (push-pull 2 MHz) and 0000 (analog input).

@@ -214,9 +214,12 @@ input and an output (see `gpio_f1::writeOrder()` in
 `src/families/stm32f1/GpioConfig.h`):
 
 - Input to output: the pin drives only with the target `CNF`.
-- Output to input: the pin stops driving with the first store.
+- Output to input: the pin stops driving after the `MODE` stores (at
+  most two), before `CNF` changes. For example, the default output
+  (`MODE` 11) becomes `MODE` 10 after the first store. This is a 2 MHz
+  output, so the pin still drives until the second store.
 - The reserved input state (`CNF` 11, `MODE` 00) does not occur, except
-  for a target with `CNF` 11 (alternate open-drain).
+  when the old or the target `CNF` is 11 (alternate open-drain).
 
 A change between two outputs with a different `CNF` can drive with a
 mixed `CNF` for one store. Use `GpioPin::configure()` for that change.
