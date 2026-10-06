@@ -98,7 +98,11 @@ extern unsigned int _Heap_Begin;
 extern unsigned long int _Heap_Limit;
 extern unsigned long int __stack;
 
-extern "C" int main();
+// The application entry point. ISO C++ forbids a linkage specification on
+// ::main and any use of it inside the program. Declare a function with
+// another name that binds to the `main` symbol instead (main is never
+// mangled), so the call below is the same `bl main` as before.
+extern int applicationMain() __asm__("main");
 
 // ----------------------------------------------------------------------------
 
@@ -307,7 +311,7 @@ void __attribute__((section(".after_vectors"), noreturn, weak)) _start(void) {
    os_run_init_array();
 
    // Call the main entry point, and save the exit code.
-   main();
+   applicationMain();
 
    //  // Standard program termination;
    //  // `atexit()` and C++ static destructors are executed.
