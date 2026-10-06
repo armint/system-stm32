@@ -98,8 +98,13 @@ list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake")
 
 # Compiler settings
-set(CMAKE_CXX_STANDARD 23)
-#set(CMAKE_CXX_STANDARD_REQUIRED True)
+# The public interface needs C++17 only (cxx_std_17 below). The consumer
+# selects the standard: CMAKE_CXX_STANDARD of the superproject applies here
+# too. Only a standalone build of this library, without a value from the
+# command line, defaults to C++23.
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR AND NOT DEFINED CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 23)
+endif()
 set(CXX_DIALECT gnu)
 
 set(CMAKE_C_STANDARD 11)
@@ -255,7 +260,7 @@ target_include_directories(system-stm32
             $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/cmsis_core/Core/Include>
 )
 
-target_compile_features(system-stm32 PUBLIC cxx_std_23)
+target_compile_features(system-stm32 PUBLIC cxx_std_17)
 
 # If a central build configuration target exists in the superproject,
 # link it so this OBJECT library is compiled with the same flags/defines.

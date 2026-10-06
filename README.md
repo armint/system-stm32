@@ -26,7 +26,17 @@ one family a downstream project happens to use).
 - CMake >= 3.20
 - An `arm-none-eabi-gcc` toolchain (a ready-made toolchain file is provided
   at `cmake/gcc_arm.cmake`)
-- C11 / C++23
+- C11 / C++17 or later. Below C++20, the build also needs span-compat (see
+  [Span type](#span-type)).
+
+### C++ standard
+
+The target requires C++17 (`cxx_std_17`). It does not force a later
+standard on its consumers. The consumer selects the standard with
+`CMAKE_CXX_STANDARD`. A value that the superproject sets before
+`add_subdirectory()` also applies to this library. A standalone build of
+this library uses C++23 if you do not set `CMAKE_CXX_STANDARD`. To build
+it at C++17, give `-D CMAKE_CXX_STANDARD=17`.
 
 CMSIS device headers and CMSIS core are fetched automatically via
 `FetchContent` for the selected family; nothing needs to be vendored.
