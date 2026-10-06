@@ -254,6 +254,11 @@ After a failure, SYSCLK stays on HSI (8 MHz). The function does not write
 global variables, so you can call it before the DATA and BSS
 initialization. Call `SystemCoreClockUpdate()` after it.
 
+For USB, call the function before `Rcc::enableUSBClock()`. The function sets
+`RCC_CFGR.USBPRE`, and this bit must be valid before the USB clock is
+enabled. The bit cannot change while the USB clock is enabled (RM0008
+section 7.3.2).
+
 ```cpp
 #include "peripherals/Rcc.h"
 
@@ -402,6 +407,9 @@ driver.
   `Rcc::setClock72MhzHSE()` sets this clock (see
   [STM32F1: 72 MHz from HSE](#stm32f1-72-mhz-from-hse)).
 - The USB bus clock enabled with `Rcc::enableUSBClock()` before `begin()`.
+- On STM32F1, call `Rcc::setClock72MhzHSE()` before `Rcc::enableUSBClock()`.
+  `USBPRE` must be valid before the USB clock is enabled. It cannot change
+  while the USB clock is enabled (RM0008 section 7.3.2).
 - On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
   errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
   underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section
