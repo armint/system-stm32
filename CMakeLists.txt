@@ -278,9 +278,20 @@ set_property(TARGET system-stm32 PROPERTY INTERFACE_LINK_LIBRARIES "")
 # library. Thus the installed package needs an installed span-compat package:
 # cmake/system-stm32Config.cmake.in finds it and links it to the imported
 # target.
-if(CMAKE_CXX_STANDARD LESS 20)
+# An unset CMAKE_CXX_STANDARD (the consumer sets the standard elsewhere, or
+# uses the compiler default) also takes the span-compat branch: with
+# SPAN_COMPAT_USE_STD_SPAN=OFF, span-compat is correct at every standard.
+if(NOT DEFINED CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 20)
     set(SYSTEM_STM32_USE_SPAN_COMPAT ON)
     if(NOT TARGET span-compat::span-compat)
+        # A C++17 build of this library can be part of a C++20 or C++23
+        # build. With AUTO, the C++23 translation units would see std::span
+        # and the C++17 ones the own span: two span types in one program.
+        # OFF gives the own span at every standard. A value that the
+        # superproject already set is kept.
+        if(NOT DEFINED SPAN_COMPAT_USE_STD_SPAN)
+            set(SPAN_COMPAT_USE_STD_SPAN OFF CACHE STRING "Span type: AUTO (by __cpp_lib_span), ON (std::span) or OFF (own)")
+        endif()
         FetchContent_Declare(
                 span_compat
                 GIT_REPOSITORY https://gitlab.vandertogt.org/embedded-libraries/span-compat.git

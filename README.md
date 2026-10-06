@@ -44,9 +44,18 @@ The public interface uses one span type: `hw::span` (`src/utils/Span.h`).
   with `FetchContent` and links it. It also defines
   `SYSTEM_STM32_USE_SPAN_COMPAT`. Then `hw::span` is `span_compat::span`.
 
-CMake selects the type from `CMAKE_CXX_STANDARD`. If the superproject
-already has the target `span-compat::span-compat`, CMake uses that target.
-Thus the full build has one span type. The span-compat README tells how
+CMake selects the type from `CMAKE_CXX_STANDARD`. If `CMAKE_CXX_STANDARD`
+is not set, CMake also uses span-compat.
+
+All translation units of one program must see the same span type. The
+firmware can build at C++23 and this library at C++17. Thus, when CMake
+fetches span-compat, it sets `SPAN_COMPAT_USE_STD_SPAN` to `OFF`. Then
+`span_compat::span` is the own implementation at every standard. A value
+that the superproject sets before is kept.
+
+If the superproject already has the target `span-compat::span-compat`,
+CMake uses that target. If the superproject mixes C++ standards, it must
+set `SPAN_COMPAT_USE_STD_SPAN` to `OFF`. The span-compat README tells how
 to select its type for the full build. Below C++20, the installed package
 needs an installed span-compat package.
 
