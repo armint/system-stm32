@@ -39,20 +39,18 @@ constexpr InterruptHandler_t gpioHandlers[16] = {
 #error No GPIO interrupts defined for this architecture
 #endif
 
-inline LineConnection& getLineConnection(uint8_t index) {
+inline LineConnection &getLineConnection(uint8_t index) {
    static LineConnection lineConnections[16] = {
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
-      { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined }, { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
+      { nullptr, nullptr, Exti::Port::Undefined }, { nullptr, nullptr, Exti::Port::Undefined },
    };
    return lineConnections[index];
-
-
 }
 template <uint8_t gpioline, IRQn_Type irq>
 void GpioHandler() {
@@ -119,7 +117,7 @@ bool disconnectHandler(GPIO_TypeDef *port, uint8_t pin) {
       }
    }
    NVIC_DisableIRQ(irq);
-   getLineConnection(pin) = { .handler = nullptr, .handler_arg = nullptr, .port = Exti::Port::Undefined };
+   getLineConnection(pin) = { nullptr, nullptr, Exti::Port::Undefined };
    Exti::disableInterrupt(pin);
    Exti::clearInterrruptPending(pin);
    if(connectCounter > 0) {
