@@ -14,42 +14,105 @@ workflow:
       when: never
     - if: "$CI_COMMIT_BRANCH"
 
+# Below C++20, CMake fetches the private span-compat repository over HTTPS.
+# Git gets the CI job token from this credential helper, so no token is part
+# of a URL or of a file in the repository. span-compat must allow job tokens
+# of this project (its CI/CD job token allowlist has the embedded-libraries
+# group).
+.span-compat-credentials: &span-compat-credentials
+  - git config --global credential.https://gitlab.vandertogt.org.helper
+      '!f() { echo username=gitlab-ci-token; echo "password=${CI_JOB_TOKEN}"; }; f'
+
+# The families that must build. The C++23 and the C++17 legs use the same list.
+.family-matrix: &family-matrix
+  - STM32_FAMILY: STM32L0
+    STM32_DEVICE: STM32L073xx
+  - STM32_FAMILY: STM32G0
+    STM32_DEVICE: STM32G071xx
+  # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of
+  # the HSI48/USB clock code in Rcc.
+  - STM32_FAMILY: STM32G0
+    STM32_DEVICE: STM32G0B1xx
+  - STM32_FAMILY: STM32WL
+    STM32_DEVICE: STM32WLE5xx
+  - STM32_FAMILY: STM32F1
+    STM32_DEVICE: STM32F103xB
+  # The Versaloon board: 12 MHz crystal instead of the 8 MHz default.
+  - STM32_FAMILY: STM32F1
+    STM32_DEVICE: STM32F103xB
+    SYSTEM_STM32_HSE_VALUE: "12000000"
+
 # Builds the system-stm32 OBJECT library standalone (no linking needed) for
 # every STM32 family this repo claims to support. Each family exercises a
 # different CMSIS device header and register layout, so this is the only
 # thing that actually catches family-specific regressions (e.g. a fix that
 # only works on WL because that's the only family anyone builds downstream).
+#
+# This is the C++23 leg. hw::span must be std::span here: the job fails if
+# CMake fetched span-compat or defined SYSTEM_STM32_USE_SPAN_COMPAT.
 build:
   stage: build
   variables:
     GIT_DEPTH: 0
   parallel:
-    matrix:
-      - STM32_FAMILY: STM32L0
-        STM32_DEVICE: STM32L073xx
-      - STM32_FAMILY: STM32G0
-        STM32_DEVICE: STM32G071xx
-      # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of
-      # the HSI48/USB clock code in Rcc.
-      - STM32_FAMILY: STM32G0
-        STM32_DEVICE: STM32G0B1xx
-      - STM32_FAMILY: STM32WL
-        STM32_DEVICE: STM32WLE5xx
-      - STM32_FAMILY: STM32F1
-        STM32_DEVICE: STM32F103xB
-      # The Versaloon board: 12 MHz crystal instead of the 8 MHz default.
-      - STM32_FAMILY: STM32F1
-        STM32_DEVICE: STM32F103xB
-        SYSTEM_STM32_HSE_VALUE: "12000000"
+    matrix: *family-matrix
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
         -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=23
         -D STM32_FAMILY=${STM32_FAMILY}
         -D STM32_DEVICE=${STM32_DEVICE}
         -D SYSTEM_STM32_HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}
     - cmake --build build --target system-stm32 -j$(nproc)
+    - grep -q -- "-std=gnu++23" build/CMakeFiles/system-stm32.dir/flags.make
+    - if grep -q "SYSTEM_STM32_USE_SPAN_COMPAT" build/CMakeFiles/system-stm32.dir/flags.make; then
+        echo "C++23 leg defines SYSTEM_STM32_USE_SPAN_COMPAT"; exit 1;
+      fi
+    - if [ -e build/_deps/span_compat-src ]; then
+        echo "C++23 leg fetched span-compat"; exit 1;
+      fi
+
+# The C++17 leg of the same matrix. hw::span is span_compat::span here.
+# First a pedantic compile (-Wpedantic -Werror -fno-exceptions -fno-rtti)
+# rejects C++20 constructs and GNU extensions. Then the normal library build
+# runs with the flags of a consumer. The job fails if CMake did not take the
+# span-compat path with SPAN_COMPAT_USE_STD_SPAN=0.
+build-cpp17:
+  stage: build
+  variables:
+    GIT_DEPTH: 0
+  parallel:
+    matrix: *family-matrix
+  before_script: *span-compat-credentials
+  script:
+    - cmake -B build-pedantic -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
+        -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=17
+        -D "CMAKE_CXX_FLAGS=-Wpedantic -Werror -fno-exceptions -fno-rtti"
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+        -D SYSTEM_STM32_HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}
+    - cmake --build build-pedantic --target system-stm32 -j$(nproc)
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
+        -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=17
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+        -D SYSTEM_STM32_HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}
+    - cmake --build build --target system-stm32 -j$(nproc)
+    - |
+      for dir in build-pedantic build; do
+        flags=${dir}/CMakeFiles/system-stm32.dir/flags.make
+        grep -q -- "-std=gnu++17" ${flags} || { echo "${dir}: not built at C++17"; exit 1; }
+        grep -q "SYSTEM_STM32_USE_SPAN_COMPAT" ${flags} || { echo "${dir}: span-compat path not taken"; exit 1; }
+        grep -q "SPAN_COMPAT_USE_STD_SPAN=0" ${flags} || { echo "${dir}: span-compat not set to its own span"; exit 1; }
+      done
 
 # Builds with SYSTEM_STM32_EXCLUDE_STARTUP=ON, the configuration every
 # downstream RTOS consumer (e.g. µOS++ IIIe-based projects) actually uses.
@@ -80,16 +143,22 @@ build-exclude-startup:
 # Links the STM32F1 test image (tests/stm32f1) for both memory scripts. This
 # catches link and layout errors that the library-only build cannot see:
 # missing symbols, a vector table that does not fit, a section overflow.
-# Extend the image when more F1 drivers land (USART).
+# Extend the image when more F1 drivers land (USART). The C++17 image links
+# the UsbDevice calls with span_compat::span.
 build-f1-test-image:
   stage: build
   variables:
     GIT_DEPTH: 0
+  parallel:
+    matrix:
+      - CXX_STANDARD: ["23", "17"]
+  before_script: *span-compat-credentials
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
         -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=${CXX_STANDARD}
         -D STM32_FAMILY=STM32F1
         -D STM32_DEVICE=STM32F103xB
         -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON
@@ -111,7 +180,8 @@ host-tests:
 # branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
 # and VECTOR_TABLE_SIZE is only ever defined for STM32WL. Kept here
 # non-blocking so the gap stays visible instead of silently untracked, until
-# C0 support is actually implemented.
+# C0 support is actually implemented. It runs at C++23 and at C++17, so
+# both legs exist for C0 when it starts to build.
 build-c0-known-broken:
   stage: build
   allow_failure: true
@@ -119,11 +189,16 @@ build-c0-known-broken:
     GIT_DEPTH: 0
     STM32_FAMILY: STM32C0
     STM32_DEVICE: STM32C031xx
+  parallel:
+    matrix:
+      - CXX_STANDARD: ["23", "17"]
+  before_script: *span-compat-credentials
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
         -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=${CXX_STANDARD}
         -D STM32_FAMILY=${STM32_FAMILY}
         -D STM32_DEVICE=${STM32_DEVICE}
     - cmake --build build --target system-stm32 -j$(nproc)

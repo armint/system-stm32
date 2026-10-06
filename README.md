@@ -21,6 +21,20 @@ for every supported family on each push, since that's the only thing that
 catches family-specific regressions (a change that only compiles for the
 one family a downstream project happens to use).
 
+Each family builds in two legs:
+
+- `build`: C++23. The job fails if CMake fetches span-compat. Thus
+  `hw::span` is `std::span`.
+- `build-cpp17`: C++17. First, a compile with `-Wpedantic -Werror
+  -fno-exceptions -fno-rtti` rejects C++20 constructs. Then the normal
+  library build runs. The job fails if CMake does not use span-compat with
+  `SPAN_COMPAT_USE_STD_SPAN=0`.
+
+The STM32F1 test image links at both standards. The C0 job also runs at
+both standards. The C++17 jobs clone the private span-compat repository
+with the CI job token. Thus span-compat must allow job tokens from this
+project.
+
 ## Requirements
 
 - CMake >= 3.20
