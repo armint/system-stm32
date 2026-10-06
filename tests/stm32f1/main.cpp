@@ -89,7 +89,7 @@ void onUsbEvent(void *, const hw::usb::Event &event) {
       if(event.endpoint == 0x01) {
          uint8_t packet[64];
          uint16_t size = usb.readOut(0x01, packet);
-         (void)usb.startIn(0x81, std::span<const uint8_t>(packet, size));
+         (void)usb.startIn(0x81, hw::span<const uint8_t>(packet, size));
       }
       break;
    case EventType::InComplete:

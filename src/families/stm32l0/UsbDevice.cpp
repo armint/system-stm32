@@ -283,7 +283,7 @@ void UsbDevice::resetEndpoints() {
    USB->DADDR = USB_DADDR_EF;
 }
 
-bool UsbDevice::startIn(uint8_t address, std::span<const uint8_t> data) {
+bool UsbDevice::startIn(uint8_t address, hw::span<const uint8_t> data) {
    Interrupt::BlockingSection block(USB_IRQn);
    if(!usb::isInEndpoint(address)) {
       return false;
@@ -311,7 +311,7 @@ bool UsbDevice::armOut(uint8_t address) {
    return true;
 }
 
-uint16_t UsbDevice::readOut(uint8_t address, std::span<uint8_t> buffer) const {
+uint16_t UsbDevice::readOut(uint8_t address, hw::span<uint8_t> buffer) const {
    Interrupt::BlockingSection block(USB_IRQn);
    const Direction *dir = direction(address);
    if(usb::isInEndpoint(address) || dir == nullptr || !dir->open) {
