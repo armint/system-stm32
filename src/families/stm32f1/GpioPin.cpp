@@ -1,82 +1,57 @@
 #include "peripherals/GpioPin.h"
+#include "GpioConfig.h"
+#include "utils/Interrupt.h"
 #include <cassert>
 
-// STM32F1 GpioPin implementation (RM0008 section 9.1).
-//
-// F1 has no MODER/OTYPER/OSPEEDR/PUPDR/AFR. Each pin has one 4-bit field
-// in CRL (pins 0-7) or CRH (pins 8-15): CNF[1:0] in the upper two bits and
-// MODE[1:0] in the lower two bits.
-//
-//   MODE = 00            input; CNF: 00 analog, 01 floating, 10 pull-up/down
-//   MODE = 01, 10, 11    output at 10, 2 or 50 MHz;
-//                        CNF: 00 push-pull, 01 open-drain,
-//                             10 alternate push-pull, 11 alternate open-drain
-//
-// In input pull mode, the ODR bit selects pull-up (1) or pull-down (0).
-// Outputs have no internal pull resistors.
+// STM32F1 GpioPin implementation (RM0008 section 9.1). The CNF/MODE field
+// encoding is in GpioConfig.h.
 //
 // The setters change only the part of the field that they own, so they
 // depend on the current mode. Call setMode() first, as configure() does.
+//
+// Interrupt safety: CRL and CRH hold the fields of 8 pins each, so every
+// change is a read-modify-write of a shared register. Each one runs in a
+// short critical section (PRIMASK), so a change in an interrupt to another
+// pin of the same register is not lost.
 
 namespace hw {
 
 namespace {
 
-constexpr uint32_t MODE_INPUT = 0b00;
-constexpr uint32_t MODE_10MHZ = 0b01;
-constexpr uint32_t MODE_2MHZ = 0b10;
-constexpr uint32_t MODE_50MHZ = 0b11;
-
-constexpr uint32_t CNF_INPUT_ANALOG = 0b00;
-constexpr uint32_t CNF_INPUT_FLOATING = 0b01;
-constexpr uint32_t CNF_INPUT_PULL = 0b10;
-constexpr uint32_t CNF_OUTPUT_OPEN_DRAIN = 0b01;
-constexpr uint32_t CNF_OUTPUT_ALTERNATE = 0b10;
+using namespace gpio_f1;
 
 struct PinConfig {
-   uint32_t cnf;
-   uint32_t mode;
+   uint8_t cnf;
+   uint8_t mode;
 };
 
 volatile uint32_t &configRegister(GPIO_TypeDef *port, uint8_t pin) {
    return pin < 8 ? port->CRL : port->CRH;
 }
 
-uint32_t configShift(uint8_t pin) {
-   return (pin & 0x07U) * 4U;
-}
-
-PinConfig readConfig(GPIO_TypeDef *port, uint8_t pin) {
-   uint32_t field = (configRegister(port, pin) >> configShift(pin)) & 0xFU;
-   return { field >> 2, field & 0x3U };
-}
-
-void writeConfig(GPIO_TypeDef *port, uint8_t pin, PinConfig config) {
+/**
+ * Reads the field of one pin, gives it to @p change, and writes the result
+ * back. The whole read-modify-write runs with interrupts disabled. @p change
+ * returns false to leave the register unchanged.
+ */
+template <typename Change>
+void updateConfig(GPIO_TypeDef *port, uint8_t pin, Change change) {
    volatile uint32_t &reg = configRegister(port, pin);
    uint32_t shift = configShift(pin);
-   uint32_t temp = reg;
-   temp &= ~(0xFUL << shift);
-   temp |= ((config.cnf << 2) | config.mode) << shift;
-   reg = temp;
-}
-
-// The GpioPin speeds name the L0/G0 rates (~400 kHz, ~2, ~10, ~40 MHz).
-// Map each one to the nearest F1 rate that is not slower.
-uint32_t speedToMode(GpioPin::Speed speed) {
-   switch(speed) {
-   case GpioPin::Speed::Low:
-   case GpioPin::Speed::Medium:
-      return MODE_2MHZ;
-   case GpioPin::Speed::High:
-      return MODE_10MHZ;
-   case GpioPin::Speed::VeryHigh:
-      return MODE_50MHZ;
+   Interrupt::CriticalSection cs;
+   uint32_t value = reg;
+   uint32_t old = (value >> shift) & 0xFU;
+   PinConfig config{ static_cast<uint8_t>(old >> 2), static_cast<uint8_t>(old & 0x3U) };
+   if(!change(config)) {
+      return;
    }
-   return MODE_2MHZ;
+   value &= ~(0xFUL << shift);
+   value |= static_cast<uint32_t>(field(config.cnf, config.mode)) << shift;
+   reg = value;
 }
 
-// Selects pull-up or pull-down through ODR. Only has an effect in input
-// pull mode.
+// Selects pull-up or pull-down through ODR (BSRR/BRR: no read-modify-write).
+// Only has an effect in input pull mode.
 void setPullDirection(GPIO_TypeDef *port, uint8_t pin, GpioPin::Pull pull) {
    if(pull == GpioPin::Pull::Up) {
       port->BSRR = 1UL << pin;
@@ -88,65 +63,67 @@ void setPullDirection(GPIO_TypeDef *port, uint8_t pin, GpioPin::Pull pull) {
 } // namespace
 
 void GpioPin::setMode(Mode mode) const {
-   PinConfig current = readConfig(port, pin);
-   bool isOutput = current.mode != MODE_INPUT;
-   PinConfig next{};
-
-   switch(mode) {
-   case Mode::Input:
-      // Keep an existing pull; otherwise start floating.
-      next.mode = MODE_INPUT;
-      next.cnf = (!isOutput && current.cnf == CNF_INPUT_PULL) ? CNF_INPUT_PULL : CNF_INPUT_FLOATING;
-      break;
-   case Mode::Analog:
-      next = { CNF_INPUT_ANALOG, MODE_INPUT };
-      break;
-   case Mode::Output:
-   case Mode::Alternate:
-      // Keep the speed and the open-drain bit of an existing output.
-      next.mode = isOutput ? current.mode : speedToMode(Speed::Low);
-      next.cnf = isOutput ? (current.cnf & CNF_OUTPUT_OPEN_DRAIN) : 0;
-      if(mode == Mode::Alternate) {
-         next.cnf |= CNF_OUTPUT_ALTERNATE;
+   updateConfig(port, pin, [mode](PinConfig &config) {
+      bool isOutput = config.mode != MODE_INPUT;
+      switch(mode) {
+      case Mode::Input:
+         // Keep an existing pull; otherwise start floating.
+         config.cnf = (!isOutput && config.cnf == CNF_INPUT_PULL) ? CNF_INPUT_PULL : CNF_INPUT_FLOATING;
+         config.mode = MODE_INPUT;
+         break;
+      case Mode::Analog:
+         config = { CNF_INPUT_ANALOG, MODE_INPUT };
+         break;
+      case Mode::Output:
+      case Mode::Alternate:
+         // Keep the speed and the open-drain bit of an existing output.
+         config.cnf = isOutput ? (config.cnf & CNF_OUTPUT_OPEN_DRAIN) : 0;
+         config.mode = isOutput ? config.mode : speedToMode(Speed::Low);
+         if(mode == Mode::Alternate) {
+            config.cnf |= CNF_OUTPUT_ALTERNATE;
+         }
+         break;
       }
-      break;
-   }
-   writeConfig(port, pin, next);
+      return true;
+   });
 }
 
 void GpioPin::setOutputType(OutputType type) const {
-   PinConfig config = readConfig(port, pin);
-   if(config.mode == MODE_INPUT) {
-      return; // Inputs have no output type.
-   }
-   config.cnf = (config.cnf & CNF_OUTPUT_ALTERNATE) | (type == OutputType::OpenDrain ? CNF_OUTPUT_OPEN_DRAIN : 0);
-   writeConfig(port, pin, config);
+   updateConfig(port, pin, [type](PinConfig &config) {
+      if(config.mode == MODE_INPUT) {
+         return false; // Inputs have no output type.
+      }
+      config.cnf = (config.cnf & CNF_OUTPUT_ALTERNATE) | (type == OutputType::OpenDrain ? CNF_OUTPUT_OPEN_DRAIN : 0);
+      return true;
+   });
 }
 
 void GpioPin::setSpeed(Speed speed) const {
-   PinConfig config = readConfig(port, pin);
-   if(config.mode == MODE_INPUT) {
-      return; // Inputs have no speed.
-   }
-   config.mode = speedToMode(speed);
-   writeConfig(port, pin, config);
+   updateConfig(port, pin, [speed](PinConfig &config) {
+      if(config.mode == MODE_INPUT) {
+         return false; // Inputs have no speed.
+      }
+      config.mode = speedToMode(speed);
+      return true;
+   });
 }
 
 void GpioPin::setPull(Pull pull) const {
-   PinConfig config = readConfig(port, pin);
-   bool isDigitalInput = config.mode == MODE_INPUT && config.cnf != CNF_INPUT_ANALOG;
-   if(!isDigitalInput) {
-      // F1 outputs and analog inputs have no pull resistors.
-      assert(pull == Pull::None);
-      return;
-   }
-   if(pull == Pull::None) {
-      config.cnf = CNF_INPUT_FLOATING;
-   } else {
-      setPullDirection(port, pin, pull);
-      config.cnf = CNF_INPUT_PULL;
-   }
-   writeConfig(port, pin, config);
+   updateConfig(port, pin, [this, pull](PinConfig &config) {
+      bool isDigitalInput = config.mode == MODE_INPUT && config.cnf != CNF_INPUT_ANALOG;
+      if(!isDigitalInput) {
+         // F1 outputs and analog inputs have no pull resistors.
+         assert(pull == Pull::None);
+         return false;
+      }
+      if(pull == Pull::None) {
+         config.cnf = CNF_INPUT_FLOATING;
+      } else {
+         setPullDirection(port, pin, pull);
+         config.cnf = CNF_INPUT_PULL;
+      }
+      return true;
+   });
 }
 
 void GpioPin::setAlternateFunction(AlternateFunction af) const {
@@ -155,43 +132,29 @@ void GpioPin::setAlternateFunction(AlternateFunction af) const {
    // Alternate-function inputs (e.g. USART RX, SPI MISO) stay in an
    // input mode.
    (void)af;
-   PinConfig config = readConfig(port, pin);
-   if(config.mode == MODE_INPUT) {
-      return;
-   }
-   config.cnf |= CNF_OUTPUT_ALTERNATE;
-   writeConfig(port, pin, config);
+   updateConfig(port, pin, [](PinConfig &config) {
+      if(config.mode == MODE_INPUT) {
+         return false;
+      }
+      config.cnf |= CNF_OUTPUT_ALTERNATE;
+      return true;
+   });
 }
 
 void GpioPin::configure(Mode mode, OutputType type, Pull pull, Speed speed) const {
+   // F1 outputs and analog inputs have no pull resistors.
+   assert(pull == Pull::None || mode == Mode::Input);
+   if(mode == Mode::Input && pull != Pull::None) {
+      // Set the pull direction before the pin becomes a pull input.
+      setPullDirection(port, pin, pull);
+   }
    // Compute the whole field and write it once, so the pin never passes
    // through an intermediate configuration.
-   PinConfig config{};
-   switch(mode) {
-   case Mode::Analog:
-      assert(pull == Pull::None);
-      config = { CNF_INPUT_ANALOG, MODE_INPUT };
-      break;
-   case Mode::Input:
-      if(pull == Pull::None) {
-         config = { CNF_INPUT_FLOATING, MODE_INPUT };
-      } else {
-         // Set the pull direction before the pin becomes a pull input.
-         setPullDirection(port, pin, pull);
-         config = { CNF_INPUT_PULL, MODE_INPUT };
-      }
-      break;
-   case Mode::Output:
-   case Mode::Alternate:
-      assert(pull == Pull::None);
-      config.mode = speedToMode(speed);
-      config.cnf = type == OutputType::OpenDrain ? CNF_OUTPUT_OPEN_DRAIN : 0;
-      if(mode == Mode::Alternate) {
-         config.cnf |= CNF_OUTPUT_ALTERNATE;
-      }
-      break;
-   }
-   writeConfig(port, pin, config);
+   uint8_t value = pinConfig(mode, type, pull, speed);
+   updateConfig(port, pin, [value](PinConfig &config) {
+      config = { static_cast<uint8_t>(value >> 2), static_cast<uint8_t>(value & 0x3U) };
+      return true;
+   });
 }
 
 } // namespace hw
