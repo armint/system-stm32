@@ -159,6 +159,9 @@ void testBitBandAlias() {
 // Applies the FastPin direction switch to a fake port: the same address
 // calculation and write order as FastPin::setConfig<>(), with each alias
 // address decoded back to its register and bit.
+// This does not run FastPin::writeBits() itself, because the bit-band
+// aliases are absolute addresses that a host cannot store to. A change to
+// the fold in FastPin.h is not caught here; check its disassembly instead.
 template <typename Visit>
 void applySwitch(GPIO_TypeDef &gpio, uintptr_t portBase, uint8_t pin, uint8_t config, Visit visit) {
    auto order = f1::writeOrder(config);
@@ -199,7 +202,9 @@ void testDirectionSwitchIntermediateStates() {
 
    // All inputs (CNF 00, 01, 10) and all outputs without CNF 11 (MODE 01,
    // 10, 11). CNF 11 is the reserved input state, or the alternate
-   // open-drain output (see gpio_f1::writeOrder()).
+   // open-drain output. A switch from or to an alternate open-drain output
+   // can pass the reserved input state (see gpio_f1::writeOrder() and
+   // testDirectionSwitchReservedLimit()).
    std::vector<uint8_t> inputs{ 0b0000, 0b0100, 0b1000 };
    std::vector<uint8_t> outputs;
    for(uint8_t cnf = 0; cnf < 3; ++cnf) {
@@ -236,6 +241,31 @@ void testDirectionSwitchIntermediateStates() {
    }
 }
 
+// Known limit: from an alternate open-drain output (CNF 11) to an input,
+// the MODE stores come first and pass the reserved input state (CNF 11,
+// MODE 00). The pin drives only with CNF 11 and stops driving before CNF
+// changes. This test documents the limit, so a change to it is seen.
+void testDirectionSwitchReservedLimit() {
+   std::vector<uint8_t> inputs{ 0b0000, 0b0100, 0b1000 };
+   for(uint8_t mode = 1; mode < 4; ++mode) {
+      uint8_t from = f1::field(0b11, mode);
+      for(uint8_t to : inputs) {
+         GPIO_TypeDef gpio{ ResetConfig, ResetConfig, 0, 0, 0, 0, 0 };
+         gpio.CRL = (gpio.CRL & ~(0xFU << 16)) | (uint32_t{ from } << 16);
+         bool reserved = false;
+         applySwitch(gpio, GPIOB_BASE, 4, to, [&reserved](uint32_t state) {
+            if((state & 0x3U) != 0) {
+               CHECK((state >> 2) == 0b11U);
+            } else if(state == 0b1100U) {
+               reserved = true;
+            }
+         });
+         CHECK(reserved);
+         CHECK(fieldOf(gpio, 4) == to);
+      }
+   }
+}
+
 } // namespace
 
 // Host stand-in for utils/Interrupt.cpp: counts the critical sections.
@@ -260,6 +290,7 @@ int main() {
    testBitBandAlias();
    testDirectionSwitchTouchesOnlyItsPin();
    testDirectionSwitchIntermediateStates();
+   testDirectionSwitchReservedLimit();
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
       return 1;
