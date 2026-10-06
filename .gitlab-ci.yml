@@ -14,6 +14,15 @@ workflow:
       when: never
     - if: "$CI_COMMIT_BRANCH"
 
+# Below C++20, CMake fetches the private span-compat repository over HTTPS.
+# Git gets the CI job token from this credential helper, so no token is part
+# of a URL or of a file in the repository. span-compat must allow job tokens
+# of this project (its CI/CD job token allowlist has the embedded-libraries
+# group).
+.span-compat-credentials: &span-compat-credentials
+  - git config --global credential.https://gitlab.vandertogt.org.helper
+      '!f() { echo username=gitlab-ci-token; echo "password=${CI_JOB_TOKEN}"; }; f'
+
 # The families that must build. The C++23 and the C++17 legs use the same list.
 .family-matrix: &family-matrix
   - STM32_FAMILY: STM32L0
@@ -64,6 +73,46 @@ build:
     - if [ -e build/_deps/span_compat-src ]; then
         echo "C++23 leg fetched span-compat"; exit 1;
       fi
+
+# The C++17 leg of the same matrix. hw::span is span_compat::span here.
+# First a pedantic compile (-Wpedantic -Werror -fno-exceptions -fno-rtti)
+# rejects C++20 constructs and GNU extensions. Then the normal library build
+# runs with the flags of a consumer. The job fails if CMake did not take the
+# span-compat path with SPAN_COMPAT_USE_STD_SPAN=0.
+build-cpp17:
+  stage: build
+  variables:
+    GIT_DEPTH: 0
+  parallel:
+    matrix: *family-matrix
+  before_script: *span-compat-credentials
+  script:
+    - cmake -B build-pedantic -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
+        -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=17
+        -D "CMAKE_CXX_FLAGS=-Wpedantic -Werror -fno-exceptions -fno-rtti"
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+        -D SYSTEM_STM32_HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}
+    - cmake --build build-pedantic --target system-stm32 -j$(nproc)
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
+        -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=17
+        -D STM32_FAMILY=${STM32_FAMILY}
+        -D STM32_DEVICE=${STM32_DEVICE}
+        -D SYSTEM_STM32_HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}
+    - cmake --build build --target system-stm32 -j$(nproc)
+    - |
+      for dir in build-pedantic build; do
+        flags=${dir}/CMakeFiles/system-stm32.dir/flags.make
+        grep -q -- "-std=gnu++17" ${flags} || { echo "${dir}: not built at C++17"; exit 1; }
+        grep -q "SYSTEM_STM32_USE_SPAN_COMPAT" ${flags} || { echo "${dir}: span-compat path not taken"; exit 1; }
+        grep -q "SPAN_COMPAT_USE_STD_SPAN=0" ${flags} || { echo "${dir}: span-compat not set to its own span"; exit 1; }
+      done
 
 # Builds with SYSTEM_STM32_EXCLUDE_STARTUP=ON, the configuration every
 # downstream RTOS consumer (e.g. µOS++ IIIe-based projects) actually uses.
