@@ -350,7 +350,7 @@ inline void clearInterrruptPending(const uint8_t line) {
 }
 
 constexpr Port getPortFromGPIO(GPIO_TypeDef *const gpio) {
-   Port p;
+   Port p = Port::Undefined;
    switch(reinterpret_cast<uint32_t>(gpio)) {
 #ifdef GPIOA
    case GPIOA_BASE:
