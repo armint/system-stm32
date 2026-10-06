@@ -267,6 +267,36 @@ endif ()
 # Ensure the exported interface does not pull non-exported targets.
 set_property(TARGET system-stm32 PROPERTY INTERFACE_LINK_LIBRARIES "")
 
+# hw::span (src/utils/Span.h) is std::span from C++20 on. Below C++20 the
+# standard library has no std::span, so link the span-compat header library
+# and make hw::span the span_compat::span. This link comes after the line
+# above, because consumers that include UsbDevice.h, Uid.h or Rcc.h also need
+# the span-compat headers. The C++20 and later build links nothing extra.
+# A superproject that already provides span-compat::span-compat (for example
+# through libArT or find_package) keeps its target, so the whole build has one
+# span type. The span-compat target is not part of the export set of this
+# library. Thus the installed package needs an installed span-compat package:
+# cmake/system-stm32Config.cmake.in finds it and links it to the imported
+# target.
+if(CMAKE_CXX_STANDARD LESS 20)
+    set(SYSTEM_STM32_USE_SPAN_COMPAT ON)
+    if(NOT TARGET span-compat::span-compat)
+        FetchContent_Declare(
+                span_compat
+                GIT_REPOSITORY https://gitlab.vandertogt.org/embedded-libraries/span-compat.git
+                GIT_TAG 15b7f429d1ba45d1d5e092d8c0c4d97c0bc4968c
+        )
+        FetchContent_GetProperties(span_compat)
+        if (NOT span_compat_POPULATED)
+            FetchContent_MakeAvailable(span_compat)
+        endif ()
+    endif()
+    target_link_libraries(system-stm32 PUBLIC $<BUILD_INTERFACE:span-compat::span-compat>)
+    target_compile_definitions(system-stm32 PUBLIC SYSTEM_STM32_USE_SPAN_COMPAT)
+else()
+    set(SYSTEM_STM32_USE_SPAN_COMPAT OFF)
+endif()
+
 option(SYSTEM_STM32_BUILD_TEST_IMAGE
     "Build the STM32F1 test image (STM32_FAMILY=STM32F1 only; needs an ARM toolchain)" OFF)
 if(SYSTEM_STM32_BUILD_TEST_IMAGE)

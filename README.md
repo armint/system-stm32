@@ -31,6 +31,25 @@ one family a downstream project happens to use).
 CMSIS device headers and CMSIS core are fetched automatically via
 `FetchContent` for the selected family; nothing needs to be vendored.
 
+### Span type
+
+The public interface uses one span type: `hw::span` (`src/utils/Span.h`).
+`UsbDevice`, `Uid` and `Rcc` use it. Use `hw::span` in your code, not
+`std::span` or `span_compat::span`.
+
+- At C++20 and later, `hw::span` is `std::span`. CMake adds no other
+  library.
+- Below C++20, the standard library has no `std::span`. Then CMake gets
+  [span-compat](https://gitlab.vandertogt.org/embedded-libraries/span-compat)
+  with `FetchContent` and links it. It also defines
+  `SYSTEM_STM32_USE_SPAN_COMPAT`. Then `hw::span` is `span_compat::span`.
+
+CMake selects the type from `CMAKE_CXX_STANDARD`. If the superproject
+already has the target `span-compat::span-compat`, CMake uses that target.
+Thus the full build has one span type. The span-compat README tells how
+to select its type for the full build. Below C++20, the installed package
+needs an installed span-compat package.
+
 ## Using it
 
 Add as a git submodule and `add_subdirectory()` it (this is how the
