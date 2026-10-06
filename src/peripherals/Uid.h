@@ -1,8 +1,9 @@
 #pragma once
 
+#include "utils/Span.h"
+
 #include <cmsis_device.h>
 #include <cstdint>
-#include <span>
 
 namespace hw::Uid {
 
@@ -25,7 +26,7 @@ inline uint32_t word(size_t index) {
 /**
  * @brief Reads the full 96-bit UID into a caller-supplied 12-byte span.
  */
-inline void read(std::span<uint8_t, SizeBytes> dest) {
+inline void read(hw::span<uint8_t, SizeBytes> dest) {
 #if defined(UID_BASE)
    const auto *uid = reinterpret_cast<const uint8_t *>(UID_BASE);
    for(size_t i = 0u; i < SizeBytes; ++i) {

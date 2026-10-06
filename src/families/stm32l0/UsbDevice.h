@@ -1,9 +1,9 @@
 #pragma once
 
 #include "peripherals/UsbDeviceTypes.h"
+#include "utils/Span.h"
 #include <cmsis_device.h>
 #include <cstdint>
-#include <span>
 
 // Only L0 devices with a USB peripheral (L05x/L06x/L07x/L08x except
 // L051/L071/L081) define USB_BASE; on the others this header is empty.
@@ -116,7 +116,7 @@ class UsbDevice {
     * @return false if the endpoint is not open, data is larger than
     * maxPacketSize, or the previous packet is not sent yet (STAT_TX VALID).
     */
-   [[nodiscard]] bool startIn(uint8_t address, std::span<const uint8_t> data);
+   [[nodiscard]] bool startIn(uint8_t address, hw::span<const uint8_t> data);
 
    /**
     * @brief Makes an OUT endpoint VALID, so it accepts the next packet.
@@ -129,7 +129,7 @@ class UsbDevice {
     * the class comment).
     * @return the number of bytes copied: min(received size, buffer.size()).
     */
-   uint16_t readOut(uint8_t address, std::span<uint8_t> buffer) const;
+   uint16_t readOut(uint8_t address, hw::span<uint8_t> buffer) const;
 
    /**
     * @brief Sets or clears STALL on one direction of an endpoint. Clearing

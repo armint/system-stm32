@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Spi.h"
+#include "utils/Span.h"
 #include <cmsis_device.h>
 #include <cstdint>
 #include <delaybusywait.h>
 #include <optional>
-#include <span>
 #include <type_traits>
 
 namespace Rcc {
@@ -2018,7 +2018,7 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
 // radio never went idle (RFBUSYS), a byte's TXE/RXNE never asserted, or the
 // shift register never drained (BSY) within the bounded wait. A caller must
 // check the return value; a stalled link has no other way to be reported.
-[[nodiscard]] inline bool subghzCommand(std::span<uint8_t> frame) {
+[[nodiscard]] inline bool subghzCommand(hw::span<uint8_t> frame) {
    if(!(SUBGHZSPI->CR1 & SPI_CR1_SPE)) {
       return false;
    }
