@@ -14,42 +14,56 @@ workflow:
       when: never
     - if: "$CI_COMMIT_BRANCH"
 
+# The families that must build. The C++23 and the C++17 legs use the same list.
+.family-matrix: &family-matrix
+  - STM32_FAMILY: STM32L0
+    STM32_DEVICE: STM32L073xx
+  - STM32_FAMILY: STM32G0
+    STM32_DEVICE: STM32G071xx
+  # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of
+  # the HSI48/USB clock code in Rcc.
+  - STM32_FAMILY: STM32G0
+    STM32_DEVICE: STM32G0B1xx
+  - STM32_FAMILY: STM32WL
+    STM32_DEVICE: STM32WLE5xx
+  - STM32_FAMILY: STM32F1
+    STM32_DEVICE: STM32F103xB
+  # The Versaloon board: 12 MHz crystal instead of the 8 MHz default.
+  - STM32_FAMILY: STM32F1
+    STM32_DEVICE: STM32F103xB
+    SYSTEM_STM32_HSE_VALUE: "12000000"
+
 # Builds the system-stm32 OBJECT library standalone (no linking needed) for
 # every STM32 family this repo claims to support. Each family exercises a
 # different CMSIS device header and register layout, so this is the only
 # thing that actually catches family-specific regressions (e.g. a fix that
 # only works on WL because that's the only family anyone builds downstream).
+#
+# This is the C++23 leg. hw::span must be std::span here: the job fails if
+# CMake fetched span-compat or defined SYSTEM_STM32_USE_SPAN_COMPAT.
 build:
   stage: build
   variables:
     GIT_DEPTH: 0
   parallel:
-    matrix:
-      - STM32_FAMILY: STM32L0
-        STM32_DEVICE: STM32L073xx
-      - STM32_FAMILY: STM32G0
-        STM32_DEVICE: STM32G071xx
-      # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of
-      # the HSI48/USB clock code in Rcc.
-      - STM32_FAMILY: STM32G0
-        STM32_DEVICE: STM32G0B1xx
-      - STM32_FAMILY: STM32WL
-        STM32_DEVICE: STM32WLE5xx
-      - STM32_FAMILY: STM32F1
-        STM32_DEVICE: STM32F103xB
-      # The Versaloon board: 12 MHz crystal instead of the 8 MHz default.
-      - STM32_FAMILY: STM32F1
-        STM32_DEVICE: STM32F103xB
-        SYSTEM_STM32_HSE_VALUE: "12000000"
+    matrix: *family-matrix
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
         -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
         -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=23
         -D STM32_FAMILY=${STM32_FAMILY}
         -D STM32_DEVICE=${STM32_DEVICE}
         -D SYSTEM_STM32_HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}
     - cmake --build build --target system-stm32 -j$(nproc)
+    - grep -q -- "-std=gnu++23" build/CMakeFiles/system-stm32.dir/flags.make
+    - if grep -q "SYSTEM_STM32_USE_SPAN_COMPAT" build/CMakeFiles/system-stm32.dir/flags.make; then
+        echo "C++23 leg defines SYSTEM_STM32_USE_SPAN_COMPAT"; exit 1;
+      fi
+    - if [ -e build/_deps/span_compat-src ]; then
+        echo "C++23 leg fetched span-compat"; exit 1;
+      fi
 
 # Builds with SYSTEM_STM32_EXCLUDE_STARTUP=ON, the configuration every
 # downstream RTOS consumer (e.g. µOS++ IIIe-based projects) actually uses.
