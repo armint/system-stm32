@@ -502,6 +502,48 @@ inline void disableGPIOHClock() {
 }
 #endif
 
+// STM32F1: GPIO ports are on APB2 (RCC_APB2ENR_IOPxEN)
+#if defined(RCC_APB2ENR_IOPAEN)
+inline void enableGPIOAClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
+}
+inline void disableGPIOAClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPAEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPBEN)
+inline void enableGPIOBClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPBEN);
+}
+inline void disableGPIOBClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPBEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPCEN)
+inline void enableGPIOCClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPCEN);
+}
+inline void disableGPIOCClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPCEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPDEN)
+inline void enableGPIODClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPDEN);
+}
+inline void disableGPIODClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPDEN);
+}
+#endif
+#if defined(RCC_APB2ENR_IOPEEN)
+inline void enableGPIOEClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_IOPEEN);
+}
+inline void disableGPIOEClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_IOPEEN);
+}
+#endif
+
 // DMA
 #if defined(RCC_AHBENR_DMA1EN)
 inline void enableDMA1Clock() {
@@ -567,6 +609,16 @@ inline void disableSYSCFGClockInSleepMode() {
 }
 #endif
 
+// AFIO (STM32F1 alternate function I/O: remap, EXTI line selection)
+#if defined(RCC_APB2ENR_AFIOEN)
+inline void enableAFIOClock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_AFIOEN);
+}
+inline void disableAFIOClock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_AFIOEN);
+}
+#endif
+
 // PWR
 #if defined(RCC_APB1ENR_PWREN) && defined(RCC_APB1SMENR_PWRSMEN)
 inline void enablePWRClock() {
@@ -603,6 +655,16 @@ inline void enablePWRClockInSleepMode() {
 }
 inline void disablePWRClockInSleepMode() {
    detail::clearBit(RCC->APB1SMENR, RCC_APB1SMENR_PWRSMEN);
+}
+#endif
+
+// BKP (STM32F1 backup registers)
+#if defined(RCC_APB1ENR_BKPEN)
+inline void enableBKPClock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_BKPEN);
+}
+inline void disableBKPClock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_BKPEN);
 }
 #endif
 
@@ -1108,6 +1170,14 @@ inline void disableTIM3Clock() {
    detail::clearBit(RCC->APBENR1, RCC_APBENR1_TIM3EN);
 }
 #endif
+#if defined(RCC_APB1ENR_TIM4EN)
+inline void enableTIM4Clock() {
+   detail::setBit(RCC->APB1ENR, RCC_APB1ENR_TIM4EN);
+}
+inline void disableTIM4Clock() {
+   detail::clearBit(RCC->APB1ENR, RCC_APB1ENR_TIM4EN);
+}
+#endif
 #if defined(RCC_APB1ENR_TIM6EN)
 inline void enableTIM6Clock() {
    detail::setBit(RCC->APB1ENR, RCC_APB1ENR_TIM6EN);
@@ -1185,7 +1255,7 @@ inline void disableTIM22Clock() {
 }
 #endif
 
-// G0-series timers on APB2 (TIM1, TIM14, TIM15, TIM16, TIM17)
+// TIM1 on APB2: G0 (APBENR2), F1 and WL (APB2ENR)
 #if defined(RCC_APBENR2_TIM1EN)
 inline void enableTIM1Clock() {
    detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM1EN);
@@ -1193,7 +1263,16 @@ inline void enableTIM1Clock() {
 inline void disableTIM1Clock() {
    detail::clearBit(RCC->APBENR2, RCC_APBENR2_TIM1EN);
 }
+#elif defined(RCC_APB2ENR_TIM1EN)
+inline void enableTIM1Clock() {
+   detail::setBit(RCC->APB2ENR, RCC_APB2ENR_TIM1EN);
+}
+inline void disableTIM1Clock() {
+   detail::clearBit(RCC->APB2ENR, RCC_APB2ENR_TIM1EN);
+}
 #endif
+
+// G0-series timers on APB2 (TIM14, TIM15, TIM16, TIM17)
 #if defined(RCC_APBENR2_TIM14EN)
 inline void enableTIM14Clock() {
    detail::setBit(RCC->APBENR2, RCC_APBENR2_TIM14EN);
@@ -1732,6 +1811,124 @@ inline void setClock64MhzHSI() {
    RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | (0x2UL << RCC_CFGR_SW_Pos); // PLL = 0b010
    while((RCC->CFGR & RCC_CFGR_SWS) != (0x2UL << RCC_CFGR_SWS_Pos)) {
    }
+}
+#endif
+
+// Configure system clock to 72 MHz from the HSE crystal via PLL (STM32F1 series).
+// - Enables HSE and waits until it is ready (bounded wait)
+// - Sets AHB=/1 (72 MHz), APB1=/2 (36 MHz, the APB1 maximum), APB2=/1 (72 MHz)
+//   and ADC=/6 (12 MHz, the ADC maximum is 14 MHz)
+// - Sets the USB prescaler to /1.5 => 72 MHz / 1.5 = 48 MHz USB clock
+// - Sets FLASH latency to 2 wait states (required for 48..72 MHz), enables
+//   prefetch and disables half-cycle access
+// - Configures PLL: source HSE (/2 for a 16 MHz crystal), MUL = 72 MHz / PLL input,
+//   e.g. 12 MHz * 6 (Versaloon) or 8 MHz * 9 (ST-Link/V2)
+// - Switches SYSCLK to PLL and waits until ready
+//
+// hseHz is the crystal frequency (4..16 MHz). It must equal HSE_VALUE
+// (SYSTEM_STM32_HSE_VALUE in CMake), because SystemCoreClockUpdate() computes
+// SystemCoreClock from HSE_VALUE. Call SystemCoreClockUpdate() afterwards.
+//
+// Returns false, with SYSCLK on HSI, if no PLL setting gives exactly 72 MHz
+// from hseHz, or if HSE or the PLL does not become ready. After a PLL failure
+// the flash latency and the prescalers are already set; that is safe on HSI.
+// It does not access global variables, so it can run before DATA/BSS init.
+#if defined(RCC_CFGR_PLLMULL) && defined(RCC_CFGR_PLLXTPRE) && defined(RCC_CFGR_USBPRE) &&         \
+defined(RCC_CFGR_ADCPRE_DIV6) && defined(RCC_CR_HSEON) && defined(RCC_CR_HSERDY) && defined(RCC_CR_PLLON) && \
+defined(RCC_CR_PLLRDY) && defined(RCC_CFGR_SWS_PLL) && defined(FLASH_ACR_PRFTBE) && \
+defined(FLASH_ACR_HLFCYA)
+namespace detail {
+// RCC_CFGR PLL bits (PLLSRC, PLLXTPRE, PLLMULL) for 72 MHz from an HSE crystal
+// of hseHz, or std::nullopt if no PLL setting gives exactly 72 MHz.
+constexpr std::optional<uint32_t> pll72MhzFromHSE(uint32_t hseHz) {
+   constexpr uint32_t target = 72000000UL;
+   if(hseHz < 4000000UL || hseHz > 16000000UL) {
+      return std::nullopt;
+   }
+   // PLLXTPRE: HSE /1 or /2 into the PLL; PLLMULL: x2..x16 (field value = MUL - 2)
+   for(uint32_t prediv = 1; prediv <= 2; ++prediv) {
+      if(hseHz % prediv != 0 || target % (hseHz / prediv) != 0) {
+         continue;
+      }
+      uint32_t mul = target / (hseHz / prediv);
+      if(mul >= 2 && mul <= 16) {
+         return RCC_CFGR_PLLSRC | (prediv == 2 ? RCC_CFGR_PLLXTPRE : 0UL) | ((mul - 2) << RCC_CFGR_PLLMULL_Pos);
+      }
+   }
+   return std::nullopt;
+}
+static_assert(pll72MhzFromHSE(8000000UL) == (RCC_CFGR_PLLSRC | RCC_CFGR_PLLMULL9));
+static_assert(pll72MhzFromHSE(12000000UL) == (RCC_CFGR_PLLSRC | RCC_CFGR_PLLMULL6));
+static_assert(pll72MhzFromHSE(16000000UL) == (RCC_CFGR_PLLSRC | RCC_CFGR_PLLXTPRE | RCC_CFGR_PLLMULL9));
+static_assert(!pll72MhzFromHSE(7000000UL) && !pll72MhzFromHSE(25000000UL));
+
+// The waits run from HSI (8 MHz), a few cycles per iteration. HSE: about
+// 100 ms (crystal start-up is 2 ms typical); PLL: some ms (lock is 200 us max).
+constexpr uint32_t HSEReadyLoops = 200000;
+constexpr uint32_t PLLReadyLoops = 10000;
+} // namespace detail
+
+[[nodiscard]] inline bool setClock72MhzHSE(uint32_t hseHz = HSE_VALUE) {
+   const auto pll = detail::pll72MhzFromHSE(hseHz);
+   if(!pll) {
+      return false;
+   }
+
+   // The PLL cannot be reconfigured while it drives SYSCLK: move to HSI first
+   if((RCC->CFGR & RCC_CFGR_SWS) == RCC_CFGR_SWS_PLL) {
+      RCC->CR |= RCC_CR_HSION;
+      while((RCC->CR & RCC_CR_HSIRDY) == 0) {
+      }
+      RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_HSI;
+      while((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_HSI) {
+      }
+   }
+
+   // Enable HSE and wait ready
+   RCC->CR |= RCC_CR_HSEON;
+   uint32_t loops = 0;
+   while((RCC->CR & RCC_CR_HSERDY) == 0) {
+      if(++loops == detail::HSEReadyLoops) {
+         RCC->CR &= ~RCC_CR_HSEON;
+         return false;
+      }
+   }
+
+   // Prescalers: AHB=1, APB1=2, APB2=1, ADC=6, USB=1.5 (USBPRE = 0).
+   // Set before FLASH_ACR: PRFTBE may only change with HPRE = /1 (RM0008 3.3.3).
+   RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_HPRE | RCC_CFGR_PPRE1 | RCC_CFGR_PPRE2 | RCC_CFGR_ADCPRE | RCC_CFGR_USBPRE)) |
+               (RCC_CFGR_HPRE_DIV1 | RCC_CFGR_PPRE1_DIV2 | RCC_CFGR_PPRE2_DIV1 | RCC_CFGR_ADCPRE_DIV6);
+
+   // Two wait states for 48..72 MHz, prefetch buffer on (it is on after reset;
+   // it may only change while SYSCLK < 24 MHz, which is the case here), and
+   // no half-cycle access (only allowed up to 8 MHz, never from the PLL)
+   FLASH->ACR = (FLASH->ACR & ~(FLASH_ACR_LATENCY | FLASH_ACR_HLFCYA)) | (2UL << FLASH_ACR_LATENCY_Pos) | FLASH_ACR_PRFTBE;
+
+   // Disable PLL if running (it is not SYSCLK here)
+   if(RCC->CR & RCC_CR_PLLON) {
+      RCC->CR &= ~RCC_CR_PLLON;
+      while(RCC->CR & RCC_CR_PLLRDY) {
+      }
+   }
+
+   // Configure PLL: source HSE, optional HSE /2, multiplier
+   RCC->CFGR = (RCC->CFGR & ~(RCC_CFGR_PLLSRC | RCC_CFGR_PLLXTPRE | RCC_CFGR_PLLMULL)) | *pll;
+
+   // Enable PLL and wait ready
+   RCC->CR |= RCC_CR_PLLON;
+   loops = 0;
+   while((RCC->CR & RCC_CR_PLLRDY) == 0) {
+      if(++loops == detail::PLLReadyLoops) {
+         RCC->CR &= ~RCC_CR_PLLON;
+         return false;
+      }
+   }
+
+   // Switch system clock to PLL
+   RCC->CFGR = (RCC->CFGR & ~RCC_CFGR_SW) | RCC_CFGR_SW_PLL;
+   while((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL) {
+   }
+   return true;
 }
 #endif
 

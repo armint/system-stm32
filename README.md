@@ -45,6 +45,12 @@ downstream projects mentioned below consume it), or `install()` it and
   separate define for the 64 KB part.
 - `SYSTEM_STM32_EXCLUDE_STARTUP` — see [Bare-metal startup vs. an external
   RTOS](#bare-metal-startup-vs-an-external-rtos) below. Defaults to `OFF`.
+- `SYSTEM_STM32_HSE_VALUE` — the HSE crystal frequency in Hz, for example
+  `12000000`. CMake gives it to the target and to its consumers as the
+  `HSE_VALUE` define. The CMSIS `SystemCoreClockUpdate()` and the `Rcc`
+  clock recipes both use it. A wrong value gives a wrong `SystemCoreClock`
+  after a switch to HSE or to the HSE PLL. Empty (the default) keeps the
+  family default. On `STM32F1` the default is 8 MHz.
 
 The library is added as the `system-stm32` CMake target (an `OBJECT`
 library) and, once installed, as `art::system-stm32`.
@@ -70,7 +76,7 @@ library) and, once installed, as `art::system-stm32`.
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
-  `Adc`, `UsbDevice` (STM32L0 and STM32F1), `GpioPin.cpp` and `Afio`
+  `Adc`, `UsbDevice` (STM32L0 and STM32F1), `GpioPin.cpp`, `Afio` and `Bkp`
   (STM32F1 only), and the interrupt vector table in
   `vectors_stm32<family>xx.c`)
   exposing the same interface as their `src/peripherals/` counterpart
@@ -219,6 +225,63 @@ add_subdirectory(path/to/system-stm32)
 option `OFF` (the default) for a bare-metal application with no RTOS,
 where `src/bare-metal/` is the only thing providing a runtime at all.
 
+## STM32F1: 72 MHz from HSE
+
+`Rcc::setClock72MhzHSE(hseHz)` sets the STM32F103 to its maximum clock
+speeds. The source is the HSE crystal through the PLL:
+
+| Clock | Frequency |
+|-------|-----------|
+| SYSCLK, AHB (HCLK), APB2 | 72 MHz |
+| APB1 | 36 MHz |
+| ADC | 12 MHz (APB2 / 6) |
+| USB | 48 MHz (PLL / 1.5) |
+
+The function calculates the PLL setting from the crystal frequency
+`hseHz`. It accepts any crystal from 4 MHz to 16 MHz that gives exactly
+72 MHz, for example 8 MHz (x 9), 12 MHz (x 6) or 16 MHz (/ 2, x 9).
+`hseHz` defaults to `HSE_VALUE`. Set the crystal frequency with
+`SYSTEM_STM32_HSE_VALUE`, so that `SystemCoreClockUpdate()` uses the same
+value.
+
+The function returns `false` in these cases:
+
+- No PLL setting gives exactly 72 MHz from `hseHz`.
+- HSE does not start within approximately 100 ms.
+- The PLL does not lock.
+
+After a failure, SYSCLK stays on HSI (8 MHz). The function does not write
+global variables, so you can call it before the DATA and BSS
+initialization. Call `SystemCoreClockUpdate()` after it.
+
+For USB, call the function before `Rcc::enableUSBClock()`. The function sets
+`RCC_CFGR.USBPRE`, and this bit must be valid before the USB clock is
+enabled. The bit cannot change while the USB clock is enabled (RM0008
+section 7.3.2).
+
+```cpp
+#include "peripherals/Rcc.h"
+
+int main() {
+   if(!Rcc::setClock72MhzHSE()) {
+      // SYSCLK is HSI (8 MHz). USB does not work without HSE.
+   }
+   SystemCoreClockUpdate();
+   // ...
+}
+```
+
+### STM32F1 backup registers
+
+`Bkp.h` (STM32F1 only) gives access to backup data register 1
+(`BKP_DR1`). The backup registers keep their content over a system reset.
+With VBAT supplied, they also keep it over a power loss. A typical use is
+a flag for the bootloader entry that survives `NVIC_SystemReset()`.
+
+1. Call `hw::Bkp::enable()`. It enables the PWR and BKP clocks and sets
+   `PWR_CR.DBP`.
+2. Use `hw::Bkp::readDR1()` and `hw::Bkp::writeDR1()`.
+
 ## USB clock: HSI48 and CRS
 
 The USB full-speed peripheral needs a 48 MHz clock. The STM32L0 and the
@@ -341,8 +404,12 @@ driver.
   [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs). On STM32F1, the
   USB clock comes from the PLL: 72 MHz / 1.5 or 48 MHz / 1
   (`RCC_CFGR.USBPRE`). Thus STM32F1 needs a crystal (HSE) for USB.
-- The USB bus clock enabled before `begin()` (`Rcc::enableUSBClock()` on
-  STM32L0, `RCC_APB1ENR.USBEN` on STM32F1).
+  `Rcc::setClock72MhzHSE()` sets this clock (see
+  [STM32F1: 72 MHz from HSE](#stm32f1-72-mhz-from-hse)).
+- The USB bus clock enabled with `Rcc::enableUSBClock()` before `begin()`.
+- On STM32F1, call `Rcc::setClock72MhzHSE()` before `Rcc::enableUSBClock()`.
+  `USBPRE` must be valid before the USB clock is enabled. It cannot change
+  while the USB clock is enabled (RM0008 section 7.3.2).
 - On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
   errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
   underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section
