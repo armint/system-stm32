@@ -299,11 +299,16 @@ this STM32F1 code:
   and the address and store order of the `FastPin` direction switch.
 - USB device driver: the `COUNTn_RX` encoding, the packet memory
   allocation, the buffer descriptor table, and the packet copy at the
-  32-bit CPU stride of the packet memory.
+  32-bit CPU stride of the packet memory. The tests also check the
+  `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT` written as
+  `old ^ wanted`, `DTOG` written as 0, and the configuration bits kept.
 
-The fake USB registers are plain memory. They do not model the toggle bits
-and the `rc_w0` bits of the hardware. Thus the host tests do not test the
-endpoint states or the interrupt handler.
+The fake USB registers are plain memory. A register holds the last written
+value. The fake does not model the toggle bits and the `rc_w0` bits of the
+hardware. Thus the host tests do not test these items:
+
+- The endpoint state after a call with more than one `USB_EPnR` write.
+- The interrupt handler.
 
 The CI job `host-tests` runs them.
 

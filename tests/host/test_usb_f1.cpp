@@ -2,10 +2,15 @@
 // packet memory allocation, the buffer descriptor table, and the packet copy
 // at the 32-bit CPU stride of the packet memory.
 //
-// The registers and the packet memory are plain host memory. The hardware
-// toggle bits (STAT, DTOG) and rc_w0 bits (CTR) are not modelled, so these
-// tests do not check endpoint states or the interrupt handler. Where a test
-// needs an endpoint state, it writes the register itself.
+// The registers and the packet memory are plain host memory, so a register
+// holds the value of the last write. The hardware toggle bits (STAT, DTOG)
+// and rc_w0 bits (CTR) are not modelled. For a call with one EPnR write, the
+// test sets a known EPnR value and checks the written value against the
+// hardware encoding (testEndpointRegisterWrites). After more than one write,
+// the register holds the last written value, not the hardware state; the
+// tests check only that value. The interrupt handler is not tested, because
+// it loops until the hardware clears ISTR.CTR. Where a test needs an endpoint
+// state, it writes the register itself.
 
 #include "UsbDevice.h"
 #include "delaybusywait.h"
@@ -269,6 +274,86 @@ void testReadOutCopiesPacket() {
    CHECK(blockingDepth == 0);
 }
 
+// EPnR write encoding (RM0008 23.5.2): CTR_RX and CTR_TX are written as 1
+// (rc_w0: no change), STAT is written as old ^ wanted, DTOG is written as 0
+// (no change), and EP_TYPE, EP_KIND and EA keep their value.
+constexpr uint16_t CtrKeep = USB_EP_CTR_RX | USB_EP_CTR_TX;
+
+void testEndpointRegisterWrites() {
+   resetFakes();
+   UsbDevice usb;
+   usb.begin(&onEvent, nullptr);
+
+   // After begin(): EP0 is a control endpoint and its last write makes OUT
+   // VALID for the first SETUP. That write saw STAT_RX 0 in the fake
+   // register and writes STAT_TX as 0 (no change).
+   CHECK(epr(0) == (CtrKeep | USB_EP_CONTROL | USB_EP_RX_VALID));
+
+   CHECK(usb.openEndpoint(0x01, EndpointType::Bulk, 64));
+   CHECK(usb.openEndpoint(0x81, EndpointType::Bulk, 64));
+   const std::array<uint8_t, 2> data{ 1, 2 };
+
+   // startIn(): STAT_TX from NAK to VALID. The other bits do not change.
+   epr(1) = USB_EP_BULK | 1 | USB_EP_TX_NAK | USB_EP_DTOG_TX | USB_EP_RX_NAK | USB_EP_DTOG_RX;
+   CHECK(usb.startIn(0x81, data));
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | (USB_EP_TX_NAK ^ USB_EP_TX_VALID)));
+
+   // armOut(): STAT_RX from NAK to VALID. EP_KIND keeps its value.
+   epr(1) = USB_EP_BULK | USB_EP_KIND | 1 | USB_EP_RX_NAK | USB_EP_DTOG_RX | USB_EP_TX_VALID;
+   CHECK(usb.armOut(0x01));
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | USB_EP_KIND | 1 | (USB_EP_RX_NAK ^ USB_EP_RX_VALID)));
+
+   // setStall(true): from NAK to STALL.
+   epr(1) = USB_EP_BULK | 1 | USB_EP_TX_NAK | USB_EP_RX_NAK;
+   usb.setStall(0x81, true);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | (USB_EP_TX_NAK ^ USB_EP_TX_STALL)));
+   epr(1) = USB_EP_BULK | 1 | USB_EP_TX_NAK | USB_EP_RX_NAK;
+   usb.setStall(0x01, true);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | (USB_EP_RX_NAK ^ USB_EP_RX_STALL)));
+
+   // setNak(): from STALL to NAK. A pending CTR is written as 1, so it stays.
+   epr(1) = USB_EP_CTR_TX | USB_EP_BULK | 1 | USB_EP_TX_STALL;
+   usb.setNak(0x81);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | (USB_EP_TX_STALL ^ USB_EP_TX_NAK)));
+   epr(1) = USB_EP_CTR_RX | USB_EP_BULK | 1 | USB_EP_RX_VALID;
+   usb.setNak(0x01);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | (USB_EP_RX_VALID ^ USB_EP_RX_NAK)));
+
+   // setStall(false) writes twice: DTOG to DATA0, then STAT. The fake
+   // register holds the second write, which saw STAT 0 in the first one.
+   epr(1) = USB_EP_BULK | 1 | USB_EP_TX_STALL | USB_EP_DTOG_TX;
+   usb.setStall(0x81, false);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | USB_EP_TX_NAK));
+   epr(1) = USB_EP_BULK | 1 | USB_EP_RX_STALL | USB_EP_DTOG_RX;
+   usb.setStall(0x01, false);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | USB_EP_RX_NAK));
+   // EP0 OUT goes to VALID, ready for the next SETUP.
+   epr(0) = USB_EP_CONTROL | USB_EP_RX_STALL | USB_EP_DTOG_RX;
+   usb.setStall(0x00, false);
+   CHECK(epr(0) == (CtrKeep | USB_EP_CONTROL | USB_EP_RX_VALID));
+
+   // openEndpoint() of the second direction: DTOG to DATA0, then STAT to
+   // NAK. Without the DTOG write, the STAT write would see the old NAK and
+   // write STAT_TX 0.
+   CHECK(usb.openEndpoint(0x02, EndpointType::Bulk, 64));
+   epr(2) = USB_EP_BULK | 2 | USB_EP_TX_NAK | USB_EP_DTOG_TX | USB_EP_RX_NAK;
+   CHECK(usb.openEndpoint(0x82, EndpointType::Bulk, 64));
+   CHECK(epr(2) == (CtrKeep | USB_EP_BULK | 2 | USB_EP_TX_NAK));
+
+   // No write for an endpoint that is not open.
+   epr(3) = USB_EP_TX_NAK;
+   usb.setStall(0x83, true);
+   usb.setNak(0x83);
+   CHECK(!usb.armOut(0x03));
+   CHECK(epr(3) == USB_EP_TX_NAK);
+
+   // No write when startIn() rejects the packet.
+   epr(1) = USB_EP_BULK | 1 | USB_EP_TX_VALID;
+   CHECK(!usb.startIn(0x81, data));
+   CHECK(epr(1) == (USB_EP_BULK | 1 | USB_EP_TX_VALID));
+   CHECK(blockingDepth == 0);
+}
+
 void testSetAddressAndStall() {
    resetFakes();
    UsbDevice usb;
@@ -314,6 +399,7 @@ int main() {
    testPacketMemoryFull();
    testStartInCopiesPacket();
    testReadOutCopiesPacket();
+   testEndpointRegisterWrites();
    testSetAddressAndStall();
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
