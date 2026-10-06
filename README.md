@@ -292,10 +292,25 @@ Measure it on hardware with the DWT cycle counter (`DWT->CYCCNT`).
 ## Host tests
 
 `tests/host/` holds unit tests that run on the build machine, with fake
-registers. They test the code that needs no hardware. Today this is the
-STM32F1 GPIO code: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`,
-`toggle()`, and the address and store order of the `FastPin` direction
-switch. The CI job `host-tests` runs them.
+registers. They test the code that needs no hardware. Today they test
+this STM32F1 code:
+
+- GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
+  and the address and store order of the `FastPin` direction switch.
+- USB device driver: the `COUNTn_RX` encoding, the packet memory
+  allocation, the buffer descriptor table, and the packet copy at the
+  32-bit CPU stride of the packet memory. The tests also check the
+  `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT` written as
+  `old ^ wanted`, `DTOG` written as 0, and the configuration bits kept.
+
+The fake USB registers are plain memory. A register holds the last written
+value. The fake does not model the toggle bits and the `rc_w0` bits of the
+hardware. Thus the host tests do not test these items:
+
+- The endpoint state after a call with more than one `USB_EPnR` write.
+- The interrupt handler.
+
+The CI job `host-tests` runs them.
 
 ```sh
 cmake -S tests/host -B build-host
