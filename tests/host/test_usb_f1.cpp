@@ -12,12 +12,11 @@
 #include "utils/Interrupt.h"
 
 #include <array>
-#include <bit>
 #include <cstdio>
 #include <cstring>
 
 USB_TypeDef hostUsbRegisters;
-uint32_t hostUsbPacketMemory[256];
+uint16_t hostUsbPacketMemory[512];
 
 namespace {
 
@@ -30,9 +29,6 @@ int failures = 0;
          ++failures;                                                 \
       }                                                              \
    } while(0)
-
-// The test reads the low half of each 32-bit slot as the 16-bit word.
-static_assert(std::endian::native == std::endian::little);
 
 int blockingDepth = 0;
 int blockingSections = 0;
@@ -50,7 +46,7 @@ void resetFakes() {
 
 // The 16-bit word at USB-local offset `offset` (even), as the CPU sees it.
 uint16_t &pma(uint16_t offset) {
-   return reinterpret_cast<uint16_t *>(hostUsbPacketMemory)[offset];
+   return hostUsbPacketMemory[offset];
 }
 
 uint16_t addrTx(uint8_t n) {
@@ -76,8 +72,8 @@ void setEprTxStatus(uint8_t n, uint16_t status) {
 
 // The CPU stride: the upper half of every 32-bit slot stays unused.
 bool upperHalvesUnused() {
-   for(uint32_t slot : hostUsbPacketMemory) {
-      if((slot >> 16) != 0) {
+   for(size_t word = 1; word < 512; word += 2) {
+      if(hostUsbPacketMemory[word] != 0) {
          return false;
       }
    }
