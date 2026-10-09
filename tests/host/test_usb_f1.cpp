@@ -8,9 +8,10 @@
 // test sets a known EPnR value and checks the written value against the
 // hardware encoding (testEndpointRegisterWrites). After more than one write,
 // the register holds the last written value, not the hardware state; the
-// tests check only that value. The interrupt handler is not tested, because
-// it loops until the hardware clears ISTR.CTR. Where a test needs an endpoint
-// state, it writes the register itself.
+// tests check only that value. The interrupt handler runs only for the
+// double-buffered OUT tests: the test sets the CTR bits, and the event
+// callback clears ISTR, as the hardware does when no CTR bit is left. Where
+// a test needs an endpoint state, it writes the register itself.
 
 #include "UsbDevice.h"
 #include "delaybusywait.h"
@@ -19,6 +20,7 @@
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 USB_TypeDef hostUsbRegisters;
 uint16_t hostUsbPacketMemory[512];
@@ -65,6 +67,13 @@ uint16_t addrRx(uint8_t n) {
 }
 uint16_t &countRx(uint8_t n) {
    return pma(static_cast<uint16_t>(n * 8 + 6));
+}
+
+// Writes bytes i and i + 1 of a test packet (first, first + 1, ...) at the
+// USB offset `pma` + i.
+void pma16Write(uint16_t pmaOffset, uint16_t i, uint8_t first, uint16_t size) {
+   auto byte = [&](uint16_t k) { return static_cast<uint8_t>(k < size ? first + k : 0); };
+   pma(static_cast<uint16_t>(pmaOffset + i)) = static_cast<uint16_t>(byte(i) | byte(static_cast<uint16_t>(i + 1)) << 8);
 }
 
 volatile uint16_t &epr(uint8_t n) {
@@ -386,6 +395,165 @@ void testSmallBufferDescriptorTable() {
    CHECK(blockingDepth == 0);
 }
 
+// The layout of a device with endpoint numbers 0..4 and a double-buffered
+// bulk OUT endpoint: the Versaloon dongle (vendor OUT 0x03 double-buffered,
+// IN 0x82, CDC notification 0x81, CDC data 0x04 and 0x84).
+void testDoubleBufferedOutLayout() {
+   resetFakes();
+   UsbDevice usb{ 5 };
+   usb.begin(&onEvent, nullptr);
+   constexpr uint16_t btable = 5 * 8;
+   CHECK(addrRx(0) == btable);
+   CHECK(addrTx(0) == btable + 64);
+
+   const uint16_t first = btable + 128;
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+   CHECK(addrTx(3) == first); // buffer 0
+   CHECK(addrRx(3) == first + 64); // buffer 1
+   CHECK(countTx(3) == UsbDevice::rxBufferSize(64).count);
+   CHECK(countRx(3) == UsbDevice::rxBufferSize(64).count);
+   CHECK((epr(3) & (USB_EP_T_FIELD | USB_EP_KIND | USB_EPADDR_FIELD)) == (USB_EP_BULK | USB_EP_KIND | 3));
+
+   CHECK(usb.openEndpoint(0x82, EndpointType::Bulk, 64));
+   CHECK(usb.openEndpoint(0x81, EndpointType::Interrupt, 16));
+   CHECK(usb.openEndpoint(0x04, EndpointType::Bulk, 64));
+   CHECK(usb.openEndpoint(0x84, EndpointType::Bulk, 64));
+   // 504 of the 512 bytes
+   CHECK(addrTx(4) == first + 128 + 64 + 16 + 64);
+   CHECK(addrTx(4) + 64 <= UsbDevice::PacketMemorySize);
+   // A normal endpoint has no DBL_BUF.
+   CHECK((epr(4) & USB_EP_KIND) == 0);
+
+   // Reopening keeps the buffers, also double-buffered.
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+   CHECK(addrTx(3) == first);
+   CHECK(addrRx(3) == first + 64);
+   CHECK(upperHalvesUnused());
+   CHECK(blockingDepth == 0);
+}
+
+void testDoubleBufferedOutRejects() {
+   resetFakes();
+   UsbDevice usb{ 5 };
+   usb.begin(&onEvent, nullptr);
+
+   CHECK(!usb.openEndpoint(0x81, EndpointType::Bulk, 64, true)); // IN
+   CHECK(!usb.openEndpoint(0x01, EndpointType::Interrupt, 64, true)); // not bulk
+
+   CHECK(usb.openEndpoint(0x81, EndpointType::Bulk, 64));
+   CHECK(!usb.openEndpoint(0x01, EndpointType::Bulk, 64, true)); // IN is open
+
+   CHECK(usb.openEndpoint(0x02, EndpointType::Bulk, 64, true));
+   CHECK(!usb.openEndpoint(0x82, EndpointType::Bulk, 64)); // unidirectional
+   CHECK(!usb.openEndpoint(0x02, EndpointType::Bulk, 64)); // doubleBuffered differs
+   CHECK(!usb.openEndpoint(0x02, EndpointType::Bulk, 32, true)); // size differs
+
+   CHECK(blockingDepth == 0);
+}
+
+std::vector<hw::usb::Event> events;
+
+// The interrupt clears ISTR.CTR when no CTR bit is left. The fake does it
+// when the driver reports an event. The fake register keeps a CTR bit that
+// the driver writes as 1 (no change), so the handler can see a CTR_TX that
+// the hardware does not set. The test records only the Out events.
+void recordEvent(void *, const hw::usb::Event &event) {
+   if(event.type == hw::usb::EventType::Out) {
+      events.push_back(event);
+   }
+   hostUsbRegisters.ISTR = 0;
+}
+
+// The hardware receives a packet into `buffer` of double-buffered endpoint
+// n, toggles DTOG_RX, sets CTR_RX, and raises the interrupt.
+void receiveDoubleBuffered(UsbDevice &usb, uint8_t n, uint8_t buffer, uint8_t first, uint16_t size) {
+   uint16_t address = buffer == 0 ? addrTx(n) : addrRx(n);
+   for(uint16_t i = 0; i < size; i += 2) {
+      pma16Write(address, i, first, size);
+   }
+   uint16_t &count = buffer == 0 ? pma(static_cast<uint16_t>(n * 8 + 2)) : countRx(n);
+   count = static_cast<uint16_t>((count & ~0x03FFu) | size);
+   // After the packet, DTOG_RX selects the other buffer.
+   uint16_t dtog = buffer == 0 ? USB_EP_DTOG_RX : 0;
+   epr(n) = static_cast<uint16_t>(USB_EP_CTR_RX | USB_EP_BULK | USB_EP_KIND | n | USB_EP_RX_VALID | dtog);
+   hostUsbRegisters.ISTR = static_cast<uint16_t>(USB_ISTR_CTR | n);
+   usb.handleInterrupt();
+}
+
+void testDoubleBufferedOutFlow() {
+   resetFakes();
+   events.clear();
+   UsbDevice usb{ 5 };
+   usb.begin(&recordEvent, nullptr);
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+   std::array<uint8_t, 64> out{};
+
+   // Before the first packet: no packet to read.
+   CHECK(usb.armOut(0x03));
+   CHECK(usb.readOut(0x03, out) == 0);
+
+   // Packet A in buffer 0: reported at once. The driver toggles SW_BUF, so
+   // the hardware can receive into buffer 1.
+   receiveDoubleBuffered(usb, 3, 0, 0xA0, 64);
+   CHECK(events.size() == 1);
+   CHECK(events.back().type == hw::usb::EventType::Out && events.back().endpoint == 3 && events.back().size == 64);
+   CHECK(epr(3) == (CtrKeep | USB_EP_BULK | USB_EP_KIND | 3 | USB_EP_DTOG_TX));
+   CHECK(usb.readOut(0x03, out) == 64);
+   CHECK(out[0] == 0xA0 && out[63] == 0xA0 + 63);
+
+   // Packet B in buffer 1 before armOut(): no event and no SW_BUF toggle.
+   // The software still reads packet A.
+   receiveDoubleBuffered(usb, 3, 1, 0xB0, 10);
+   CHECK(events.size() == 1);
+   CHECK((epr(3) & USB_EP_DTOG_TX) == 0);
+   CHECK(usb.readOut(0x03, out) == 64);
+   CHECK(out[0] == 0xA0);
+
+   // armOut() frees buffer 0 and reports packet B.
+   CHECK(usb.armOut(0x03));
+   CHECK(events.size() == 2);
+   CHECK(events.back().size == 10);
+   CHECK(usb.readOut(0x03, out) == 10);
+   CHECK(out[0] == 0xB0 && out[9] == 0xB9);
+
+   // armOut() with no waiting packet reports nothing. Packet C in buffer 0
+   // is reported at once.
+   CHECK(usb.armOut(0x03));
+   CHECK(events.size() == 2);
+   CHECK(usb.readOut(0x03, out) == 0);
+   receiveDoubleBuffered(usb, 3, 0, 0xC0, 1);
+   CHECK(events.size() == 3);
+   CHECK(usb.readOut(0x03, out) == 1);
+   CHECK(out[0] == 0xC0);
+
+   // A clear of STALL drops a waiting packet and starts at buffer 0 again:
+   // DTOG_RX 0 and SW_BUF 1.
+   receiveDoubleBuffered(usb, 3, 1, 0xD0, 4);
+   CHECK(events.size() == 3);
+   epr(3) = USB_EP_BULK | USB_EP_KIND | 3 | USB_EP_RX_STALL | USB_EP_DTOG_RX;
+   usb.setStall(0x03, false);
+   CHECK(usb.readOut(0x03, out) == 0);
+   CHECK(usb.armOut(0x03));
+   CHECK(events.size() == 3);
+   CHECK(blockingDepth == 0);
+}
+
+// The toggle writes: DTOG_RX to 0 and SW_BUF (DTOG_TX) to 1, as 1 where
+// the bit must change.
+void testDoubleBufferedOutToggles() {
+   resetFakes();
+   UsbDevice usb{ 5 };
+   usb.begin(&onEvent, nullptr);
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+
+   epr(3) = USB_EP_BULK | USB_EP_KIND | 3 | USB_EP_RX_STALL | USB_EP_DTOG_RX;
+   usb.setStall(0x03, false);
+   // Two writes; the fake holds the second (STAT to NAK), which saw STAT 0.
+   CHECK(epr(3) == (CtrKeep | USB_EP_BULK | USB_EP_KIND | 3 | USB_EP_RX_NAK));
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+   CHECK(blockingDepth == 0);
+}
+
 void testSetAddressAndStall() {
    resetFakes();
    UsbDevice usb;
@@ -434,6 +602,10 @@ int main() {
    testEndpointRegisterWrites();
    testSetAddressAndStall();
    testSmallBufferDescriptorTable();
+   testDoubleBufferedOutLayout();
+   testDoubleBufferedOutRejects();
+   testDoubleBufferedOutFlow();
+   testDoubleBufferedOutToggles();
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
       return 1;

@@ -74,8 +74,16 @@ namespace hw {
 // (NAK after Out/InComplete/Setup, or not armed yet). Do not use them to
 // cancel a pending startIn() or armOut().
 //
+// Double-buffered bulk OUT (RM0008 23.4.3): openEndpoint() with
+// doubleBuffered true uses both buffer descriptors of the endpoint number.
+// The hardware receives the next packet into the second buffer while the
+// software still reads the first. The interface stays the same: the driver
+// reports one Out event per armOut(), and readOut() reads that packet. A
+// packet that arrives before armOut() waits in the second buffer, and
+// armOut() reports it. The endpoint number then has no IN direction.
+//
 // Limits: 8 endpoint registers (endpoint numbers 0..7), 512 bytes of packet
-// memory, no isochronous and no double-buffered endpoints.
+// memory, no isochronous endpoints, no double-buffered IN endpoints.
 class UsbDevice {
    public:
    static constexpr uint8_t EndpointCount = 8;
@@ -137,14 +145,20 @@ class UsbDevice {
     * packet memory. The endpoint starts with data toggle DATA0 and answers
     * NAK. Both directions of one endpoint number share one register and must
     * have the same type.
+    * @param doubleBuffered true: a double-buffered bulk OUT endpoint with two
+    * buffers of maxPacketSize (see the class comment). The IN direction of
+    * the number stays closed.
     * @return false for endpoint number >= the endpointCount of the
     * constructor, isochronous type,
     * control type on an endpoint other than 0, maxPacketSize 0 or > 64 (the full-speed limit for control, bulk and
     * interrupt endpoints), a type that does not match the other direction,
-    * a direction that is already open with another maxPacketSize (call
-    * closeAllEndpoints() first), or not enough packet memory.
+    * a direction that is already open with another maxPacketSize or another
+    * doubleBuffered (call closeAllEndpoints() first), or not enough packet
+    * memory. With doubleBuffered: also false for an IN or a non-bulk
+    * endpoint, or when the IN direction of the number is open. An IN
+    * direction cannot open on the number of a double-buffered endpoint.
     */
-   [[nodiscard]] bool openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize);
+   [[nodiscard]] bool openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize, bool doubleBuffered = false);
 
    /**
     * @brief Disables every endpoint except EP0 and frees their packet
@@ -162,6 +176,9 @@ class UsbDevice {
 
    /**
     * @brief Makes an OUT endpoint VALID, so it accepts the next packet.
+    * Double-buffered: frees the buffer of the reported packet. If the next
+    * packet is already in the other buffer, it reports that packet (Out
+    * event) before it returns.
     * @return false if the endpoint is not open.
     */
    bool armOut(uint8_t address);
@@ -218,10 +235,21 @@ class UsbDevice {
    }
 
    private:
+   static constexpr uint8_t NoBuffer = 0xFF;
+
    struct Direction {
       uint16_t pmaAddress = 0;
       uint16_t maxPacketSize = 0;
       bool open = false;
+      // Double-buffered OUT only. pmaAddress is buffer 0 (the TX
+      // descriptor), pmaAddress1 buffer 1 (the RX descriptor).
+      bool doubleBuffered = false;
+      bool armed = false;
+      uint16_t pmaAddress1 = 0;
+      // The buffer of the reported packet, until armOut()
+      uint8_t reportedBuffer = NoBuffer;
+      // The buffer of a received packet that waits for armOut()
+      uint8_t pendingBuffer = NoBuffer;
    };
 
    struct Endpoint {
@@ -244,6 +272,9 @@ class UsbDevice {
 
    void resetEndpoints();
    void report(usb::EventType type, uint8_t endpoint, uint16_t size = 0);
+   void resetDoubleBuffer(uint8_t n);
+   void receiveDoubleBuffered(uint8_t n, uint16_t epr);
+   void reportDoubleBuffered(uint8_t n, uint8_t buffer);
    uint16_t allocate(uint16_t bytes);
    Direction *direction(uint8_t address);
    const Direction *direction(uint8_t address) const;

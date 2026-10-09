@@ -50,6 +50,20 @@ void resetRxToggle(uint8_t n) {
    epr(n) = static_cast<uint16_t>((v & EpConfigBits) | EpCtrKeep | (v & USB_EP_DTOG_RX));
 }
 
+// Double-buffered OUT (RM0008 23.4.3): DTOG_RX selects the buffer of the
+// hardware, SW_BUF (the DTOG_TX bit) the buffer of the software. Start with
+// DTOG_RX = 0 and SW_BUF = 1: the hardware receives into buffer 0 first.
+void resetDoubleBufferToggles(uint8_t n) {
+   uint16_t v = epr(n);
+   epr(n) = static_cast<uint16_t>((v & EpConfigBits) | EpCtrKeep | (v & USB_EP_DTOG_RX) | (~v & USB_EP_DTOG_TX));
+}
+
+// Gives one buffer back to the hardware.
+void toggleSwBuf(uint8_t n) {
+   uint16_t v = epr(n);
+   epr(n) = static_cast<uint16_t>((v & EpConfigBits) | EpCtrKeep | USB_EP_DTOG_TX);
+}
+
 void clearCtrRx(uint8_t n) {
    uint16_t v = epr(n);
    epr(n) = static_cast<uint16_t>((v & EpConfigBits) | USB_EP_CTR_TX);
@@ -60,8 +74,9 @@ void clearCtrTx(uint8_t n) {
    epr(n) = static_cast<uint16_t>((v & EpConfigBits) | USB_EP_CTR_RX);
 }
 
-// Type and address are plain rw bits; the toggle bits are written as 0.
-void setTypeAndAddress(uint8_t n, EndpointType type) {
+// Type, kind and address are plain rw bits; the toggle bits are written as
+// 0. kind: DBL_BUF for a bulk endpoint.
+void setTypeAndAddress(uint8_t n, EndpointType type, bool kind) {
    uint16_t t = USB_EP_BULK;
    switch(type) {
       case EndpointType::Control:
@@ -76,7 +91,7 @@ void setTypeAndAddress(uint8_t n, EndpointType type) {
       case EndpointType::Bulk:
          break;
    }
-   epr(n) = static_cast<uint16_t>(EpCtrKeep | t | n);
+   epr(n) = static_cast<uint16_t>(EpCtrKeep | t | (kind ? USB_EP_KIND : 0u) | n);
 }
 
 // --- Packet memory (RM0008 23.5, 23.5.3) -------------------------------------
@@ -222,7 +237,7 @@ uint16_t UsbDevice::allocate(uint16_t bytes) {
    return address;
 }
 
-bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize) {
+bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize, bool doubleBuffered) {
    Interrupt::BlockingSection block(UsbIrq);
    uint8_t n = usb::endpointNumber(address);
    Direction *dir = direction(address);
@@ -230,34 +245,45 @@ bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t m
       maxPacketSize == 0 || maxPacketSize > 64) {
       return false;
    }
+   bool in = usb::isInEndpoint(address);
    Endpoint &ep = _endpoints[n];
-   const Direction &other = usb::isInEndpoint(address) ? ep.out : ep.in;
-   if(other.open && ep.type != type) {
+   const Direction &other = in ? ep.out : ep.in;
+   if(other.open && (ep.type != type || doubleBuffered || other.doubleBuffered)) {
+      return false;
+   }
+   if(doubleBuffered && (in || type != EndpointType::Bulk)) {
       return false;
    }
 
-   bool in = usb::isInEndpoint(address);
    // Reopening with the same size reuses the buffer. A different size would
    // need a new buffer and leak the old one until closeAllEndpoints().
-   if(dir->open && dir->maxPacketSize != maxPacketSize) {
+   if(dir->open && (dir->maxPacketSize != maxPacketSize || dir->doubleBuffered != doubleBuffered)) {
       return false;
    }
    if(!dir->open) {
       uint16_t bytes = in ? maxPacketSize : rxBufferSize(maxPacketSize).pmaBytes;
-      uint16_t pma = allocate(bytes);
+      uint16_t pma = allocate(doubleBuffered ? static_cast<uint16_t>(2u * bytes) : bytes);
       if(pma == 0) {
          return false;
       }
       dir->pmaAddress = pma;
+      dir->pmaAddress1 = doubleBuffered ? static_cast<uint16_t>(pma + bytes) : 0u;
       dir->maxPacketSize = maxPacketSize;
+      dir->doubleBuffered = doubleBuffered;
    }
    dir->open = true;
    ep.type = type;
 
    if(!other.open) {
-      setTypeAndAddress(n, type);
+      setTypeAndAddress(n, type, doubleBuffered);
    }
-   if(in) {
+   if(doubleBuffered) {
+      addrTx(n) = dir->pmaAddress;
+      countTx(n) = rxBufferSize(maxPacketSize).count;
+      addrRx(n) = dir->pmaAddress1;
+      countRx(n) = rxBufferSize(maxPacketSize).count;
+      resetDoubleBuffer(n);
+   } else if(in) {
       addrTx(n) = dir->pmaAddress;
       countTx(n) = 0;
       resetTxToggle(n);
@@ -328,7 +354,25 @@ bool UsbDevice::armOut(uint8_t address) {
    if(usb::isInEndpoint(address) || dir == nullptr || !dir->open) {
       return false;
    }
-   setRxStatus(usb::endpointNumber(address), USB_EP_RX_VALID);
+   uint8_t n = usb::endpointNumber(address);
+   if(dir->doubleBuffered) {
+      Direction &out = _endpoints[n].out;
+      out.reportedBuffer = NoBuffer;
+      if(out.pendingBuffer != NoBuffer) {
+         uint8_t buffer = out.pendingBuffer;
+         out.pendingBuffer = NoBuffer;
+         reportDoubleBuffered(n, buffer);
+      }
+      out.armed = true;
+      // STAT stays VALID after the first packet (RM0008 23.4.3). It is NAK
+      // only before the first armOut(), after setNak(), and after the
+      // first packet.
+      if((epr(n) & USB_EPRX_STAT) != USB_EP_RX_VALID) {
+         setRxStatus(n, USB_EP_RX_VALID);
+      }
+      return true;
+   }
+   setRxStatus(n, USB_EP_RX_VALID);
    return true;
 }
 
@@ -339,7 +383,18 @@ uint16_t UsbDevice::readOut(uint8_t address, hw::span<uint8_t> buffer) const {
       return 0;
    }
    uint8_t n = usb::endpointNumber(address);
+   uint16_t pma = dir->pmaAddress;
    uint16_t size = n == 0 ? _ep0OutSize : countRx(n) & CountMask;
+   if(dir->doubleBuffered) {
+      if(dir->reportedBuffer == NoBuffer) {
+         return 0;
+      }
+      if(dir->reportedBuffer == 0) {
+         size = countTx(n) & CountMask;
+      } else {
+         pma = dir->pmaAddress1;
+      }
+   }
    if(size > buffer.size()) {
       size = static_cast<uint16_t>(buffer.size());
    }
@@ -348,7 +403,7 @@ uint16_t UsbDevice::readOut(uint8_t address, hw::span<uint8_t> buffer) const {
          buffer[i] = _ep0Out[i];
       }
    } else {
-      copyFromPma(dir->pmaAddress, buffer.data(), size);
+      copyFromPma(pma, buffer.data(), size);
    }
    return size;
 }
@@ -370,6 +425,9 @@ void UsbDevice::setStall(uint8_t address, bool stall) {
    } else {
       if(stall) {
          setRxStatus(n, USB_EP_RX_STALL);
+      } else if(dir->doubleBuffered) {
+         // Drops the packets in the buffers, as a clear drops the transfer.
+         resetDoubleBuffer(n);
       } else {
          resetRxToggle(n);
          // EP0 OUT must stay ready for the next SETUP.
@@ -399,6 +457,7 @@ void UsbDevice::setNak(uint8_t address) {
    if(usb::isInEndpoint(address)) {
       setTxStatus(n, USB_EP_TX_NAK);
    } else {
+      _endpoints[n].out.armed = false;
       setRxStatus(n, USB_EP_RX_NAK);
    }
 }
@@ -408,6 +467,43 @@ void UsbDevice::report(usb::EventType type, uint8_t endpoint, uint16_t size) {
       usb::Event event{ type, endpoint, size, {} };
       _callback(_context, event);
    }
+}
+
+void UsbDevice::resetDoubleBuffer(uint8_t n) {
+   Direction &out = _endpoints[n].out;
+   out.armed = false;
+   out.reportedBuffer = NoBuffer;
+   out.pendingBuffer = NoBuffer;
+   resetDoubleBufferToggles(n);
+   setRxStatus(n, USB_EP_RX_NAK);
+}
+
+void UsbDevice::receiveDoubleBuffered(uint8_t n, uint16_t eprValue) {
+   Direction &out = _endpoints[n].out;
+   // The hardware toggled DTOG_RX at the end of the packet, so the packet is
+   // in the other buffer.
+   uint8_t buffer = (eprValue & USB_EP_DTOG_RX) != 0 ? 0 : 1;
+   if(out.reportedBuffer == NoBuffer) {
+      reportDoubleBuffered(n, buffer);
+   } else {
+      // The software reads the other buffer. DTOG_RX equals SW_BUF now, so
+      // the hardware NAKs until armOut() reports this packet.
+      out.pendingBuffer = buffer;
+   }
+   // The first packet after DBL_BUF sets STAT to NAK (RM0008 23.4.3).
+   if(out.armed && (epr(n) & USB_EPRX_STAT) == USB_EP_RX_NAK) {
+      setRxStatus(n, USB_EP_RX_VALID);
+   }
+}
+
+void UsbDevice::reportDoubleBuffered(uint8_t n, uint8_t buffer) {
+   Direction &out = _endpoints[n].out;
+   out.reportedBuffer = buffer;
+   // The software keeps this buffer until armOut(). The toggle gives the
+   // other buffer to the hardware, so the next packet can come in now.
+   toggleSwBuf(n);
+   uint16_t size = static_cast<uint16_t>((buffer == 0 ? countTx(n) : countRx(n)) & CountMask);
+   report(EventType::Out, n, size);
 }
 
 void UsbDevice::handleInterrupt() {
@@ -451,6 +547,11 @@ void UsbDevice::handleInterrupt() {
             if(_callback != nullptr) {
                _callback(_context, event);
             }
+         } else if(_endpoints[n].out.doubleBuffered) {
+            // Clear CTR_RX before the SW_BUF toggle: the toggle lets the
+            // next packet in, and its CTR_RX must stay set.
+            clearCtrRx(n);
+            receiveDoubleBuffered(n, v);
          } else {
             if(n == 0) {
                // Same reason as SETUP: copy before CTR_RX is cleared. While
