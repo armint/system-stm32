@@ -354,6 +354,38 @@ void testEndpointRegisterWrites() {
    CHECK(blockingDepth == 0);
 }
 
+// A device with endpoint numbers 0..4 has a 40-byte buffer descriptor
+// table, so the endpoint buffers start at offset 40.
+void testSmallBufferDescriptorTable() {
+   resetFakes();
+   UsbDevice usb{ 5 };
+   usb.begin(&onEvent, nullptr);
+   constexpr uint16_t btable = 5 * 8;
+   CHECK(addrRx(0) == btable);
+   CHECK(addrTx(0) == btable + 64);
+   CHECK(!usb.openEndpoint(0x05, EndpointType::Bulk, 64)); // only EP0..EP4
+   CHECK(!usb.openEndpoint(0x85, EndpointType::Bulk, 64));
+   CHECK(usb.openEndpoint(0x84, EndpointType::Bulk, 64));
+   CHECK(addrTx(4) == btable + 128);
+
+   // closeAllEndpoints() frees everything after the EP0 buffers.
+   usb.closeAllEndpoints();
+   CHECK(usb.openEndpoint(0x01, EndpointType::Bulk, 64));
+   CHECK(addrRx(1) == btable + 128);
+
+   // A count of 0 or above 8 gives 8.
+   resetFakes();
+   UsbDevice all{ 9 };
+   all.begin(&onEvent, nullptr);
+   CHECK(addrRx(0) == BtableSize);
+   CHECK(all.openEndpoint(0x07, EndpointType::Bulk, 8));
+   resetFakes();
+   UsbDevice none{ 0 };
+   none.begin(&onEvent, nullptr);
+   CHECK(addrRx(0) == BtableSize);
+   CHECK(blockingDepth == 0);
+}
+
 void testSetAddressAndStall() {
    resetFakes();
    UsbDevice usb;
@@ -401,6 +433,7 @@ int main() {
    testReadOutCopiesPacket();
    testEndpointRegisterWrites();
    testSetAddressAndStall();
+   testSmallBufferDescriptorTable();
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
       return 1;

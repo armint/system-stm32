@@ -137,6 +137,12 @@ static_assert(UsbDevice::rxBufferSize(63).count == 0x8400 && UsbDevice::rxBuffer
 static_assert(UsbDevice::rxBufferSize(64).count == 0x8400 && UsbDevice::rxBufferSize(64).pmaBytes == 64);
 static_assert(UsbDevice::rxBufferSize(0).pmaBytes == 2);
 
+UsbDevice::UsbDevice(uint8_t endpointCount)
+   : _endpointCount(endpointCount == 0 || endpointCount > EndpointCount ? EndpointCount : endpointCount)
+   , _btableSize(static_cast<uint16_t>(_endpointCount * 8u))
+   , _pmaNext(_btableSize) {
+}
+
 void UsbDevice::begin(usb::EventCallback callback, void *context) {
    _callback = callback;
    _context = context;
@@ -196,7 +202,7 @@ void UsbDevice::setAddress(uint8_t address) {
 
 UsbDevice::Direction *UsbDevice::direction(uint8_t address) {
    uint8_t n = usb::endpointNumber(address);
-   if(n >= EndpointCount) {
+   if(n >= _endpointCount) {
       return nullptr;
    }
    return usb::isInEndpoint(address) ? &_endpoints[n].in : &_endpoints[n].out;
@@ -273,7 +279,7 @@ void UsbDevice::closeAllEndpoints() {
       _endpoints[n] = {};
    }
    // EP0 buffers are allocated first, so everything after them is free.
-   uint16_t end = BtableSize;
+   uint16_t end = _btableSize;
    for(const Direction *d : { &_endpoints[0].in, &_endpoints[0].out }) {
       if(d->open) {
          uint16_t bytes = d == &_endpoints[0].in ? d->maxPacketSize : rxBufferSize(d->maxPacketSize).pmaBytes;
@@ -290,7 +296,7 @@ void UsbDevice::resetEndpoints() {
    for(uint8_t n = 0; n < EndpointCount; ++n) {
       _endpoints[n] = {};
    }
-   _pmaNext = BtableSize;
+   _pmaNext = _btableSize;
    // EP0: control, OUT VALID so the first SETUP is received, IN NAK.
    (void)openEndpoint(0x00, EndpointType::Control, Ep0MaxPacketSize);
    (void)openEndpoint(0x80, EndpointType::Control, Ep0MaxPacketSize);

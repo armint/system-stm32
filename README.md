@@ -616,6 +616,7 @@ usb.connect();                   // D+ pull-up on: the host sees the device
 | `setPullupCallback(callback, context)` | STM32F1 only. Sets the board function that switches the external D+ pull-up. |
 | `isConnected()` | STM32L0: the state of `USB_BCDR.DPPU`. STM32F1: the state that the last `connect()` or `disconnect()` requested. |
 | `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
+| `UsbDevice(endpointCount)` | STM32F1 only. `endpointCount` is the highest endpoint number of the device plus 1 (default 8). The buffer descriptor table then has `endpointCount * 8` bytes. |
 | `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize`. |
 | `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
 | `startIn(address, data)` | Sends one packet (0 to `maxPacketSize` bytes). Returns `false` while the previous packet is not sent. |
@@ -668,7 +669,8 @@ or `armOut()`.
 
 The packet memory (1024 bytes on STM32L0, 512 bytes on STM32F1) holds
 the buffer descriptor table (64 bytes at offset 0) and the endpoint
-buffers. The driver allocates the
+buffers. On STM32F1, the table has `endpointCount * 8` bytes (see the
+constructor). The driver allocates the
 buffers in sequence. An OUT buffer is rounded up to the `COUNTn_RX`
 block size: 2-byte blocks up to 62 bytes, 32-byte blocks above.
 
@@ -711,6 +713,8 @@ interface, the event model, the `USB_EPnR` toggle logic and the
 - bxCAN shares the packet memory. Do not use CAN together with USB.
 - No LPM and no BCD registers. `USB_CNTR_LPMODE` has the name
   `USB_CNTR_LP_MODE` in the STM32F1 CMSIS header.
+- The constructor argument `endpointCount` makes the buffer descriptor
+  table smaller. This gives more packet memory to the endpoint buffers.
 
 ```cpp
 void usbPullup(void *, bool enable) {

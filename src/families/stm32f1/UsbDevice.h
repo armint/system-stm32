@@ -85,7 +85,13 @@ class UsbDevice {
    // Drives the external D+ pull-up: enable true = pull-up on (attach).
    using PullupCallback = void (*)(void *context, bool enable);
 
-   UsbDevice() = default;
+   /**
+    * @param endpointCount The highest endpoint number that the device uses,
+    * plus 1 (1..EndpointCount). The buffer descriptor table has 8 bytes per
+    * endpoint number, so a smaller count leaves more packet memory for the
+    * endpoint buffers. openEndpoint() refuses higher endpoint numbers.
+    */
+   explicit UsbDevice(uint8_t endpointCount = EndpointCount);
    UsbDevice(const UsbDevice &) = delete;
    UsbDevice &operator=(const UsbDevice &) = delete;
 
@@ -131,7 +137,8 @@ class UsbDevice {
     * packet memory. The endpoint starts with data toggle DATA0 and answers
     * NAK. Both directions of one endpoint number share one register and must
     * have the same type.
-    * @return false for endpoint number >= EndpointCount, isochronous type,
+    * @return false for endpoint number >= the endpointCount of the
+    * constructor, isochronous type,
     * control type on an endpoint other than 0, maxPacketSize 0 or > 64 (the full-speed limit for control, bulk and
     * interrupt endpoints), a type that does not match the other direction,
     * a direction that is already open with another maxPacketSize (call
@@ -223,15 +230,15 @@ class UsbDevice {
       Direction out;
    };
 
-   static constexpr uint16_t BtableSize = EndpointCount * 8;
-
    usb::EventCallback _callback = nullptr;
    void *_context = nullptr;
    PullupCallback _pullupCallback = nullptr;
    void *_pullupContext = nullptr;
    bool _connected = false;
    Endpoint _endpoints[EndpointCount] = {};
-   uint16_t _pmaNext = BtableSize;
+   uint8_t _endpointCount;
+   uint16_t _btableSize;
+   uint16_t _pmaNext;
    uint8_t _ep0Out[Ep0MaxPacketSize] = {};
    uint16_t _ep0OutSize = 0;
 
