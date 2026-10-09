@@ -616,7 +616,8 @@ usb.connect();                   // D+ pull-up on: the host sees the device
 | `setPullupCallback(callback, context)` | STM32F1 only. Sets the board function that switches the external D+ pull-up. |
 | `isConnected()` | STM32L0: the state of `USB_BCDR.DPPU`. STM32F1: the state that the last `connect()` or `disconnect()` requested. |
 | `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
-| `openEndpoint(address, type, maxPacketSize)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize`. |
+| `UsbDevice(endpointCount)` | STM32F1 only. `endpointCount` is the highest endpoint number of the device plus 1 (default 8). The buffer descriptor table then has `endpointCount * 8` bytes. |
+| `openEndpoint(address, type, maxPacketSize, doubleBuffered)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize` and `doubleBuffered`. `doubleBuffered` (default `false`) opens a double-buffered bulk OUT endpoint, on STM32F1 only (see [Double-buffered bulk OUT](#double-buffered-bulk-out-stm32f1)). |
 | `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
 | `startIn(address, data)` | Sends one packet (0 to `maxPacketSize` bytes). Returns `false` while the previous packet is not sent. |
 | `armOut(address)` / `readOut(address, buffer)` | Accepts the next OUT packet / copies the received packet. |
@@ -630,7 +631,7 @@ The interrupt handler reports these events through the callback:
 |---|---|
 | `Reset` | USB bus reset. The driver opens EP0 again (64 bytes, OUT VALID) and sets the address to 0. Other endpoints are closed. |
 | `Setup` | SETUP packet. `Event::setup` holds the 8 bytes. Both directions of the endpoint are then NAK. |
-| `Out` | OUT packet with `Event::size` bytes. The endpoint answers NAK until the next `armOut()`. |
+| `Out` | OUT packet with `Event::size` bytes. The endpoint answers NAK until the next `armOut()`. A double-buffered endpoint can receive one more packet before `armOut()`. `armOut()` then reports that packet. |
 | `InComplete` | The host acknowledged the IN packet. The endpoint answers NAK until the next `startIn()`. |
 | `Suspend` | No bus activity for 3 ms. This also occurs when the cable is pulled. The driver sets `FSUSP`. |
 | `Resume` | Bus activity after `Suspend`. |
@@ -668,7 +669,8 @@ or `armOut()`.
 
 The packet memory (1024 bytes on STM32L0, 512 bytes on STM32F1) holds
 the buffer descriptor table (64 bytes at offset 0) and the endpoint
-buffers. The driver allocates the
+buffers. On STM32F1, the table has `endpointCount * 8` bytes (see the
+constructor). The driver allocates the
 buffers in sequence. An OUT buffer is rounded up to the `COUNTn_RX`
 block size: 2-byte blocks up to 62 bytes, 32-byte blocks above.
 
@@ -681,7 +683,8 @@ driver never reads them: `readOut()` copies only the payload.
 
 - Endpoint numbers 0 to 7. Both directions of one number share one
   register, so they have the same type.
-- No isochronous and no double-buffered endpoints.
+- No isochronous endpoints. Double-buffered bulk OUT endpoints on STM32F1
+  only. No double-buffered IN endpoints.
 - No remote wakeup, no Link Power Management (LPM) and no Battery
   Charging Detection (BCD). On STM32L0, two USB errata of ES0292 do not
   apply: 2.16.2 (SUSP timing after resume signalling by the device) and
@@ -705,12 +708,16 @@ interface, the event model, the `USB_EPnR` toggle logic and the
 - `isConnected()` reports the requested state, not the bus state. With a
   fixed pull-up, the host sees the device from power-on, before `begin()`.
   `isConnected()` is still `false` until `connect()`.
-- Interrupt: `USB_LP_CAN1_RX0_IRQn`. `USB_HP_CAN1_TX_IRQn` is for
-  isochronous and double-buffered endpoints, which the driver does not
-  support.
+- Interrupt: `USB_LP_CAN1_RX0_IRQn`. The hardware also sets
+  `USB_HP_CAN1_TX_IRQn` for isochronous and double-buffered endpoints.
+  The driver does not enable it: the low-priority interrupt also comes for
+  these transfers (RM0008 section 23.3.1).
 - bxCAN shares the packet memory. Do not use CAN together with USB.
 - No LPM and no BCD registers. `USB_CNTR_LPMODE` has the name
   `USB_CNTR_LP_MODE` in the STM32F1 CMSIS header.
+- Double-buffered bulk OUT endpoints (see below).
+- The constructor argument `endpointCount` makes the buffer descriptor
+  table smaller. This gives more packet memory to the endpoint buffers.
 
 ```cpp
 void usbPullup(void *, bool enable) {
@@ -721,3 +728,38 @@ usb.setPullupCallback(&usbPullup, nullptr);
 usb.begin(&onUsbEvent, nullptr);
 usb.connect();
 ```
+
+### Double-buffered bulk OUT (STM32F1)
+
+With a single buffer, an OUT endpoint answers NAK from the end of a packet
+until the next `armOut()`. The host then sends the next packet again
+later, so the transfer rate goes down. A double-buffered bulk OUT endpoint
+(RM0008 section 23.4.3) has two buffers. The hardware receives the next
+packet into one buffer while the software reads the other.
+
+`openEndpoint(address, EndpointType::Bulk, maxPacketSize, true)` opens it.
+The endpoint uses both buffer descriptors of its number. Thus the IN
+direction of that number stays closed. It uses two buffers of
+`maxPacketSize` bytes in packet memory.
+
+The interface does not change. The driver reports one `Out` event for each
+`armOut()`, and `readOut()` reads that packet. These are the steps:
+
+1. A packet arrives, and no packet is reported. The driver reports it at
+   once, and gives the other buffer to the hardware (it toggles `SW_BUF`).
+2. A second packet arrives before `armOut()`. The driver keeps it in the
+   other buffer and reports nothing. The hardware answers NAK, because
+   both buffers are full.
+3. `armOut()` frees the buffer of the reported packet. If a packet waits,
+   `armOut()` reports it before it returns. Thus the event callback can
+   run in the main loop, with the USB interrupt masked.
+
+`setStall(address, false)` and `openEndpoint()` start the buffers again at
+buffer 0. A packet that waits is then lost, as a clear of STALL drops the
+transfer.
+
+A double-buffered 64-byte endpoint uses 128 bytes. With the default
+64-byte table and EP0 (128 bytes), 192 bytes stay free for the other
+endpoints. With `hw::UsbDevice usb{ 5 };` (endpoint numbers 0 to 4), the
+table has 40 bytes, and 216 bytes stay free.
+

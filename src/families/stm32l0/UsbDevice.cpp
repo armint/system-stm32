@@ -201,11 +201,11 @@ uint16_t UsbDevice::allocate(uint16_t bytes) {
    return address;
 }
 
-bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize) {
+bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize, bool doubleBuffered) {
    Interrupt::BlockingSection block(USB_IRQn);
    uint8_t n = usb::endpointNumber(address);
    Direction *dir = direction(address);
-   if(dir == nullptr || type == EndpointType::Isochronous || (type == EndpointType::Control && n != 0) ||
+   if(doubleBuffered || dir == nullptr || type == EndpointType::Isochronous || (type == EndpointType::Control && n != 0) ||
       maxPacketSize == 0 || maxPacketSize > 64) {
       return false;
    }

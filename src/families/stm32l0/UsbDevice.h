@@ -96,13 +96,15 @@ class UsbDevice {
     * packet memory. The endpoint starts with data toggle DATA0 and answers
     * NAK. Both directions of one endpoint number share one register and must
     * have the same type.
-    * @return false for endpoint number >= EndpointCount, isochronous type,
+    * @param doubleBuffered Must be false. The interface is the same as on
+    * STM32F1, where it opens a double-buffered bulk OUT endpoint.
+    * @return false for doubleBuffered true, endpoint number >= EndpointCount, isochronous type,
     * control type on an endpoint other than 0, maxPacketSize 0 or > 64 (the full-speed limit for control, bulk and
     * interrupt endpoints), a type that does not match the other direction,
     * a direction that is already open with another maxPacketSize (call
     * closeAllEndpoints() first), or not enough packet memory.
     */
-   [[nodiscard]] bool openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize);
+   [[nodiscard]] bool openEndpoint(uint8_t address, usb::EndpointType type, uint16_t maxPacketSize, bool doubleBuffered = false);
 
    /**
     * @brief Disables every endpoint except EP0 and frees their packet
