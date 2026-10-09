@@ -419,6 +419,11 @@ void UsbDevice::handleInterrupt() {
    while((istr = USB->ISTR) & USB_ISTR_CTR) {
       uint8_t n = istr & USB_ISTR_EP_ID;
       uint16_t v = epr(n);
+      if((v & (USB_EP_CTR_RX | USB_EP_CTR_TX)) == 0) {
+         // ISTR.CTR without a CTR bit in the register: nothing to do. A
+         // CTR that comes later raises the interrupt again.
+         break;
+      }
       // TX before RX: if both CTR bits are set, the IN transaction came
       // first. After a SETUP the hardware sets STAT_TX to NAK, so no IN can
       // complete while that CTR_RX is pending. Example: the host ACKs the
