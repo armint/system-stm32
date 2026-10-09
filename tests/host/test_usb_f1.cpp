@@ -452,6 +452,11 @@ void testDoubleBufferedOutRejects() {
 }
 
 std::vector<hw::usb::Event> events;
+// When set: the STAT_RX that the hardware has when the driver reports a
+// packet. The fake register loses STAT on each write, so the callback puts
+// it back, before the driver checks for the NAK of the first packet.
+constexpr uint16_t NoStat = 0xFFFF;
+uint16_t rxStatAtEvent = NoStat;
 
 // The interrupt clears ISTR.CTR when no CTR bit is left. The fake does it
 // when the driver reports an event. The fake register keeps a CTR bit that
@@ -460,6 +465,9 @@ std::vector<hw::usb::Event> events;
 void recordEvent(void *, const hw::usb::Event &event) {
    if(event.type == hw::usb::EventType::Out) {
       events.push_back(event);
+      if(rxStatAtEvent != NoStat) {
+         epr(event.endpoint) = static_cast<uint16_t>((epr(event.endpoint) & ~USB_EPRX_STAT) | rxStatAtEvent);
+      }
    }
    hostUsbRegisters.ISTR = 0;
 }
@@ -538,6 +546,33 @@ void testDoubleBufferedOutFlow() {
    CHECK(blockingDepth == 0);
 }
 
+// The first packet after DBL_BUF sets STAT_RX to NAK (RM0008 23.4.3). The
+// interrupt makes an armed endpoint VALID again, and leaves a NAK of
+// setNak().
+void testDoubleBufferedOutFirstPacketNak() {
+   resetFakes();
+   events.clear();
+   UsbDevice usb{ 5 };
+   usb.begin(&recordEvent, nullptr);
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+   CHECK(usb.armOut(0x03));
+
+   rxStatAtEvent = USB_EP_RX_NAK;
+   receiveDoubleBuffered(usb, 3, 0, 0xA0, 8);
+   CHECK(events.size() == 1);
+   // STAT from NAK to VALID; the DTOG bits are written as 0 (no change).
+   CHECK(epr(3) == (CtrKeep | USB_EP_BULK | USB_EP_KIND | 3 | (USB_EP_RX_NAK ^ USB_EP_RX_VALID)));
+
+   // After setNak() the endpoint is not armed: the NAK stays.
+   CHECK(usb.armOut(0x03));
+   usb.setNak(0x03);
+   receiveDoubleBuffered(usb, 3, 1, 0xB0, 8);
+   CHECK(events.size() == 2);
+   CHECK(epr(3) == (CtrKeep | USB_EP_BULK | USB_EP_KIND | 3 | USB_EP_DTOG_TX | USB_EP_RX_NAK));
+   rxStatAtEvent = NoStat;
+   CHECK(blockingDepth == 0);
+}
+
 // The toggle writes: DTOG_RX to 0 and SW_BUF (DTOG_TX) to 1, as 1 where
 // the bit must change.
 void testDoubleBufferedOutToggles() {
@@ -605,6 +640,7 @@ int main() {
    testDoubleBufferedOutLayout();
    testDoubleBufferedOutRejects();
    testDoubleBufferedOutFlow();
+   testDoubleBufferedOutFirstPacketNak();
    testDoubleBufferedOutToggles();
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);

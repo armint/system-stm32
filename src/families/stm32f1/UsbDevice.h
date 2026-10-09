@@ -195,7 +195,9 @@ class UsbDevice {
     * STALL sets NAK and resets the data toggle to DATA0 (CLEAR_FEATURE
     * ENDPOINT_HALT, USB 2.0 section 9.4.5). A STALL on EP0 ends with the
     * next SETUP packet. Race-free only if the endpoint is not VALID (see the
-    * class comment).
+    * class comment). Double-buffered OUT: clearing STALL drops both
+    * buffers. readOut() then returns 0, also for a packet that was
+    * reported but not read yet.
     */
    void setStall(uint8_t address, bool stall);
    bool isStalled(uint8_t address) const;
