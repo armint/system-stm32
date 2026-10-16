@@ -5,7 +5,8 @@
  * FLASH: 512K at 0x08000000 (two banks of 256K, 8K sectors).
  * RAM: SRAM1 (128K), SRAM2 (80K) and SRAM3 (64K) are contiguous at
  * 0x20000000, 272K in total. TrustZone is off, so the non-secure aliases
- * are used.
+ * are used. Do not reset the backup domain (VSWRST) after start-up: it also
+ * erases SRAM2 (ES0621 section 2.2.6).
  *
  * The first 0x400 bytes of RAM are kept free for the copy of the vector
  * table that Interrupt::connectHandler() makes at SRAM_BASE. The table has

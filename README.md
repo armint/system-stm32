@@ -230,8 +230,11 @@ F1 peripherals. The skeleton has these properties:
   and the SPI v2 (#34), GPDMA (#35), and one EXTI IRQ for each line.
 - Until the RCC port (#32), the core runs on the reset clock: HSI at
   32 MHz. Enable peripheral clocks with direct `RCC` register writes.
-- The CMSIS `SystemCoreClockUpdate()` of the H5 uses `float`. Thus a call
-  links the soft-float routines (about 1 to 2 KB).
+- The CMSIS `SystemCoreClockUpdate()` of the H5 uses `float`. The start-up
+  calls it, so every image links the soft-float routines (about 1.3 KB).
+- Do not reset the backup domain (`RCC_BDCR.VSWRST`) after start-up. The
+  reset also erases SRAM2 (errata ES0621, section 2.2.6), and SRAM2 is
+  part of the RAM region of `mem-H533xE.ld`.
 
 ## STM32F1 GPIO
 
