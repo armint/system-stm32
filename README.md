@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART. SPI, ADC, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2. ADC, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -238,10 +238,12 @@ F1 peripherals. The skeleton has these properties:
   PB13 (CC1) and PB14 (CC2). `Pwr::disableUcpdDeadBattery()` sets
   `PWR_UCPDR.UCPD_DBDIS` and removes them. Call it before you use these
   pins, for example for SPI2.
-- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Spi`, `Dma`,
+- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Spi.cpp`, `Dma`,
   `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
-  these: the SPI v2 (#34), GPDMA (#35), and one EXTI IRQ for each line.
+  these: the SPI v2, GPDMA (#35), and one EXTI IRQ for each line.
 - The shared `Usart` driver works on the H5. See [STM32H5 USART](#stm32h5-usart).
+- The SPI v2 driver is in `families/stm32h5/SpiV2.{h,cpp}`.
+  `peripherals/Spi.h` includes it on the H5. See [STM32H5 SPI v2](#stm32h5-spi-v2).
 - The RCC of the H5 has its own driver, `families/stm32h5/RccH5.{h,cpp}`.
   `peripherals/Rcc.h` includes it on the H5, so the include stays the same.
   See [STM32H5 clocks](#stm32h5-clocks).
@@ -317,6 +319,42 @@ The H5 USART has the register set of the G0 USART. The shared driver
 - Erratum ES0621 2.15.2: after `disableDmaTx()` and `enableDmaTx()`, the
   USART sends no more DMA requests. Disable and enable the USART after the
   clear of `DMAT`.
+
+### STM32H5 SPI v2
+
+The SPI of the H5 is not the SPI of the other families. It has two
+configuration registers (`CFG1`, `CFG2`), a FIFO with a threshold, a
+transfer size counter (`TSIZE`), a master start bit (`CSTART`), separate
+`TXDR` and `RXDR` registers, and flags that `IFCR` clears. It has no `BSY`
+flag. Thus `hw::Spi` on the H5 has its own interface, which follows this
+hardware:
+
+| Item | Function |
+|---|---|
+| Configuration | `configure()`: prescaler, master or slave, CPOL, CPHA, data size (4 to 32 bits), bit order, NSS mode, direction (full-duplex, TX only, RX only, half-duplex). It disables the SPI, writes `CFG1`/`CFG2`, sets `TSIZE` = 0 and restores `SPE`. |
+| Single setters | `setBaudRatePrescaler()`, `setDataSize()`, `setFifoThreshold()`, `setTransferSize()`, `enableTxDma()`, ... Only while the SPI is disabled: the hardware ignores writes to `CFG1`, `CFG2` and `CR2` while `SPE` = 1. |
+| Master transfer | `enable()`, then `startTransfer()` (`CSTART`). `suspend()`, `setHalfDuplexDirection()`. |
+| Data | `write()` and `read()`. The access width (8, 16 or 32 bits) follows the data size, so that one access is one frame. |
+| Blocking frame | `transfer()`: one full-duplex frame in master mode. It sets `CSTART` if necessary. |
+| End of transfer | `waitUntilIdle()` waits for `TXC`. Call it before `disable()`. |
+| Flags | `isTxPacketSpaceAvailable()` (`TXP`), `isRxPacketAvailable()` (`RXP`), `isEndOfTransfer()`, `isTxComplete()`, `isOverrun()`, `isUnderrun()`, `isModeFault()`, `remainingFrames()`, and a `clear...()` function for each `IFCR` bit. |
+| Interrupts | RXP, TXP, end of transfer (EOT, SUSP, TXC), errors (OVR, UDR, MODF). |
+| Clock | `getClockFrequency()`: `pll1_q_ck` (125 MHz) for SPI1 to SPI3 with the reset mux. 0 for the other sources and for SPI4. |
+
+- With `TSIZE` = 0 the transfer is endless. In full-duplex and TX-only
+  mode, the master sends a frame each time the TX FIFO has data. It stops
+  the clock when the TX FIFO is empty. With `TSIZE` > 0 the hardware clears
+  `CSTART` and sets `EOT` after `TSIZE` frames.
+- `NssMode::Soft` sets `SSM`. The internal slave select (`SSI`) is then
+  inactive for a master (no mode fault) and active for a slave. Call
+  `setMode()` before `setNssMode()`; `configure()` does this.
+- `enableAlternateFunctionControl()` (`AFCNTR`) keeps SCK, MOSI and NSS at
+  their idle levels while the SPI is disabled. Use it in master mode only.
+- SPI1 to SPI3 take 4 to 32 data bits and have a 16-byte FIFO. SPI4 takes
+  4 to 16 data bits and has an 8-byte FIFO.
+- Erratum ES0621 2.17.2: a disable directly after `EOT` can cut the last
+  SCK pulse. At a high PCLK/SCK ratio, wait half an SCK period between
+  `waitUntilIdle()` and `disable()`.
 
 ## STM32F1 GPIO
 
