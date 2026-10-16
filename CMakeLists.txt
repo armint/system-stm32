@@ -211,7 +211,7 @@ endif()
 # STM32H5 skeleton: these drivers do not match the H5 register blocks yet.
 # The H5 has the RCC with PLL1..PLL3 and CFGR1/CFGR2 (its own driver in
 # families/stm32h5/RccH5.{h,cpp} replaces Rcc.cpp), the SPI v2 with FIFO and TSIZE and a USART with FIFO (#34), and GPDMA instead
-# of DMA + DMAMUX (#35). EXTI has one IRQ per line (EXTI0..EXTI15) instead
+# of DMA + DMAMUX (families/stm32h5/GpdmaH5.{h,cpp} replaces Dma.cpp). EXTI has one IRQ per line (EXTI0..EXTI15) instead
 # of the grouped G0 IRQs. I2c.cpp and GpioInterrupt.cpp need Rcc and Exti.
 # The other shared drivers (GPIO with MODER as on L0/G0, RTC, timers, CRS,
 # interrupt table) compile unchanged. The H5 issues test them on hardware.

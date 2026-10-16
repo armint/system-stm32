@@ -1,6 +1,11 @@
 #pragma once
 #include <cmsis_device.h>
 
+#if defined(GPDMA1_BASE)
+// STM32H5: GPDMA instead of DMA + DMAMUX, see families/stm32h5/GpdmaH5.h.
+#include "GpdmaH5.h"
+#else
+
 namespace Dma {
 
 enum class Direction { PeripheralToMemory = 0, MemoryToPeripheral = DMA_CCR_DIR };
@@ -222,3 +227,5 @@ struct Channel {
    }
 };
 } // namespace Dma
+
+#endif // GPDMA1_BASE
