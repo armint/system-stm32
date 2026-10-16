@@ -65,8 +65,15 @@ struct USB_TypeDef {
 // 512 bytes of packet memory at a 32-bit stride: 1024 bytes of CPU space.
 // It is an array of 16-bit words because the driver uses 16-bit access only;
 // word 2 * k is the lower half of 32-bit slot k.
-extern USB_TypeDef hostUsbRegisters;
-extern uint16_t hostUsbPacketMemory[512];
+using HostUsbTypeDef = USB_TypeDef;
+
+#define HOST_USB_PMA_WORDS 512
+extern HostUsbTypeDef hostUsbRegisters;
+extern uint16_t hostUsbPacketMemory[HOST_USB_PMA_WORDS];
+
+inline volatile uint16_t &hostEpr(unsigned n) {
+   return (&hostUsbRegisters.EP0R)[n * 2];
+}
 
 #define USB_BASE (reinterpret_cast<uintptr_t>(&hostUsbRegisters))
 #define USB_PMAADDR (reinterpret_cast<uintptr_t>(hostUsbPacketMemory))

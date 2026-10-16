@@ -6,29 +6,34 @@
 #include <cmsis_device.h>
 #include <cstdint>
 
-// Only devices with a USB full-speed device peripheral (STM32L0: L05x/L06x/
-// L07x/L08x except L051/L071/L081; STM32F1: F102, F103) define USB_BASE; on
-// the others this header is empty.
-#if defined(USB_BASE)
+// The access layer defines SYSTEM_STM32_USBFS only on devices with the USB
+// peripheral (STM32L0: L05x/L06x/L07x/L08x except L051/L071/L081; STM32F1:
+// F102, F103; STM32H5: all). On the others this header is empty.
+#if defined(SYSTEM_STM32_USBFS)
 
 namespace hw {
 
-// USB full-speed device peripheral with 16-bit packet memory access and
-// USB_EPnR registers (STM32L0: RM0367 section 32; STM32F1: RM0008 section
-// 23). One driver for all these families. The family access layer
+// USB full-speed device peripheral: the USB block with USB_EPnR registers
+// (STM32L0: RM0367 section 32; STM32F1: RM0008 section 23) and the USB DRD
+// block in Device mode (STM32H5: RM0481 section 61). One driver for all
+// these families. The family access layer
 // (families/stm32<family>/UsbFsFamily.h, namespace hw::usbfs) has the
 // differences:
 //  - Packet memory: STM32L0 1024 bytes at a 16-bit stride. STM32F1 512
 //    bytes; the CPU sees each 16-bit word at a 32-bit stride
-//    (USB_PMAADDR + offset * 2). Buffer descriptors and endpoint buffer
-//    addresses stay USB-local offsets.
+//    (USB_PMAADDR + offset * 2). STM32H5 2048 bytes, 32-bit access only,
+//    word-aligned buffers, 32-bit buffer descriptors. Buffer descriptors
+//    and endpoint buffer addresses stay USB-local offsets.
+//  - Endpoint registers: 16-bit USB_EPnR, or 32-bit USB_CHEPnR (STM32H5)
+//    with the same low 16 bits.
 //  - Interrupt: USB_IRQn (STM32L0), USB_LP_CAN1_RX0_IRQn (STM32F1, the
 //    packet memory is shared with bxCAN, so do not use CAN at the same
-//    time).
-//  - D+ pull-up: internal USB_BCDR.DPPU (STM32L0). STM32F1 has no USB_BCDR:
-//    connect() and disconnect() call a board callback that drives an
-//    external pull-up (see setPullupCallback()).
-//  - The CNTR low-power mode bit name. LPM and BCD are not used.
+//    time), USB_DRD_FS_IRQn (STM32H5).
+//  - D+ pull-up: internal USB_BCDR.DPPU (STM32L0, STM32H5). STM32F1 has no
+//    USB_BCDR: connect() and disconnect() call a board callback that drives
+//    an external pull-up (see setPullupCallback()).
+//  - Power-up: STM32H5 validates the VDDUSB supply in begin().
+//  - Register names. LPM and BCD are not used.
 //
 // Packet level only: one call moves at most one packet of maxPacketSize
 // bytes. Control transfers, multi-packet transfers and zero-length packets

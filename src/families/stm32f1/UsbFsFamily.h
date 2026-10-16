@@ -9,6 +9,8 @@
 
 #if defined(USB_BASE)
 
+#define SYSTEM_STM32_USBFS 1
+
 namespace hw::usbfs {
 
 // The packet memory is shared with bxCAN, so do not use CAN at the same
@@ -30,12 +32,14 @@ constexpr uint16_t CntrLowPowerMode = USB_CNTR_LP_MODE;
 // pull-up through UsbDevice::setPullupCallback().
 constexpr bool HasInternalPullup = false;
 
-inline void resetBcdr() {}
+inline void beforePowerUp() {}
 inline void setInternalPullup(bool) {}
 inline bool internalPullup() {
    return false;
 }
 
 } // namespace hw::usbfs
+
+#include "peripherals/usbfs/UsbFs16Access.h"
 
 #endif

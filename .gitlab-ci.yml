@@ -175,7 +175,7 @@ build-f1-test-image:
 # Links the STM32H5 test image (tests/stm32h5): start-up, the 149-entry
 # vector table, the Armv8-M fault handlers, the interrupt table copy, the
 # DWT delay, the RCC with the 250 MHz recipes, the ICACHE, HSI48 and the CRS,
-# with the memory script ldscripts/mem-H533xE.ld.
+# the USB device driver, with the memory script ldscripts/mem-H533xE.ld.
 build-h5-test-image:
   stage: build
   variables:
