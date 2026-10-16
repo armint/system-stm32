@@ -17,6 +17,11 @@ class Iwdg {
       Div64 = 4,
       Div128 = 5,
       Div256 = 6,
+#if defined(IWDG_PR_PR_3)
+      // STM32H5: 4-bit PR field
+      Div512 = 7,
+      Div1024 = 8,
+#endif
    };
 
    explicit Iwdg(IWDG_TypeDef *base)
@@ -36,6 +41,12 @@ class Iwdg {
       iwdg.KR = 0xAAAA;
    }
 
+   /**
+    * @brief Sets the prescaler and the reload value, and waits for the update.
+    * @note On STM32H5, call enable() first: the register update needs the IWDG
+    * kernel clock (LSI), which enable() starts (RM0481 49.4.4). Else
+    * waitReady() does not return while LSI is off.
+    */
    void configure(Prescaler prescaler, uint16_t reloadValue) const {
       iwdg.KR = 0x5555; // Enable write access
       iwdg.PR = static_cast<uint32_t>(prescaler);
