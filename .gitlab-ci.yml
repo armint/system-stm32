@@ -41,6 +41,10 @@ workflow:
   - STM32_FAMILY: STM32F1
     STM32_DEVICE: STM32F103xB
     SYSTEM_STM32_HSE_VALUE: "12000000"
+  # NUCLEO-H533RE: 24 MHz crystal. The H523 builds from the same headers.
+  - STM32_FAMILY: STM32H5
+    STM32_DEVICE: STM32H533xx
+    SYSTEM_STM32_HSE_VALUE: "24000000"
 
 # Builds the system-stm32 OBJECT library standalone (no linking needed) for
 # every STM32 family this repo claims to support. Each family exercises a
@@ -167,6 +171,30 @@ build-f1-test-image:
     - for image in test-image-f103x8 test-image-f103xB; do
         ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1;
       done
+
+# Links the STM32H5 test image (tests/stm32h5): start-up, the 149-entry
+# vector table, the Armv8-M fault handlers, the interrupt table copy and the
+# DWT delay, with the memory script ldscripts/mem-H533xE.ld.
+build-h5-test-image:
+  stage: build
+  variables:
+    GIT_DEPTH: 0
+  parallel:
+    matrix:
+      - CXX_STANDARD: ["23", "17"]
+  before_script: *span-compat-credentials
+  script:
+    - cmake -B build -G "Unix Makefiles"
+        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
+        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
+        -D CMAKE_BUILD_TYPE=Release
+        -D CMAKE_CXX_STANDARD=${CXX_STANDARD}
+        -D STM32_FAMILY=STM32H5
+        -D STM32_DEVICE=STM32H533xx
+        -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON
+        -D SYSTEM_STM32_HSE_VALUE=24000000
+    - cmake --build build -j$(nproc)
+    - ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32h5/test-image-h533xE | grep -q "^08000000 T g_pfnVectors$"
 
 # Host unit tests (tests/host): fake registers, no ARM toolchain needed.
 host-tests:
