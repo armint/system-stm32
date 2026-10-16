@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, delay, RCC (250 MHz), ICACHE, CRS. USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS. USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -183,7 +183,8 @@ library) and, once installed, as `art::system-stm32`.
   never runs on hardware. Add new F1 drivers to it when they land.
 - `tests/stm32h5/` — STM32H5 test image, enabled in the same way with
   `STM32_FAMILY=STM32H5`. CI links it for the H533xE. On a NUCLEO-H533RE it
-  sets 250 MHz and blinks LD2 (PA5). Add new H5 drivers to it when they land.
+  sets 250 MHz and blinks LD2 (PA5) with `FastPin`. It also runs the IWDG
+  (about 2 s), so the board resets if the main loop stops. Add new H5 drivers to it when they land.
 - `tests/common/` — the linker scripts of the test images: a copy of the
   µOS++ `sections.ld` and `libs.ld`.
 - `svd/` — SVD register descriptions, for reference/tooling use.
@@ -224,6 +225,19 @@ F1 peripherals. The skeleton has these properties:
   and the interrupt table code compile. `Rtc` sets the backup domain write
   access in `PWR_DBPCR` on the H5. None of them is tested on H5 hardware
   yet.
+- `FastPin::setOutput()`, `setInput()` and `setMode<>()` change the
+  `MODER` field of the pin. See [FastPin direction switch](#fastpin-direction-switch).
+- `Uid` reads the 96-bit unique ID at `UID_BASE` (0x08FFF800).
+  `Dbg::freezeIwdgOnDebug()` and `Dbg::freezeWwdgOnDebug()` set the
+  freeze bits in `DBGMCU_APB1FZR1`.
+- `Iwdg` has the two extra H5 prescalers `Div512` and `Div1024`. On the H5,
+  call `enable()` before `configure()`. The IWDG updates `PR` and `RLR` only
+  while its clock (LSI) runs, and `enable()` starts LSI (RM0481 section
+  49.4.4).
+- After reset, the USB Type-C dead-battery pull-downs of the UCPD are on
+  PB13 (CC1) and PB14 (CC2). `Pwr::disableUcpdDeadBattery()` sets
+  `PWR_UCPDR.UCPD_DBDIS` and removes them. Call it before you use these
+  pins, for example for SPI2.
 - `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Usart`, `Spi`,
   `Dma`, `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register
   blocks for these: the USART with FIFO and the SPI v2 (#34), GPDMA (#35),
@@ -344,8 +358,31 @@ example the main loop), or disable interrupts around the change.
 
 ### FastPin direction switch
 
-On STM32F1, `FastPin` can change the pin configuration fast, for example
-the SWDIO direction at each SWD turnaround:
+`FastPin` can change the pin direction fast, for example the SWDIO
+direction at each SWD turnaround.
+
+On the `MODER` families (L0, G0, WL, H5), `setOutput()`, `setInput()` and
+`setMode<GpioPin::Mode>()` write the 2-bit `MODER` field of the pin:
+
+```cpp
+using Swdio = hw::FastPin<GPIOB_BASE, 4>;
+
+Swdio::pin().configure(hw::GpioPin::Mode::Input, hw::GpioPin::OutputType::PushPull,
+                       hw::GpioPin::Pull::Up, hw::GpioPin::Speed::VeryHigh);
+Swdio::setOutput(); // push-pull output with the speed and pull from configure()
+Swdio::setInput();  // input with the pull-up from configure()
+```
+
+The calls do not change `OTYPER`, `OSPEEDR`, `PUPDR` or `ODR`. Set these
+once with `pin().configure()`. Each call is a read-modify-write of `MODER`
+with interrupts off (`PRIMASK`), so an interrupt cannot lose a change to
+another pin. The call restores the old `PRIMASK` value. In the H5 test
+image, one call is 6 or 7 instructions: `mrs`, `cpsid`, load, `bic`,
+`orr` (not for an input), store and `msr`. An input to
+output change and an output to input change each go through no other
+mode, because only `MODER` bit 0 of the pin changes.
+
+On STM32F1, `FastPin` changes the 4-bit `CNF`/`MODE` field:
 
 ```cpp
 using Swdio = hw::FastPin<GPIOB_BASE, 4>;
@@ -387,11 +424,14 @@ Measure it on hardware with the DWT cycle counter (`DWT->CYCCNT`).
 
 `tests/host/` holds unit tests that run on the build machine, with fake
 registers. They test the code that needs no hardware. Today they test
-this STM32F1 code:
+this code:
 
-- GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
+- GPIO on the `MODER` families: the `FastPin` direction switch and the
+  `AFR` mapping of `GpioPin`. `FastPin` needs a constant port address, so
+  the test maps a fake port at `GPIOA_BASE` with `mmap()` (Linux only).
+- STM32F1 GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
   and the address and store order of the `FastPin` direction switch.
-- USB device driver: the `COUNTn_RX` encoding, the packet memory
+- STM32F1 USB device driver: the `COUNTn_RX` encoding, the packet memory
   allocation, the buffer descriptor table, and the packet copy at the
   32-bit CPU stride of the packet memory. The tests also check the
   `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT` written as

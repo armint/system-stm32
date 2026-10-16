@@ -57,6 +57,21 @@ inline bool isBackupDomainAccessEnabled() {
 }
 
 /**
+ * @brief Disables the USB Type-C dead-battery pull-downs on the UCPD CC pins.
+ *
+ * After reset, the UCPD pulls CC1 and CC2 down (STM32H523/H533: PB13 and
+ * PB14). Call this before you use these pins as GPIO or for another
+ * peripheral (RM0481 10.11.10, PWR_UCPDR.UCPD_DBDIS).
+ * STM32H5 only: no effect on other families. The G0 controls its UCPD
+ * dead-battery pull-downs with SYSCFG_CFGR1.UCPDx_STROBE (not handled here).
+ */
+inline void disableUcpdDeadBattery() {
+#if defined(PWR_UCPDR_UCPD_DBDIS)
+   PWR->UCPDR |= PWR_UCPDR_UCPD_DBDIS;
+#endif
+}
+
+/**
  * @brief Sets the Stop mode variant (Stop 0, Stop 1, Stop 2).
  */
 inline void setStopMode(StopMode mode) {
