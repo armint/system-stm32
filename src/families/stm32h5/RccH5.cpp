@@ -70,6 +70,9 @@ bool setClock250Mhz(uint32_t pllSource, uint32_t inputHz) {
    while(RCC->CR & RCC_CR_PLL1RDY) {
    }
    RCC->PLL1CFGR = pll->cfgr | pllSource;
+   if((RCC->PLL1CFGR & RCC_PLL1CFGR_PLL1SRC) != pllSource) {
+      return false; // PLL2 or PLL3 is on: the hardware kept the old PLL1SRC.
+   }
    RCC->PLL1DIVR = pll->divr;
    RCC->PLL1FRACR = 0;
    RCC->CR |= RCC_CR_PLL1ON;
@@ -141,8 +144,8 @@ bool enableHSI48() {
    return waitForSet(RCC->CR, RCC_CR_HSI48RDY, 10000);
 }
 
-bool setClock250MhzHSE(uint32_t hseHz) {
-   return setClock250Mhz(RCC_PLL1CFGR_PLL1SRC, hseHz);
+bool setClock250MhzHSE() {
+   return setClock250Mhz(RCC_PLL1CFGR_PLL1SRC, HSE_VALUE);
 }
 
 bool setClock250MhzHSI() {

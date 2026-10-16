@@ -180,13 +180,16 @@ constexpr uint32_t VOSReadyLoops = 10000;
 
 /**
  * @brief Sets sys_ck, hclk and pclk1..3 to 250 MHz from PLL1, with the HSE
- * crystal (hseHz) as the PLL input. Sets VOS0, 5 flash wait states,
+ * crystal (HSE_VALUE) as the PLL input. Sets VOS0, 5 flash wait states,
  * WRHIGHFREQ = 2 and the prefetch, then calls SystemCoreClockUpdate().
  * pll1_q_ck is 125 MHz (see detail::pll1For250Mhz()).
- * @return false if hseHz gives no exact 250 MHz, or HSE, VOS0 or PLL1 is not
- * ready in time. The system clock then stays on HSI.
+ * No frequency parameter: SystemCoreClockUpdate() also uses HSE_VALUE, so
+ * SystemCoreClock always agrees with the real clock.
+ * @return false if HSE_VALUE gives no exact 250 MHz, if PLL2 or PLL3 is on
+ * (the hardware then keeps PLL1SRC), or if HSE, VOS0 or PLL1 is not ready in
+ * time. The system clock then stays on HSI.
  */
-[[nodiscard]] bool setClock250MhzHSE(uint32_t hseHz = HSE_VALUE);
+[[nodiscard]] bool setClock250MhzHSE();
 
 /**
  * @brief As setClock250MhzHSE(), but with hsi_ck (64 MHz / HSIDIV) as the

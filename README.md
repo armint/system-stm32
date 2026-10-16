@@ -244,7 +244,7 @@ Two recipes set 250 MHz, the maximum of the H5:
 
 | Function | PLL1 input | PLL1 settings |
 |---|---|---|
-| `Rcc::setClock250MhzHSE(hseHz = HSE_VALUE)` | HSE crystal | M = HSE / 2 MHz, N = 250, P = 2, Q = 4 |
+| `Rcc::setClock250MhzHSE()` | HSE crystal (`HSE_VALUE`) | M = HSE / 2 MHz, N = 250, P = 2, Q = 4 |
 | `Rcc::setClock250MhzHSI()` | `hsi_ck` (64 MHz / `HSIDIV`) | M = `hsi_ck` / 2 MHz, N = 250, P = 2, Q = 4 |
 
 Each recipe does these steps:
@@ -257,8 +257,9 @@ Each recipe does these steps:
 6. Call `SystemCoreClockUpdate()`.
 
 The recipe returns `false` if the input clock is not a multiple of 2 MHz
-(for example a 25 MHz crystal), or if HSE, VOS0 or PLL1 is not ready in
-time. The system clock then stays on HSI.
+(for example a 25 MHz crystal), or if PLL2 or PLL3 is on. It also returns
+`false` if HSE, VOS0 or PLL1 is not ready in time. The system clock then
+stays on HSI.
 
 - The PLL input (`ref1_ck`) is 2 MHz. This is the minimum for the wide VCO
   range, and it gives the lowest long-term jitter (DS14539 table 47).
