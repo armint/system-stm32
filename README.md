@@ -269,7 +269,8 @@ on L0/G0: the H5 API does not match the DMA API of the other families.
 - `Channel::start()` runs a single transfer. `Channel::startList()` runs a
   linked list of `Dma::LinkedListItem`. Build each item with
   `LinkedListItem::make()`. All items stay in SRAM, 4-byte aligned, in the
-  same 64 KiB region. An item can point to itself for a circular transfer.
+  same 64 KiB region: align the item array to a power of 2 that is at least
+  its size. An item can point to itself for a circular transfer.
 - Both AHB ports stay on port 0. The 2D addressing of channels 6 and 7 is
   not used. The trigger inputs, the link step mode and the suspend mode
   are not used.
