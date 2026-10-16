@@ -52,7 +52,8 @@ void exerciseUsbClock() {
 
 alignas(4) uint8_t dmaSource[64];
 alignas(4) uint8_t dmaTarget[64];
-Dma::LinkedListItem dmaList[2];
+// The items must share one 64 KiB region: align the array to its size.
+alignas(64) Dma::LinkedListItem dmaList[2];
 
 bool waitDone(const Dma::Channel &channel) {
    for(uint32_t i = 0; i < 100000; ++i) {

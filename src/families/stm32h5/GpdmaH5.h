@@ -102,9 +102,11 @@ struct Config {
    bool destinationIncrement = false;
    CompleteEvent completeEvent = CompleteEvent::Block;
 
-   /// CTR1 value.
+   /// CTR1 value. Different widths pack or unpack the data stream (PAM = 2),
+   /// so the destination gets the same bytes as the source read.
    constexpr uint32_t ctr1() const {
-      return (static_cast<uint32_t>(sourceSize) << DMA_CTR1_SDW_LOG2_Pos) | (sourceIncrement ? DMA_CTR1_SINC : 0U) |
+      const uint32_t pam = sourceSize != destinationSize ? (2UL << DMA_CTR1_PAM_Pos) : 0U;
+      return pam | (static_cast<uint32_t>(sourceSize) << DMA_CTR1_SDW_LOG2_Pos) | (sourceIncrement ? DMA_CTR1_SINC : 0U) |
              (static_cast<uint32_t>(destinationSize) << DMA_CTR1_DDW_LOG2_Pos) | (destinationIncrement ? DMA_CTR1_DINC : 0U);
    }
 
@@ -123,7 +125,9 @@ struct Config {
  * @brief Linked-list item (LLI) of a channel without 2D addressing
  * (channels 0 to 5). The hardware reads the words in this order. An item sits
  * in SRAM, 4-byte aligned, in the same 64 KiB region as every other item of
- * the list and as the first item (CLBAR holds the upper 16 address bits).
+ * the list and as the first item (CLBAR holds the upper 16 address bits). The
+ * driver cannot check this: align the item array to a power of 2 that is at
+ * least its size.
  */
 struct alignas(4) LinkedListItem {
    uint32_t ctr1;
@@ -149,7 +153,7 @@ struct Channel {
    DMA_Channel_TypeDef &_channel;
    const uint8_t _number;
 
-   /// @param dma GPDMA1 or GPDMA2. @param channelNumber 0 to 7.
+   /// @param dma GPDMA1 or GPDMA2. @param channelNumber 0 to 7, not checked.
    Channel(DMA_TypeDef *dma, uint8_t channelNumber);
 
    Channel(const Channel &) = default;
@@ -159,10 +163,10 @@ struct Channel {
 
    /**
     * @brief Single transfer: programs the channel and starts it.
-    * The channel must be idle. @p bytes is a multiple of the wider of the two
-    * data widths, 1 to 65535. The data pointers must stay valid until the
+    * The channel must be idle. @p bytes counts source bytes: a multiple of the
+    * wider of the two data widths, 1 to 65535. The data pointers must stay valid until the
     * transfer ends.
-    * @return false if the channel is not idle or @p bytes is 0.
+    * @return false if the channel is not idle and disabled, or @p bytes is 0.
     */
    bool start(const Config &config, const void *source, void *destination, uint16_t bytes, Priority priority = Priority::low) const;
 
@@ -170,20 +174,29 @@ struct Channel {
     * @brief Linked-list transfer: starts the list at @p first.
     * The first item runs after an empty transfer of the channel registers.
     * @p first must be 4-byte aligned. The channel must be idle.
-    * @return false if the channel is not idle.
+    * @return false if the channel is not idle and disabled.
     */
    bool startList(const LinkedListItem &first, Priority priority = Priority::low) const;
 
-   /// Resets the channel: stops the transfer and clears the channel registers.
+   /// Suspends a running transfer, then resets the channel (FIFO and state).
+   /// The address and block registers must be programmed again.
    void abort() const;
+
+   /// Reset of a channel in steady state; used by start() and abort().
+   void reset() const;
 
    bool isIdle() const {
       return (_channel.CSR & DMA_CSR_IDLEF) != 0U;
    }
+   /// Free for a new transfer: nothing runs and EN is clear. A transfer error
+   /// also leaves the channel here, with an error flag set.
+   bool isFree() const {
+      return isIdle() && !isEnabled();
+   }
    bool isEnabled() const {
       return (_channel.CCR & DMA_CCR_EN) != 0U;
    }
-   /// Bytes of the current block that the destination has not received yet.
+   /// Source bytes of the current block that are not read yet.
    uint16_t remainingBytes() const {
       return static_cast<uint16_t>((_channel.CBR1 & DMA_CBR1_BNDT_Msk) >> DMA_CBR1_BNDT_Pos);
    }

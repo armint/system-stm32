@@ -42,8 +42,12 @@ void testConfig() {
    c.sourceSize = Dma::DataSize::Size32Bits;
    c.destinationSize = Dma::DataSize::Size8Bits;
    c.sourceIncrement = true;
-   // SDW_LOG2 = 2 at bits 1:0, SINC bit 3, DDW_LOG2 at bits 17:16.
-   CHECK(c.ctr1() == (2U | (1U << 3)));
+   // SDW_LOG2 = 2 at bits 1:0, SINC bit 3, PAM = 2 (pack/unpack) at bits
+   // 12:11 because the widths differ, DDW_LOG2 = 0 at bits 17:16.
+   CHECK(c.ctr1() == (2U | (1U << 3) | (2U << 11)));
+   c.destinationSize = Dma::DataSize::Size32Bits;
+   CHECK(c.ctr1() == (2U | (1U << 3) | (2U << 16))); // same widths: PAM = 0
+   c.destinationSize = Dma::DataSize::Size8Bits;
    // REQSEL = 7 (spi1_tx), DREQ bit 10: the destination is the request source.
    CHECK(c.ctr2() == (7U | (1U << 10)));
 
@@ -68,6 +72,10 @@ void testSingle() {
 
    CHECK(!ch.start(c, src, dst, 8)); // CSR.IDLEF is 0: busy
    regs.CSR = DMA_CSR_IDLEF;
+   regs.CCR = DMA_CCR_EN;
+   CHECK(!ch.start(c, src, dst, 8)); // idle but still enabled (suspended)
+   regs.CCR = 0;
+   regs.CSR = DMA_CSR_IDLEF;
    CHECK(!ch.start(c, src, dst, 0)); // empty block
    CHECK(ch.start(c, src, dst, 8, Dma::Priority::very_high));
    CHECK(regs.CTR1 == c.ctr1());
@@ -78,6 +86,7 @@ void testSingle() {
    CHECK(regs.CLLR == 0U);
    CHECK((regs.CCR & DMA_CCR_PRIO_Msk) == (3UL << DMA_CCR_PRIO_Pos));
    CHECK((regs.CCR & DMA_CCR_EN) != 0U);
+   CHECK((regs.CCR & DMA_CCR_RESET) != 0U); // reset before the new setup
    // Neighbour channels stay untouched.
    CHECK(gpdma.channel(2).CCR == 0U && gpdma.channel(4).CCR == 0U);
 }
@@ -117,6 +126,21 @@ void testList() {
    CHECK(ch2.startList(loop));
 }
 
+void testAbort() {
+   FakeGpdma gpdma;
+   Dma::Channel ch(gpdma.dma(), 5);
+   auto &regs = gpdma.channel(5);
+   // Running channel: SUSP first, then RESET (RM0481 section 16.8.9).
+   regs.CCR = DMA_CCR_EN;
+   ch.abort();
+   CHECK((regs.CCR & DMA_CCR_SUSP) != 0U && (regs.CCR & DMA_CCR_RESET) != 0U);
+   // Disabled channel: no SUSP, only RESET.
+   FakeGpdma idle;
+   Dma::Channel ch2(idle.dma(), 5);
+   ch2.abort();
+   CHECK(idle.channel(5).CCR == DMA_CCR_RESET);
+}
+
 void testStatus() {
    FakeGpdma gpdma;
    Dma::Channel ch(gpdma.dma(), 7);
@@ -142,6 +166,7 @@ int main() {
    testConfig();
    testSingle();
    testList();
+   testAbort();
    testStatus();
    if(failures == 0) {
       std::printf("gpdma-h5: all tests passed\n");

@@ -6,7 +6,7 @@ namespace {
 // Channel register block: 0x50 behind the controller base, 0x80 per channel.
 constexpr uintptr_t channelOffset = 0x50;
 constexpr uintptr_t channelStride = 0x80;
-constexpr uint8_t channelCount = 8;
+constexpr uint32_t suspendTimeout = 100000;
 // Upper 16 address bits go to CLBAR, bits 15:2 to CLLR.LA.
 constexpr uint32_t linkBaseMask = 0xFFFF0000UL;
 constexpr uint32_t linkOffsetMask = DMA_CLLR_LA_Msk;
@@ -25,15 +25,15 @@ LinkedListItem::make(const Config &config, const void *source, void *destination
 Channel::Channel(DMA_TypeDef *dma, uint8_t channelNumber)
    : _dma(*dma)
    , _channel(*reinterpret_cast<DMA_Channel_TypeDef *>(reinterpret_cast<uintptr_t>(dma) + channelOffset +
-                                                        (channelNumber % channelCount) * channelStride))
-   , _number(channelNumber % channelCount) {
+                                                        channelNumber * channelStride))
+   , _number(channelNumber) {
 }
 
 bool Channel::start(const Config &config, const void *source, void *destination, uint16_t bytes, Priority priority) const {
-   if(bytes == 0U || !isIdle()) {
+   if(bytes == 0U || !isFree()) {
       return false;
    }
-   clearAllFlags();
+   reset(); // RM0481 16.4.17: clears FIFO bytes left by an error
    _channel.CTR1 = config.ctr1();
    _channel.CTR2 = config.ctr2();
    _channel.CBR1 = bytes;
@@ -47,12 +47,13 @@ bool Channel::start(const Config &config, const void *source, void *destination,
 
 bool Channel::startList(const LinkedListItem &first, Priority priority) const {
    const auto address = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(&first));
-   if((address & 3U) != 0U || !isIdle()) {
+   if((address & 3U) != 0U || !isFree()) {
       return false;
    }
-   clearAllFlags();
+   reset();
    // LLI0 is an empty transfer (BNDT = 0, no flow control): UB1 loads the
    // first real item (RM0481 section 16.4.6).
+   _channel.CTR1 = 0;
    _channel.CTR2 = 0;
    _channel.CBR1 = 0;
    _channel.CLBAR = address & linkBaseMask;
@@ -62,11 +63,22 @@ bool Channel::startList(const LinkedListItem &first, Priority priority) const {
    return true;
 }
 
-void Channel::abort() const {
+void Channel::reset() const {
+   // RESET works in steady state only: disabled, or suspended and active.
    _channel.CCR |= DMA_CCR_RESET;
-   while((_channel.CCR & DMA_CCR_RESET) != 0U) {
-   }
    clearAllFlags();
+}
+
+void Channel::abort() const {
+   if(isEnabled()) {
+      _channel.CCR |= DMA_CCR_SUSP;
+      for(uint32_t i = 0; i < suspendTimeout && (_channel.CSR & DMA_CSR_SUSPF) == 0U; ++i) {
+         if(!isEnabled()) { // the transfer ended or failed meanwhile
+            break;
+         }
+      }
+   }
+   reset();
 }
 
 } // namespace Dma
