@@ -44,7 +44,8 @@ static inline void connectMemberHandler(IRQn_Type IRQn, T &instance) {
 }
 
 class BlockingSection {
-   int8_t irqn;
+   // int16_t: the H5 has IRQ numbers above 127 (I3C2 is 131 and 132).
+   int16_t irqn;
 
    public:
    explicit BlockingSection(IRQn_Type IRQn);

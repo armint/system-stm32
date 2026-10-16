@@ -86,15 +86,15 @@ Handler_t getHandler(IRQn_Type irq) {
 
 BlockingSection::BlockingSection(IRQn_Type IRQn) {
    if(NVIC_GetEnableIRQ(IRQn)) {
-      irqn = static_cast<int8_t>(IRQn);
+      irqn = static_cast<int16_t>(IRQn);
       NVIC_DisableIRQ(IRQn);
    } else {
-      irqn = INT8_MIN;
+      irqn = INT16_MIN;
    }
 }
 
 BlockingSection::~BlockingSection() {
-   if(irqn != INT8_MIN) {
+   if(irqn != INT16_MIN) {
       NVIC_EnableIRQ(static_cast<IRQn_Type>(irqn));
    }
 }
