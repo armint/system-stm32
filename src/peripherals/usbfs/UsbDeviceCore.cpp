@@ -280,7 +280,8 @@ bool UsbDevice::openEndpoint(uint8_t address, usb::EndpointType type, uint16_t m
       return false;
    }
    if(!dir->open) {
-      uint16_t bytes = in ? maxPacketSize : rxBufferSize(maxPacketSize).pmaBytes;
+      // Both buffers of a double-buffered endpoint start at BufferAlignment.
+      uint16_t bytes = alignBuffer(in ? maxPacketSize : rxBufferSize(maxPacketSize).pmaBytes);
       uint16_t pma = allocate(doubleBuffered ? static_cast<uint16_t>(2u * bytes) : bytes);
       if(pma == 0) {
          return false;
