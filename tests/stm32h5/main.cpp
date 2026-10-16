@@ -2,7 +2,8 @@
 // library builds, links and fits in memory: start-up, vector table, fault
 // handlers, the interrupt table copy, the DWT delay, the RCC with the 250 MHz
 // recipes, the ICACHE, HSI48, the CRS, GpioPin, FastPin, UID, DBG, IWDG, the
-// UCPD dead-battery disable, the USART, the SPI v2, the ADC and the GPDMA.
+// UCPD dead-battery disable, the USART, the SPI v2, the ADC, the GPDMA and
+// the USB device driver.
 //
 // After the clock setup it runs self-tests and prints the results on USART2
 // (PA2/PA3, the ST-LINK virtual COM port, 115200 8N1):
@@ -14,6 +15,10 @@
 // - GPDMA1 memory-to-memory: one transfer and a two-item linked list.
 // A missing wire gives "FAIL" for that test only.
 //
+// USB (CN13, USB Type-C): a packet-level echo without enumeration. The host
+// sees the device attach, but EP0 stalls every SETUP. Bulk OUT 0x02
+// (double-buffered) echoes on bulk IN 0x81.
+//
 // On a NUCLEO-H533RE it sets 250 MHz from the 24 MHz HSE crystal. Hold B1
 // (PC13) during reset to use HSI instead. LD2 (PA5) then toggles every
 // 500 SysTick interrupts of 1 ms: it blinks at 1 Hz only if SystemCoreClock
@@ -21,6 +26,7 @@
 // on the reset clock (HSI, 32 MHz). The IWDG (about 2 s) resets the board if
 // the main loop stops; it stops while a debugger halts the core.
 #include <Adc.h>
+#include <UsbDevice.h>
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/Crs.h>
@@ -59,6 +65,54 @@ void exerciseUsbClock() {
    if(hw::Crs::configure({})) {
       hw::Crs::enable();
    }
+}
+
+// Links the H5 USB driver: a packet-level echo, without enumeration (no
+// descriptors, EP0 SETUP is stalled).
+hw::UsbDevice usb;
+
+void onUsbEvent(void *, const hw::usb::Event &event) {
+   using hw::usb::EventType;
+   switch(event.type) {
+   case EventType::Reset:
+      (void)usb.openEndpoint(0x02, hw::usb::EndpointType::Bulk, 64, true);
+      (void)usb.openEndpoint(0x81, hw::usb::EndpointType::Bulk, 64);
+      usb.armOut(0x02);
+      break;
+   case EventType::Setup:
+      usb.setStall(0x80, true);
+      usb.setStall(0x00, true);
+      break;
+   case EventType::Out:
+      if(event.endpoint == 0x02) {
+         uint8_t packet[64];
+         uint16_t size = usb.readOut(0x02, packet);
+         (void)usb.startIn(0x81, hw::span<const uint8_t>(packet, size));
+      }
+      break;
+   case EventType::InComplete:
+      if(event.endpoint == 0x81) {
+         usb.armOut(0x02);
+      }
+      break;
+   case EventType::Suspend:
+   case EventType::Resume:
+      break;
+   }
+}
+
+// After exerciseUsbClock(): the USB kernel clock is HSI48. GPIOA clock on.
+void exerciseUsb() {
+   // PA11/PA12: USB_DM/USB_DP are alternate function AF10 on the H533.
+   for(uint8_t pin : { 11, 12 }) {
+      const hw::GpioPin p(GPIOA, pin);
+      p.setAlternateFunction(hw::GpioPin::AlternateFunction::AF10);
+      p.configure(hw::GpioPin::Mode::Alternate, hw::GpioPin::OutputType::PushPull, hw::GpioPin::Pull::None, hw::GpioPin::Speed::VeryHigh);
+   }
+   Rcc::enableUSBClock();
+   usb.begin(&onUsbEvent, nullptr);
+   usb.connect();
+   sink = usb.isConnected() && !usb.isStalled(0x81);
 }
 
 using Pin = hw::GpioPin;
@@ -278,6 +332,7 @@ int main() {
    const bool clockOk = key.read() ? Rcc::setClock250MhzHSI() : Rcc::setClock250MhzHSE();
    Rcc::enableICache();
    exerciseUsbClock();
+   exerciseUsb();
    sink = Rcc::getAPBClock() + Rcc::getAPB2Clock() + Rcc::getAPB3Clock() + Rcc::getPLL1QClock();
    sink = hw::Uid::hash();
    selfTest();
