@@ -31,7 +31,7 @@ Each family builds in two legs:
   library build runs. The job fails if CMake does not use span-compat with
   `SPAN_COMPAT_USE_STD_SPAN=0`.
 
-The STM32F1 test image links at both standards. The C0 job also runs at
+The STM32F1 and STM32H5 test images link at both standards. The C0 job also runs at
 both standards. The C++17 jobs clone the private span-compat repository
 with the CI job token. Thus span-compat must allow job tokens from this
 project.
@@ -181,6 +181,9 @@ library) and, once installed, as `art::system-stm32`.
   for F103x8 and F103xB. Enable it with
   `-DSYSTEM_STM32_BUILD_TEST_IMAGE=ON` and `STM32_FAMILY=STM32F1`. The image
   never runs on hardware. Add new F1 drivers to it when they land.
+- `tests/stm32h5/` — STM32H5 test image, enabled in the same way with
+  `STM32_FAMILY=STM32H5`. CI links it for the H533xE. On a NUCLEO-H533RE it
+  blinks LD2 (PA5). Add new H5 drivers to it when they land.
 - `tests/common/` — the linker scripts of the test images: a copy of the
   µOS++ `sections.ld` and `libs.ld`.
 - `svd/` — SVD register descriptions, for reference/tooling use.

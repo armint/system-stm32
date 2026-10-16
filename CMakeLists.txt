@@ -364,12 +364,15 @@ else()
 endif()
 
 option(SYSTEM_STM32_BUILD_TEST_IMAGE
-    "Build the STM32F1 test image (STM32_FAMILY=STM32F1 only; needs an ARM toolchain)" OFF)
+    "Build the test image of the family (STM32_FAMILY=STM32F1 or STM32H5 only; needs an ARM toolchain)" OFF)
 if(SYSTEM_STM32_BUILD_TEST_IMAGE)
-    if(NOT STM32_FAMILY STREQUAL "STM32F1")
-        message(FATAL_ERROR "SYSTEM_STM32_BUILD_TEST_IMAGE needs STM32_FAMILY=STM32F1")
+    if(STM32_FAMILY STREQUAL "STM32F1")
+        add_subdirectory(tests/stm32f1)
+    elseif(STM32_FAMILY STREQUAL "STM32H5")
+        add_subdirectory(tests/stm32h5)
+    else()
+        message(FATAL_ERROR "SYSTEM_STM32_BUILD_TEST_IMAGE needs STM32_FAMILY=STM32F1 or STM32H5")
     endif()
-    add_subdirectory(tests/stm32f1)
 endif()
 
 install(TARGETS system-stm32
