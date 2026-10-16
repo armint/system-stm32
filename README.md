@@ -587,11 +587,15 @@ this code:
   the test maps a fake port at `GPIOA_BASE` with `mmap()` (Linux only).
 - STM32F1 GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
   and the address and store order of the `FastPin` direction switch.
-- STM32F1 USB device driver: the `COUNTn_RX` encoding, the packet memory
-  allocation, the buffer descriptor table, and the packet copy at the
-  32-bit CPU stride of the packet memory. The tests also check the
-  `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT` written as
-  `old ^ wanted`, `DTOG` written as 0, and the configuration bits kept.
+- USB device driver (the shared core in `src/peripherals/usbfs/`): the
+  `COUNTn_RX` encoding, the packet memory allocation, the buffer
+  descriptor table, the packet copy, double-buffered bulk OUT and the D+
+  pull-up. The same test (`test_usb_fs.cpp`) runs once with each family
+  access layer: STM32F1 (32-bit CPU stride, stub `stubs/`) and STM32L0
+  (16-bit stride and `USB_BCDR`, stub `stubs-usb-l0/`). The tests also
+  check the `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT`
+  written as `old ^ wanted`, `DTOG` written as 0, and the configuration
+  bits kept.
 
 - STM32H5 GPDMA driver: the `CTR1` and `CTR2` encoding, the linked-list
   items, and the register writes of `Channel::start()` and `startList()`.
