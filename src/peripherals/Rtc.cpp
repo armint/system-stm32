@@ -100,6 +100,8 @@ void Rtc::unlockWriteProtection() const {
   PWR->CR1 |= PWR_CR1_DBP;
 #elif defined(PWR_CR_DBP)
   PWR->CR |= PWR_CR_DBP;
+#elif defined(PWR_DBPCR_DBP)
+  PWR->DBPCR |= PWR_DBPCR_DBP; // STM32H5
 #endif
   rtc_.WPR = kWriteProtectionKey1;
   rtc_.WPR = kWriteProtectionKey2;

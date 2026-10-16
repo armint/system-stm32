@@ -8,6 +8,9 @@
 #elif defined(STM32F1)
 // STM32F103 medium density has 43 interrupt vectors + 16 cortex-m vectors
 #define VECTOR_TABLE_SIZE 59
+#elif defined(STM32H533xx) || defined(STM32H523xx)
+// STM32H523/H533 have 133 interrupt vectors + 16 cortex-m vectors
+#define VECTOR_TABLE_SIZE 149
 #endif
 
 namespace Interrupt {
@@ -41,7 +44,8 @@ static inline void connectMemberHandler(IRQn_Type IRQn, T &instance) {
 }
 
 class BlockingSection {
-   int8_t irqn;
+   // int16_t: the H5 has IRQ numbers above 127 (I3C2 is 131 and 132).
+   int16_t irqn;
 
    public:
    explicit BlockingSection(IRQn_Type IRQn);

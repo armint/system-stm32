@@ -14,6 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); skeleton only: start-up, vectors, GPIO, delay. RCC, USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -30,7 +31,7 @@ Each family builds in two legs:
   library build runs. The job fails if CMake does not use span-compat with
   `SPAN_COMPAT_USE_STD_SPAN=0`.
 
-The STM32F1 test image links at both standards. The C0 job also runs at
+The STM32F1 and STM32H5 test images link at both standards. The C0 job also runs at
 both standards. The C++17 jobs clone the private span-compat repository
 with the CI job token. Thus span-compat must allow job tokens from this
 project.
@@ -54,6 +55,9 @@ it at C++17, give `-D CMAKE_CXX_STANDARD=17`.
 
 CMSIS device headers and CMSIS core are fetched automatically via
 `FetchContent` for the selected family; nothing needs to be vendored.
+The target exports them as `SYSTEM` include directories. Thus warnings in
+these vendor headers do not stop a `-Wpedantic -Werror` build. For example,
+`core_cm33.h` has an anonymous struct, which ISO C++ does not allow.
 
 ### Span type
 
@@ -128,8 +132,8 @@ library) and, once installed, as `art::system-stm32`.
   [USART frame format](#usart-frame-format).
 - `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
   The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
-  STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
-  `src/families/stm32f1/delaybusywait.cpp`. The delay is then exact to a few
+  STM32F1 (Cortex-M3) and STM32H5 (Cortex-M33) use the DWT cycle counter
+  instead, in `src/delaybusywait-dwt.cpp`. The delay is then exact to a few
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
@@ -173,21 +177,64 @@ library) and, once installed, as `art::system-stm32`.
   layout). Needed by the always-built per-family vector table regardless
   of which startup path is active, so it stays outside `src/bare-metal/`.
 - `src/bare-metal/` — see below.
-- `tests/stm32f1/` — STM32F1 test image: a minimal `main()` with a copy of
-  the µOS++ `sections.ld`. CI links it for F103x8 and F103xB. Enable it with
+- `tests/stm32f1/` — STM32F1 test image: a minimal `main()`. CI links it
+  for F103x8 and F103xB. Enable it with
   `-DSYSTEM_STM32_BUILD_TEST_IMAGE=ON` and `STM32_FAMILY=STM32F1`. The image
   never runs on hardware. Add new F1 drivers to it when they land.
+- `tests/stm32h5/` — STM32H5 test image, enabled in the same way with
+  `STM32_FAMILY=STM32H5`. CI links it for the H533xE. On a NUCLEO-H533RE it
+  blinks LD2 (PA5). Add new H5 drivers to it when they land.
+- `tests/common/` — the linker scripts of the test images: a copy of the
+  µOS++ `sections.ld` and `libs.ld`.
 - `svd/` — SVD register descriptions, for reference/tooling use.
 - `ldscripts/` — memory linker scripts (`MEMORY` regions only) for the
-  parts that this repository supplies. Today these are `mem-F103x8.ld` and
-  `mem-F103xB.ld`. The consumer adds its own sections script (for example
-  `sections.ld`) and points the linker at this directory with `-L`. The
-  first 0x100 bytes of RAM stay free. `Interrupt::connectHandler()` copies
-  the vector table to `SRAM_BASE`, and VTOR needs that copy 256-byte
-  aligned. The scripts start FLASH at 0x08000000. A consumer with a
+  parts that this repository supplies. Today these are `mem-F103x8.ld`,
+  `mem-F103xB.ld` and `mem-H533xE.ld`. The consumer adds its own sections
+  script (for example `sections.ld`) and points the linker at this
+  directory with `-L`. The first bytes of RAM stay free:
+  `Interrupt::connectHandler()` copies the vector table to `SRAM_BASE`, and
+  VTOR needs that copy aligned to the next power of two of its size. That
+  is 0x100 bytes on the F103 (59 entries) and 0x400 bytes on the H533
+  (149 entries). The scripts start FLASH at 0x08000000. A consumer with a
   bootloader supplies its own script with a different FLASH origin.
   `install()` copies the scripts to `share/system-stm32/ldscripts` in the
   install prefix.
+
+## STM32H5
+
+The STM32H5 family is a skeleton today. It is the base of the port of
+versaloon-NG to the NUCLEO-H533RE (embedded-projects/versaloon-ng#89).
+The H5 peripherals are close to the L0, G0 and L4 peripherals, not to the
+F1 peripherals. The skeleton has these properties:
+
+- Device `STM32H533xx`. The STM32H523xx has the same reference manual
+  (RM0481) and the same IRQ positions, so the vector table also fits it.
+  CI builds only the H533. Other H5 devices stop the build with `#error`.
+- Cortex-M33, compiled with `-mcpu=cortex-m33 -mfloat-abi=soft`. The FPU
+  stays off, as on the other families. Thus all libraries of a consumer use
+  the same ABI.
+- TrustZone is off (option byte `TZEN` at its default). The build uses
+  `system_stm32h5xx.c`, not the `_s` or `_ns` variants. `SecureFault_Handler`
+  is in the vector table only as a weak alias.
+- The start-up and the fault handlers use their Armv7-M branches also for
+  Armv8-M Mainline (`__ARM_ARCH_8M_MAIN__`): VTOR, `CFSR`, `MMFAR`, `BFAR`.
+- The memory script `ldscripts/mem-H533xE.ld` has 512 KB flash and the
+  272 KB of SRAM1 to SRAM3 as one RAM region.
+- `GpioPin` (the shared `MODER` driver), `FastPin`, `Timer`, `Crs`, `Rtc`
+  and the interrupt table code compile. `Rtc` sets the backup domain write
+  access in `PWR_DBPCR` on the H5. None of them is tested on H5 hardware
+  yet.
+- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc`, `Usart`, `Spi`, `Dma`,
+  `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
+  these: the RCC with PLL1 to PLL3 (system-stm32#32), the USART with FIFO
+  and the SPI v2 (#34), GPDMA (#35), and one EXTI IRQ for each line.
+- Until the RCC port (#32), the core runs on the reset clock: HSI at
+  32 MHz. Enable peripheral clocks with direct `RCC` register writes.
+- The CMSIS `SystemCoreClockUpdate()` of the H5 uses `float`. The start-up
+  calls it, so every image links the soft-float routines (about 1.3 KB).
+- Do not reset the backup domain (`RCC_BDCR.VSWRST`) after start-up. The
+  reset also erases SRAM2 (errata ES0621, section 2.2.6), and SRAM2 is
+  part of the RAM region of `mem-H533xE.ld`.
 
 ## STM32F1 GPIO
 

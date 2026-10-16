@@ -74,13 +74,13 @@ void __attribute__((section(".after_vectors"), noreturn, weak)) Reset_Handler(vo
 
 void __attribute__((section(".after_vectors"), weak)) NMI_Handler(void) {
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {
@@ -91,7 +91,7 @@ void __attribute__((section(".after_vectors"), weak)) NMI_Handler(void) {
 // ----------------------------------------------------------------------------
 
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 // The values of BFAR and MMFAR remain unchanged if the BFARVALID or
 // MMARVALID is set. However, if a new fault occurs during the
@@ -130,7 +130,7 @@ void dump_exception_stack(exception_stack_frame_t *frame, uint32_t cfsr, uint32_
    trace_printf(" LR/EXC_RETURN = %08X\n", lr);
 }
 
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 
 #if defined(__ARM_ARCH_6M__)
 
@@ -152,7 +152,7 @@ void dump_exception_stack(exception_stack_frame_t *frame, uint32_t lr) {
 
 
 // ----------------------------------------------------------------------------
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 // Hard Fault handler wrapper in assembly.
 // Extract the location of the stack frame and pass it to the C
@@ -189,13 +189,13 @@ HardFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uint
    dump_exception_stack(frame, cfsr, mmfar, bfar, lr);
 
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {
@@ -203,7 +203,7 @@ HardFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uint
    }
 }
 
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 
 #if defined(__ARM_ARCH_6M__)
 
@@ -264,17 +264,17 @@ HardFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uint
 
 #endif /* defined(__ARM_ARCH_6M__) */
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 void __attribute__((section(".after_vectors"), weak)) MemManage_Handler(void) {
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {
@@ -309,13 +309,13 @@ BusFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uint3
    dump_exception_stack(frame, cfsr, mmfar, bfar, lr);
 
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {
@@ -362,13 +362,13 @@ UsageFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uin
    dump_exception_stack(frame, cfsr, mmfar, bfar, lr);
 
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {
@@ -380,13 +380,13 @@ UsageFault_Handler_C(exception_stack_frame_t *frame __attribute__((unused)), uin
 
 void __attribute__((section(".after_vectors"), weak)) SVC_Handler(void) {
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {
@@ -394,7 +394,7 @@ void __attribute__((section(".after_vectors"), weak)) SVC_Handler(void) {
    }
 }
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 void __attribute__((section(".after_vectors"), weak)) DebugMon_Handler(void) {
 #if defined(DEBUG)
@@ -408,17 +408,17 @@ void __attribute__((section(".after_vectors"), weak)) DebugMon_Handler(void) {
    }
 }
 
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 
 void __attribute__((section(".after_vectors"), weak)) PendSV_Handler(void) {
 #if defined(DEBUG)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
    if((CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk) != 0) {
       __BKPT(0);
    }
 #else
    __BKPT(0);
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 #endif /* defined(DEBUG) */
 
    while(true) {

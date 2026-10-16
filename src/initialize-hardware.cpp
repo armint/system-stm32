@@ -34,7 +34,7 @@
 
 // ----------------------------------------------------------------------------
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 extern unsigned int __vectors_start;
 #endif
 
@@ -60,7 +60,7 @@ void __attribute__((weak)) os_startup_initialize_hardware_early(void) {
    // Call the CSMSIS system initialisation routine.
    SystemInit();
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
    // Set VTOR to the actual address, provided by the linker script.
    // Override the manual, possibly wrong, SystemInit() setting.
@@ -68,7 +68,7 @@ void __attribute__((weak)) os_startup_initialize_hardware_early(void) {
    // Ensure all subsequence instructions use the new configuration.
    __DSB();
 
-#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) */
+#endif /* defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__) */
 
    // The current version of SystemInit() leaves the value of the clock
    // in a RAM variable (SystemCoreClock), which will be cleared shortly,

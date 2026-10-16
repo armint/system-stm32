@@ -1,7 +1,7 @@
 #include "delaybusywait.h"
 #include <cmsis_device.h>
 
-// Cortex-M3 implementation of the delay functions. It counts core clock
+// Cortex-M3 and Cortex-M33 implementation of the delay functions. It counts core clock
 // cycles with the DWT cycle counter (DWT->CYCCNT), so the result does not
 // depend on flash wait states or on the instruction timing of the loop.
 // The Cortex-M0+ implementation in src/delaybusywait.cpp is not used here.

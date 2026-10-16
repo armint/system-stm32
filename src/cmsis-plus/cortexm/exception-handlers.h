@@ -46,7 +46,7 @@ extern void NMI_Handler(void);
 
 extern void HardFault_Handler(void);
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 extern void MemManage_Handler(void);
 
@@ -64,7 +64,7 @@ extern void PendSV_Handler(void);
 
 extern void SysTick_Handler(void);
 
-// Exception Stack Frame for the Cortex-M3 and Cortex-M4 processor.
+// Exception Stack Frame for the Cortex-M3, Cortex-M4 and Cortex-M33 processor.
 typedef struct exception_stack_frame_s {
    uint32_t r0;
    uint32_t r1;
@@ -80,9 +80,9 @@ typedef struct exception_stack_frame_s {
 } exception_stack_frame_t;
 
 #if defined(TRACE)
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 void dump_exception_stack(exception_stack_frame_t *frame, uint32_t cfsr, uint32_t mmfar, uint32_t bfar, uint32_t lr);
-#endif // defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#endif // defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 #if defined(__ARM_ARCH_6M__)
 void dump_exception_stack(exception_stack_frame_t *frame, uint32_t lr);
 #endif // defined(__ARM_ARCH_6M__)
@@ -90,13 +90,13 @@ void dump_exception_stack(exception_stack_frame_t *frame, uint32_t lr);
 
 void HardFault_Handler_C(exception_stack_frame_t *frame, uint32_t lr);
 
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 void UsageFault_Handler_C(exception_stack_frame_t *frame, uint32_t lr);
 
 void BusFault_Handler_C(exception_stack_frame_t *frame, uint32_t lr);
 
-#endif // defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
+#endif // defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8M_MAIN__)
 
 #if defined(__cplusplus)
 }

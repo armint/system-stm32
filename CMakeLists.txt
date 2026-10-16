@@ -5,8 +5,8 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake")
 Include(FetchContent)
 
 # Default to STM32L0 if not specified
-set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0, STM32WL, STM32F1)")
-set(STM32_DEVICE "STM32L073xx" CACHE STRING "STM32 device define for CMSIS (e.g., STM32L073xx, STM32G071xx, STM32G0B1xx, STM32WLE5xx, STM32F103xB)")
+set(STM32_FAMILY "STM32L0" CACHE STRING "STM32 family to build for (e.g., STM32L0, STM32C0, STM32G0, STM32WL, STM32F1, STM32H5)")
+set(STM32_DEVICE "STM32L073xx" CACHE STRING "STM32 device define for CMSIS (e.g., STM32L073xx, STM32G071xx, STM32G0B1xx, STM32WLE5xx, STM32F103xB, STM32H533xx)")
 
 # Use a family-specific FetchContent name so different STM32 families
 # can coexist in a shared FETCHCONTENT_BASE_DIR.
@@ -44,6 +44,12 @@ elseif (STM32_FAMILY STREQUAL "STM32F1")
             GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_f1.git
             GIT_TAG v4.3.5
     )
+elseif (STM32_FAMILY STREQUAL "STM32H5")
+    FetchContent_Declare(
+            ${_cmsis_device_name}
+            GIT_REPOSITORY https://github.com/STMicroelectronics/cmsis_device_h5.git
+            GIT_TAG v1.7.0
+    )
 endif()
 
 FetchContent_GetProperties(${_cmsis_device_name})
@@ -54,12 +60,14 @@ endif ()
 # Alias for the rest of this file
 set(cmsis_device_SOURCE_DIR "${${_cmsis_device_name}_SOURCE_DIR}")
 
-# STM32WL uses a Cortex-M4 application core, STM32F1 a Cortex-M3; all other
-# supported families use Cortex-M0+.
+# STM32WL uses a Cortex-M4 application core, STM32F1 a Cortex-M3, STM32H5 a
+# Cortex-M33; all other supported families use Cortex-M0+.
 if (STM32_FAMILY STREQUAL "STM32WL")
     set(_cmsis_core_variant "cm4")
 elseif (STM32_FAMILY STREQUAL "STM32F1")
     set(_cmsis_core_variant "cm3")
+elseif (STM32_FAMILY STREQUAL "STM32H5")
+    set(_cmsis_core_variant "cm33")
 else()
     set(_cmsis_core_variant "cm0")
 endif()
@@ -121,6 +129,9 @@ elseif (STM32_FAMILY STREQUAL "STM32WL")
     file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32wlxx.c")
 elseif (STM32_FAMILY STREQUAL "STM32F1")
     file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32f1xx.c")
+elseif (STM32_FAMILY STREQUAL "STM32H5")
+    # TrustZone stays off: the _s.c and _ns.c variants are not used.
+    file(GLOB_RECURSE STM32_SOURCES "${cmsis_device_SOURCE_DIR}/Source/Templates/system_stm32h5xx.c")
 endif()
 
 # Gather all project sources
@@ -191,12 +202,41 @@ if(STM32_FAMILY STREQUAL "STM32F1")
         "${PROJECT_SOURCE_DIR}/src/peripherals/Rtc.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
         "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
-        # The Cortex-M0+ busy loop; F1 has its own DWT version in families/stm32f1.
-        "${PROJECT_SOURCE_DIR}/src/delaybusywait.cpp"
     )
     foreach(_excl ${_F1_EXCLUDE})
         list(REMOVE_ITEM PROJECT_SOURCES "${_excl}")
     endforeach()
+endif()
+
+# STM32H5 skeleton: these drivers do not match the H5 register blocks yet.
+# The H5 has the RCC with PLL1..PLL3 and CFGR1/CFGR2 (system-stm32#32), the
+# SPI v2 with FIFO and TSIZE and a USART with FIFO (#34), and GPDMA instead
+# of DMA + DMAMUX (#35). EXTI has one IRQ per line (EXTI0..EXTI15) instead
+# of the grouped G0 IRQs. I2c.cpp and GpioInterrupt.cpp need Rcc and Exti.
+# The other shared drivers (GPIO with MODER as on L0/G0, RTC, timers, CRS,
+# interrupt table) compile unchanged. The H5 issues test them on hardware.
+if(STM32_FAMILY STREQUAL "STM32H5")
+    set(_H5_EXCLUDE
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Dma.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Exti.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/I2c.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Rcc.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Spi.cpp"
+        "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
+        "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
+    )
+    foreach(_excl ${_H5_EXCLUDE})
+        list(REMOVE_ITEM PROJECT_SOURCES "${_excl}")
+    endforeach()
+endif()
+
+# Delay functions: the Cortex-M3 and Cortex-M33 families count cycles with
+# the DWT cycle counter. The others (Cortex-M0+ has no DWT cycle counter,
+# STM32WL keeps its old behaviour) use the busy loop.
+if(STM32_FAMILY STREQUAL "STM32F1" OR STM32_FAMILY STREQUAL "STM32H5")
+    list(REMOVE_ITEM PROJECT_SOURCES "${PROJECT_SOURCE_DIR}/src/delaybusywait.cpp")
+else()
+    list(REMOVE_ITEM PROJECT_SOURCES "${PROJECT_SOURCE_DIR}/src/delaybusywait-dwt.cpp")
 endif()
 
 file(GLOB_RECURSE PROJECT_HEADERS
@@ -241,6 +281,12 @@ if(STM32_FAMILY STREQUAL "STM32WL")
     )
 endif()
 
+# STM32H5 has no generic SRAM_BASE alias either. Its vector table size is
+# in utils/Interrupt.h.
+if(STM32_FAMILY STREQUAL "STM32H5")
+    target_compile_definitions(system-stm32 PRIVATE SRAM_BASE=SRAM1_BASE)
+endif()
+
 target_include_directories(
         system-stm32
         PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
@@ -252,8 +298,11 @@ target_include_directories(system-stm32
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# Export CMSIS headers to dependents as part of the public interface
-target_include_directories(system-stm32
+# Export CMSIS headers to dependents as part of the public interface.
+# SYSTEM: these are vendor headers, so warnings in them do not stop a
+# -Wpedantic -Werror build. core_cm33.h (STM32H5) has an anonymous struct in
+# MPU_Type, which ISO C++ does not allow.
+target_include_directories(system-stm32 SYSTEM
         PUBLIC
             $<BUILD_INTERFACE:${cmsis_device_SOURCE_DIR}/Include>
             $<BUILD_INTERFACE:${cmsis_core_SOURCE_DIR}/Core/Include>
@@ -315,12 +364,15 @@ else()
 endif()
 
 option(SYSTEM_STM32_BUILD_TEST_IMAGE
-    "Build the STM32F1 test image (STM32_FAMILY=STM32F1 only; needs an ARM toolchain)" OFF)
+    "Build the test image of the family (STM32_FAMILY=STM32F1 or STM32H5 only; needs an ARM toolchain)" OFF)
 if(SYSTEM_STM32_BUILD_TEST_IMAGE)
-    if(NOT STM32_FAMILY STREQUAL "STM32F1")
-        message(FATAL_ERROR "SYSTEM_STM32_BUILD_TEST_IMAGE needs STM32_FAMILY=STM32F1")
+    if(STM32_FAMILY STREQUAL "STM32F1")
+        add_subdirectory(tests/stm32f1)
+    elseif(STM32_FAMILY STREQUAL "STM32H5")
+        add_subdirectory(tests/stm32h5)
+    else()
+        message(FATAL_ERROR "SYSTEM_STM32_BUILD_TEST_IMAGE needs STM32_FAMILY=STM32F1 or STM32H5")
     endif()
-    add_subdirectory(tests/stm32f1)
 endif()
 
 install(TARGETS system-stm32

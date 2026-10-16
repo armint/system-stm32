@@ -56,11 +56,15 @@ SET(CMAKE_C_ARCHIVE_FINISH   true)
 # including CMakeLists.txt before this file runs, same as STM32_FAMILY
 # itself). STM32L0/C0/G0 use a Cortex-M0+ core; STM32WL's application core
 # (the one this repo targets) is a Cortex-M4 without an FPU; STM32F1 uses a
-# Cortex-M3.
+# Cortex-M3; STM32H5 uses a Cortex-M33. The H5 has an FPU, but builds use soft
+# float like every other family: the code has no floating point, and one ABI
+# keeps all libraries of a consumer compatible.
 IF(STM32_FAMILY STREQUAL "STM32WL")
     SET(MCU_FLAGS "-mcpu=cortex-m4 -mthumb -mfloat-abi=soft")
 ELSEIF(STM32_FAMILY STREQUAL "STM32F1")
     SET(MCU_FLAGS "-mcpu=cortex-m3 -mthumb -mfloat-abi=soft")
+ELSEIF(STM32_FAMILY STREQUAL "STM32H5")
+    SET(MCU_FLAGS "-mcpu=cortex-m33 -mthumb -mfloat-abi=soft")
 ELSE()
     SET(MCU_FLAGS "-mcpu=cortex-m0plus -mthumb -mfloat-abi=soft")
 ENDIF()
