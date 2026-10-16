@@ -167,8 +167,10 @@ void __attribute__((section(".after_vectors"), weak, naked)) HardFault_Handler(v
                 " mrseq r0,msp    \n"
                 " mrsne r0,psp    \n"
                 " mov r1,lr       \n"
-                " ldr r2,=HardFault_Handler_C \n"
-                " bx r2"
+                // b.w has a range of +-16 MB and needs no literal pool.
+                // With ldr r2,=X the pool must be at less than 4 KB, which
+                // LTO can break when it puts more code in .after_vectors.
+                " b.w HardFault_Handler_C"
 
                 : /* Outputs */
                 : /* Inputs */
@@ -224,7 +226,10 @@ void __attribute__((section(".after_vectors"), weak, naked)) HardFault_Handler(v
                 "2:"
                 " mov r1,lr       \n"
                 " ldr r2,=HardFault_Handler_C \n"
-                " bx r2"
+                " bx r2           \n"
+                // ARMv6-M has no b.w: put the literal pool next to the ldr,
+                // so that it is in range when LTO makes .after_vectors larger.
+                " .ltorg"
 
                 : /* Outputs */
                 : /* Inputs */
@@ -283,8 +288,10 @@ void __attribute__((section(".after_vectors"), weak, naked)) BusFault_Handler(vo
                 " mrseq r0,msp    \n"
                 " mrsne r0,psp    \n"
                 " mov r1,lr       \n"
-                " ldr r2,=BusFault_Handler_C \n"
-                " bx r2"
+                // b.w has a range of +-16 MB and needs no literal pool.
+                // With ldr r2,=X the pool must be at less than 4 KB, which
+                // LTO can break when it puts more code in .after_vectors.
+                " b.w BusFault_Handler_C"
 
                 : /* Outputs */
                 : /* Inputs */
@@ -322,8 +329,10 @@ void __attribute__((section(".after_vectors"), weak, naked)) UsageFault_Handler(
                 " mrseq r0,msp    \n"
                 " mrsne r0,psp    \n"
                 " mov r1,lr       \n"
-                " ldr r2,=UsageFault_Handler_C \n"
-                " bx r2"
+                // b.w has a range of +-16 MB and needs no literal pool.
+                // With ldr r2,=X the pool must be at less than 4 KB, which
+                // LTO can break when it puts more code in .after_vectors.
+                " b.w UsageFault_Handler_C"
 
                 : /* Outputs */
                 : /* Inputs */
