@@ -53,12 +53,26 @@ struct Usart {
       Div256 = (USART_PRESC_PRESCALER_3 | USART_PRESC_PRESCALER_1 | USART_PRESC_PRESCALER_0),
    };
 #endif
+#if defined(RCC_CCIPR1_USART1SEL)
+   // STM32H5: RCC_CCIPR1.USART1SEL (RM0481 section 11.8.40). PCLK is pclk2
+   // for USART1 and pclk1 for USART2/3. getClockFrequency() returns 0 for
+   // PLL2Q and PLL3Q: system-stm32 does not start PLL2 or PLL3.
+   enum class ClockSource : uint32_t {
+      PCLK = 0,
+      PLL2Q = RCC_CCIPR1_USART1SEL_0,
+      PLL3Q = RCC_CCIPR1_USART1SEL_1,
+      HSIKER = RCC_CCIPR1_USART1SEL_1 | RCC_CCIPR1_USART1SEL_0,
+      CSIKER = RCC_CCIPR1_USART1SEL_2,
+      LSE = RCC_CCIPR1_USART1SEL_2 | RCC_CCIPR1_USART1SEL_0,
+   };
+#else
    enum class ClockSource : uint32_t {
       PCLK = 0,
       SYSCLK = RCC_CCIPR_USART1SEL_0,
       HSIKER = RCC_CCIPR_USART1SEL_1,
       LSE = RCC_CCIPR_USART1SEL_1 | RCC_CCIPR_USART1SEL_0,
    };
+#endif
 
    enum class AutoBaudRateMode : uint32_t {
       StartBit = 0x0,    // Detect baud rate based on start bit only
@@ -383,6 +397,15 @@ struct Usart {
    }
 #endif
 
+#if defined(RCC_CCIPR1_USART1SEL)
+   static inline void setUSART1ClockSource(ClockSource clockSource) {
+      RCC->CCIPR1 = (RCC->CCIPR1 & ~RCC_CCIPR1_USART1SEL) | static_cast<uint32_t>(clockSource);
+   }
+
+   static inline ClockSource getUSART1ClockSource() {
+      return static_cast<ClockSource>(RCC->CCIPR1 & RCC_CCIPR1_USART1SEL);
+   }
+#else
    static inline void setUSART1ClockSource(ClockSource clockSource) {
       RCC->CCIPR = (RCC->CCIPR & ~RCC_CCIPR_USART1SEL) | static_cast<uint32_t>(clockSource);
    }
@@ -390,6 +413,26 @@ struct Usart {
    static inline ClockSource getUSART1ClockSource() {
       return static_cast<ClockSource>(RCC->CCIPR & RCC_CCIPR_USART1SEL);
    }
+#endif
+
+#if defined(USART_CR1_FIFOEN)
+   /**
+    * @brief Enables the 8-byte TX and RX FIFOs (FIFO mode). Then RXNE means
+    * "RX FIFO not empty" and TXE means "TX FIFO not full", so the receive
+    * and transmit paths stay the same. FIFOEN is only writable with UE = 0:
+    * the function disables the USART for the change and restores UE.
+    * Wait for isTransferComplete() first.
+    */
+   void enableFifo() const {
+      setFifoEnable(true);
+   }
+   void disableFifo() const {
+      setFifoEnable(false);
+   }
+   bool isFifoEnabled() const {
+      return (usart_.CR1 & USART_CR1_FIFOEN) != 0;
+   }
+#endif
 
    inline void enablePinSwap() const {
       usart_.CR2 |= USART_CR2_SWAP;
@@ -444,6 +487,8 @@ struct Usart {
    void enableDmaTx() const {
       usart_.CR3 |= USART_CR3_DMAT;
    }
+   // STM32H5 erratum (ES0621 2.15.2): after DMAT is cleared and set again,
+   // the USART sends no more DMA requests. Toggle UE after the clear.
    void disableDmaTx() const {
       usart_.CR3 &= ~USART_CR3_DMAT;
    }
@@ -527,6 +572,11 @@ struct Usart {
          usart_.ICR = mask;
       }
    }
+
+ private:
+#if defined(USART_CR1_FIFOEN)
+   void setFifoEnable(bool on) const;
+#endif
 };
 
 } // namespace hw

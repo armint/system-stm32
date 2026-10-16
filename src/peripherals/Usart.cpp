@@ -7,6 +7,9 @@ void Usart::setBaudRate(uint32_t baud_rate) const {
    uint32_t fclk;
 
    fclk = getClockFrequency();
+   if(fclk == 0) {
+      return; // kernel clock unknown to getClockFrequency()
+   }
    uint32_t brr = fclk;
    const bool over8 = (usart_.CR1 & USART_CR1_OVER8);
    if(over8) {
@@ -26,6 +29,41 @@ void Usart::setBaudRate(uint32_t baud_rate) const {
 
 uint32_t Usart::getClockFrequency() const {
    uint32_t clk;
+#if defined(RCC_CCIPR1_USART1SEL)
+   // STM32H5: one 3-bit kernel clock mux per USART in RCC_CCIPR1, with the
+   // same encoding for each USART. USART1 is on APB2, USART2/3 on APB1.
+   const auto base = reinterpret_cast<uintptr_t>(&usart_);
+   uint32_t sel;
+   uint32_t pclk;
+   if(base == USART1_BASE) {
+      sel = (RCC->CCIPR1 & RCC_CCIPR1_USART1SEL) >> RCC_CCIPR1_USART1SEL_Pos;
+      pclk = Rcc::getAPB2Clock();
+   } else if(base == USART2_BASE) {
+      sel = (RCC->CCIPR1 & RCC_CCIPR1_USART2SEL) >> RCC_CCIPR1_USART2SEL_Pos;
+      pclk = Rcc::getAPBClock();
+   } else if(base == USART3_BASE) {
+      sel = (RCC->CCIPR1 & RCC_CCIPR1_USART3SEL) >> RCC_CCIPR1_USART3SEL_Pos;
+      pclk = Rcc::getAPBClock();
+   } else {
+      return 0; // UART4/5, USART6, UART12: not used by system-stm32 yet
+   }
+   switch(static_cast<ClockSource>(sel << RCC_CCIPR1_USART1SEL_Pos)) {
+   case ClockSource::PCLK:
+      clk = pclk;
+      break;
+   case ClockSource::HSIKER:
+      clk = Rcc::getHSIClock();
+      break;
+   case ClockSource::CSIKER:
+      clk = Rcc::CSIHz;
+      break;
+   case ClockSource::LSE:
+      clk = LSE_VALUE;
+      break;
+   default:
+      return 0; // PLL2Q, PLL3Q or reserved
+   }
+#else
    if(reinterpret_cast<uint32_t>(&usart_) == USART1_BASE) {
       switch(getUSART1ClockSource()) {
       case ClockSource::SYSCLK:
@@ -51,6 +89,7 @@ uint32_t Usart::getClockFrequency() const {
       // USART2
       clk = Rcc::getAPBClock();
    }
+#endif
    if(usart_.CR1 & USART_CR1_OVER8) {
       clk *= 2;
    }
@@ -128,6 +167,21 @@ void Usart::configureRs485DriverEnable(bool activeHigh, uint8_t assertionTime, u
    if(wasEnabled)
       enable();
 }
+
+#if defined(USART_CR1_FIFOEN)
+void Usart::setFifoEnable(bool on) const {
+   const bool wasEnabled = isEnabled();
+   disable();
+   if(on) {
+      usart_.CR1 |= USART_CR1_FIFOEN;
+   } else {
+      usart_.CR1 &= ~USART_CR1_FIFOEN;
+   }
+   if(wasEnabled) {
+      enable();
+   }
+}
+#endif
 
 void Usart::setReceiverTimeout(uint32_t bitDuration) const {
    // RTOR register takes a 24-bit value

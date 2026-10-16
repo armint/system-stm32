@@ -16,11 +16,15 @@
 #if !defined(HSE_VALUE)
 #error "HSE_VALUE is not defined: set SYSTEM_STM32_HSE_VALUE in CMake"
 #endif
+#if !defined(LSE_VALUE)
+#define LSE_VALUE (32768UL)
+#endif
 
 namespace Rcc {
 
 // HSI before HSIDIV. HSIDIV is /2 after reset, so hsi_ck is 32 MHz.
 constexpr uint32_t HSIMaxHz = 64000000UL;
+constexpr uint32_t CSIHz = 4000000UL;
 constexpr uint32_t SysClock250MHz = 250000000UL;
 
 namespace detail {

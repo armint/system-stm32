@@ -1,6 +1,12 @@
 #pragma once
 
 #include <cmsis_device.h>
+
+#if defined(SPI_CFG1_MBR)
+// SPI v2 (STM32H5): CFG1/CFG2, TSIZE, CSTART, in the family directory
+#include "SpiV2.h"
+#else
+
 #include <cstdint>
 #include <optional>
 
@@ -346,3 +352,5 @@ struct Spi {
 };
 
 } // namespace hw
+
+#endif // SPI_CFG1_MBR
