@@ -1,5 +1,12 @@
 #pragma once
 
+#include <cmsis_device.h>
+
+#if defined(RCC_CFGR1_SW)
+// STM32H5: other RCC register layout, see families/stm32h5/RccH5.h.
+#include "RccH5.h"
+#else
+
 #include "Spi.h"
 #include "utils/Span.h"
 #include <cmsis_device.h>
@@ -2611,3 +2618,5 @@ inline bool isRTCClockEnabled() {
 #endif
 
 } // namespace Rcc
+
+#endif // RCC_CFGR1_SW
