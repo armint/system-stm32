@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS. USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2, ADC. DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -154,6 +154,8 @@ library) and, once installed, as `art::system-stm32`.
   and up to 1.26 V (105 °C). So VDDA from Vrefint has an error of about
   ±3.3 % (+5 % at the highest temperatures), plus the ADC error. In the
   worst case this is about ±110 mV at 3.3 V and ±120 mV at 3.6 V.
+  The STM32H5 `Adc` also has its own interface, because the H5 ADC is the
+  L4/G4 type. See [STM32H5 ADC](#stm32h5-adc).
 - `src/utils/` — interrupt vector-table relocation and C++ member-function
   binding (`Interrupt`), GPIO interrupt dispatch (`GpioInterrupt`, not
   built for STM32WL and STM32F1 — see above).
@@ -238,10 +240,14 @@ F1 peripherals. The skeleton has these properties:
   PB13 (CC1) and PB14 (CC2). `Pwr::disableUcpdDeadBattery()` sets
   `PWR_UCPDR.UCPD_DBDIS` and removes them. Call it before you use these
   pins, for example for SPI2.
-- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Usart`, `Spi`,
-  `Dma`, `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register
-  blocks for these: the USART with FIFO and the SPI v2 (#34), GPDMA (#35),
-  and one EXTI IRQ for each line.
+- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Spi.cpp`, `Dma`,
+  `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
+  these: the SPI v2, GPDMA (#35), and one EXTI IRQ for each line.
+- The shared `Usart` driver works on the H5. See [STM32H5 USART](#stm32h5-usart).
+- The SPI v2 driver is in `families/stm32h5/SpiV2.{h,cpp}`.
+  `peripherals/Spi.h` includes it on the H5. See [STM32H5 SPI v2](#stm32h5-spi-v2).
+- The ADC driver is in `families/stm32h5/Adc.{h,cpp}`. See
+  [STM32H5 ADC](#stm32h5-adc).
 - The RCC of the H5 has its own driver, `families/stm32h5/RccH5.{h,cpp}`.
   `peripherals/Rcc.h` includes it on the H5, so the include stays the same.
   See [STM32H5 clocks](#stm32h5-clocks).
@@ -296,6 +302,129 @@ stays on HSI.
 - The test image (`tests/stm32h5`) uses the HSE recipe. Hold B1 during reset
   to use the HSI recipe. LD2 blinks at 1 Hz from SysTick when the clock is
   correct, and at 5 Hz when the recipe fails.
+- The test image also prints self-test results on the ST-LINK virtual COM
+  port (USART2, PA2/PA3, 115200 8N1):
+  - USART1 loopback. Connect PA9 (TX) to PA10 (RX).
+  - SPI2 loopback in master mode. Connect PB15 (MOSI) to PB14 (MISO).
+  - ADC1 calibration, VDDA from Vrefint, and PB0 in mV. The image prints
+    PB0 again at each LD2 toggle.
+
+  A missing wire gives `FAIL` for that test only. The SPI test needs the
+  250 MHz clock, because the SPI kernel clock is `pll1_q_ck`.
+
+### STM32H5 USART
+
+The H5 USART has the register set of the G0 USART. The shared driver
+`peripherals/Usart.{h,cpp}` has two H5 additions:
+
+- The kernel clock mux is in `RCC_CCIPR1`, with a 3-bit field for each
+  USART. `Usart::ClockSource` has the H5 values `PCLK`, `PLL2Q`, `PLL3Q`,
+  `HSIKER`, `CSIKER` and `LSE`. `PCLK` is pclk2 for USART1 and pclk1 for
+  USART2 and USART3.
+- `getClockFrequency()` decodes the field of USART1 to USART3. It returns 0
+  for `PLL2Q`, `PLL3Q` and for the other U(S)ARTs, because system-stm32
+  does not start PLL2 or PLL3. `setBaudRate()` then does not change `BRR`.
+- `enableFifo()` and `disableFifo()` set `CR1.FIFOEN`. They exist on all
+  parts that have FIFO mode (G0 and H5). In FIFO mode, `RXNE` means "RX FIFO
+  not empty" and `TXE` means "TX FIFO not full". Thus the receive and
+  transmit code stays the same. `FIFOEN` is only writable while the USART
+  is disabled: the functions disable it and then restore the enable bit.
+- Erratum ES0621 2.15.2: after `disableDmaTx()` and `enableDmaTx()`, the
+  USART sends no more DMA requests. Disable and enable the USART after the
+  clear of `DMAT`.
+
+### STM32H5 SPI v2
+
+The SPI of the H5 is not the SPI of the other families. It has two
+configuration registers (`CFG1`, `CFG2`), a FIFO with a threshold, a
+transfer size counter (`TSIZE`), a master start bit (`CSTART`), separate
+`TXDR` and `RXDR` registers, and flags that `IFCR` clears. It has no `BSY`
+flag. Thus `hw::Spi` on the H5 has its own interface, which follows this
+hardware:
+
+| Item | Function |
+|---|---|
+| Configuration | `configure()`: prescaler, master or slave, CPOL, CPHA, data size (4 to 32 bits), bit order, NSS mode, direction (full-duplex, TX only, RX only, half-duplex). It disables the SPI, writes `CFG1`/`CFG2`, sets `TSIZE` = 0 and restores `SPE`. |
+| Single setters | `setBaudRatePrescaler()`, `setDataSize()`, `setFifoThreshold()`, `setTransferSize()`, `enableTxDma()`, ... Only while the SPI is disabled: the hardware ignores writes to `CFG1`, `CFG2` and `CR2` while `SPE` = 1. |
+| Master transfer | `enable()`, then `startTransfer()` (`CSTART`). `suspend()`, `setHalfDuplexDirection()`. |
+| Data | `write()` and `read()`. The access width (8, 16 or 32 bits) follows the data size, so that one access is one frame. |
+| Blocking frame | `transfer()`: one full-duplex frame in master mode. It sets `CSTART` if necessary. |
+| End of transfer | `waitUntilIdle()` waits for `TXC`. Call it before `disable()`. |
+| Flags | `isTxPacketSpaceAvailable()` (`TXP`), `isRxPacketAvailable()` (`RXP`), `isEndOfTransfer()`, `isTxComplete()`, `isOverrun()`, `isUnderrun()`, `isModeFault()`, `remainingFrames()`, and a `clear...()` function for each `IFCR` bit. |
+| Interrupts | RXP, TXP, end of transfer (EOT, SUSP, TXC), errors (OVR, UDR, MODF). |
+| Clock | `getClockFrequency()`: `pll1_q_ck` (125 MHz) for SPI1 to SPI3 with the reset mux, pclk2 for SPI4 with the reset mux. HSI, CSI and HSE for SPI4 too. 0 for PLL2, PLL3, AUDIOCLK and per_ck. |
+
+- With `TSIZE` = 0 the transfer is endless. In full-duplex and TX-only
+  mode, the master sends a frame each time the TX FIFO has data. It stops
+  the clock when the TX FIFO is empty. With `TSIZE` > 0 the hardware clears
+  `CSTART` and sets `EOT` after `TSIZE` frames.
+- `NssMode::Soft` sets `SSM`. The internal slave select (`SSI`) is then
+  inactive for a master (no mode fault) and active for a slave. Call
+  `setMode()` before `setNssMode()`; `configure()` does this.
+- `enableAlternateFunctionControl()` (`AFCNTR`) keeps SCK, MOSI and NSS at
+  their idle levels while the SPI is disabled. Use it in master mode only.
+- SPI1 to SPI3 take 4 to 32 data bits and have a 16-byte FIFO. SPI4 takes
+  4 to 16 data bits and has an 8-byte FIFO.
+- Erratum ES0621 2.17.2: a disable directly after `EOT` can cut the last
+  SCK pulse. At a high PCLK/SCK ratio, wait half an SCK period between
+  `waitUntilIdle()` and `disable()`.
+
+### STM32H5 ADC
+
+The H5 ADC is the L4/G4 type of ADC, not the G0 type. It has a sequencer
+for each group, a sample time for each channel, and a deep power-down
+mode. `Adc` (`families/stm32h5/Adc.h`) gives access to all functions of
+the block:
+
+| Area | Functions |
+|---|---|
+| Clock (static) | `enableClock()`, `reset()`, `setKernelClock()` (`RCC_CCIPR5.ADCDACSEL`), `setClockMode()` (`CKMODE`, `PRESC`), `configureClock()`, `clockHz()` |
+| Common (static) | `enableVrefint()`, `enableTemperatureSensor()`, `enableVbat()`, `setDualMode()`, `dualValue()` |
+| Power and calibration | `powerUp()`, `powerDown()`, `calibrate(InputMode)`, `getCalibrationFactors()`, `setCalibrationFactors()`, `enable()`, `disable()` |
+| Channels | `setSamplingTime()`, `setSamplingTimePlusOne()` (`SMPPLUS`), `setInputMode()` (single-ended or differential), `setChannel0Switch()` (`ADC_OR.OP0`) |
+| Regular group | `setRegularRank()` (ranks 1 to 16), `setRegularLength()`, `setResolution()`, `setAlignment()`, `setConversionMode()`, `setDiscontinuousCount()`, `setOverrunMode()`, `setDmaMode()`, `setAutoDelay()`, `setRegularTrigger()`, `setBulbSampling()`, `setSamplingTimeControlTrigger()`, `setSamplingSoftwareTrigger()`, `start()`, `stop()`, `value()` |
+| Injected group | `setInjectedSequence()` (1 to 4 ranks and the trigger in one `JSQR` write), `setInjectedQueue()`, `setInjectedAuto()`, `setInjectedDiscontinuous()`, `startInjected()`, `stopInjected()`, `injectedValue()` |
+| Offsets | `setOffset()` (4 units: subtract or add, saturation), `disableOffset()` |
+| Oversampling | `setOversampling()` (ratio 2 to 256, shift 0 to 8, regular and injected, triggered, continued or resumed) |
+| Analog watchdogs | `setWatchdog1()` (12-bit thresholds, one channel or all, filter), `setWatchdog23()` (channel set, 8-bit thresholds) |
+| Events | `isSet()`, `clear()`, `enableInterrupts()`, `disableInterrupts()` with the `Adc::Event` bits |
+| Helpers | `convert()` (one blocking software conversion), `readSupplyMillivolts()`, `toMillivolts()`, `supplyFromVrefint()`, `Calibration` (factory values) |
+
+Start-up sequence:
+
+1. `Adc::enableClock()` and `Adc::configureClock()`. The synchronous clock
+   is hclk / 4 at 250 MHz, thus 62.5 MHz. The maximum ADC clock is 75 MHz
+   (DS14539).
+2. `powerUp()`: the ADC leaves deep power-down. The regulator then needs
+   10 µs.
+3. `calibrate()`: once for single-ended inputs, once more with
+   `InputMode::Differential` if you use differential inputs.
+4. `enable()`.
+
+- The waits of the driver stop after `Adc::pollLimit` iterations and then
+  return `false`.
+- The `Channel` values are the ADC1 `VINP` numbers of the STM32H533. They
+  do not follow the pin order (for example PB0 is channel 9). PA0 also
+  needs `setChannel0Switch(true)`.
+- `Calibration::vrefint()`, `ts1()` and `ts2()` read the factory values at
+  0x08FFF810, 0x08FFF814 and 0x08FFF818 (VDDA = 3.3 V). `readSupplyMillivolts()`
+  calculates VDDA = 3.3 V × `VREFINT_CAL` / raw. It sets a sample time of
+  at least 5 µs for Vrefint.
+- `TemperatureSensorCalibration` gives the same names as on G0, for the
+  `InternalTemperatureSensor` of libArT.
+- The hardware allows most writes only while no conversion runs, and some
+  only while the ADC is disabled (RM0481 section 28.4.10). The driver does
+  not check these rules.
+- With the injected queue on (`setInjectedQueue(true)`), the injected
+  group needs a hardware trigger. `setInjectedSequence()` refuses
+  `TriggerEdge::Software` then and returns `false`.
+- Errata ES0621 2.6.1 and 2.6.2 apply to the injected queue. Erratum 2.6.5:
+  before `stopInjected()`, wait for `Event::InjectedEndOfSequence`.
+- With `OverrunMode::Preserve` (the reset value), `ADC_DR` is a 3-stage
+  FIFO. `convert()` sets `Overwrite` while it runs, so it never returns an
+  older unread result.
+- `readSupplyMillivolts()` works on ADC1 only. On ADC2, channel 17 is
+  VDDCORE.
 
 ## STM32F1 GPIO
 
