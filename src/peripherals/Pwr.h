@@ -61,8 +61,9 @@ inline bool isBackupDomainAccessEnabled() {
  *
  * After reset, the UCPD pulls CC1 and CC2 down (STM32H523/H533: PB13 and
  * PB14). Call this before you use these pins as GPIO or for another
- * peripheral (RM0481 10.11.10, PWR_UCPDR.UCPD_DBDIS). No effect on families
- * without this bit.
+ * peripheral (RM0481 10.11.10, PWR_UCPDR.UCPD_DBDIS).
+ * STM32H5 only: no effect on other families. The G0 controls its UCPD
+ * dead-battery pull-downs with SYSCFG_CFGR1.UCPDx_STROBE (not handled here).
  */
 inline void disableUcpdDeadBattery() {
 #if defined(PWR_UCPDR_UCPD_DBDIS)
