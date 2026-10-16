@@ -84,6 +84,12 @@ inline void enableSPI3Clock() {
 inline void enableUSBClock() {
    detail::enableClock(RCC->APB2ENR, RCC_APB2ENR_USBEN);
 }
+inline void enableGPDMA1Clock() {
+   detail::enableClock(RCC->AHB1ENR, RCC_AHB1ENR_GPDMA1EN);
+}
+inline void enableGPDMA2Clock() {
+   detail::enableClock(RCC->AHB1ENR, RCC_AHB1ENR_GPDMA2EN);
+}
 inline void enableCRSClock() {
    detail::enableClock(RCC->APB1LENR, RCC_APB1LENR_CRSEN);
 }

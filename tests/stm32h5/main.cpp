@@ -2,7 +2,7 @@
 // library builds, links and fits in memory: start-up, vector table, fault
 // handlers, the interrupt table copy, the DWT delay, the RCC with the 250 MHz
 // recipes, the ICACHE, HSI48, the CRS, GpioPin, FastPin, UID, DBG, IWDG, the
-// UCPD dead-battery disable, the USART, the SPI v2 and the ADC.
+// UCPD dead-battery disable, the USART, the SPI v2, the ADC and the GPDMA.
 //
 // After the clock setup it runs self-tests and prints the results on USART2
 // (PA2/PA3, the ST-LINK virtual COM port, 115200 8N1):
@@ -11,6 +11,7 @@
 //   SCK is on PB13.
 // - ADC1: VDDA from Vrefint and the factory VREFINT_CAL, and PB0 (channel
 //   9) in mV. Then PB0 again at each LD2 toggle.
+// - GPDMA1 memory-to-memory: one transfer and a two-item linked list.
 // A missing wire gives "FAIL" for that test only.
 //
 // On a NUCLEO-H533RE it sets 250 MHz from the 24 MHz HSE crystal. Hold B1
@@ -23,6 +24,7 @@
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/Crs.h>
+#include <peripherals/Dma.h>
 #include <peripherals/Dbg.h>
 #include <peripherals/FastPin.h>
 #include <peripherals/GpioPin.h>
@@ -178,6 +180,59 @@ void printPb0() {
    print(" mV\r\n");
 }
 
+alignas(4) uint8_t dmaSource[64];
+alignas(4) uint8_t dmaTarget[64];
+// The items must share one 64 KiB region: align the array to its size.
+alignas(64) Dma::LinkedListItem dmaList[2];
+
+bool waitDone(const Dma::Channel &channel) {
+   for(uint32_t i = 0; i < 100000; ++i) {
+      if(channel.isErrorFlagSet()) {
+         return false;
+      }
+      if(channel.isTransferCompleteFlagSet() && channel.isIdle()) {
+         return true;
+      }
+   }
+   return false;
+}
+
+bool targetMatches(size_t offset, size_t count) {
+   for(size_t i = 0; i < count; ++i) {
+      if(dmaTarget[offset + i] != dmaSource[offset + i]) {
+         return false;
+      }
+   }
+   return true;
+}
+
+// Memory-to-memory with one transfer, then with a two-item list. A transfer
+// to a peripheral only changes Config::direction and Config::request.
+bool exerciseDma() {
+   Rcc::enableGPDMA1Clock();
+   for(size_t i = 0; i < sizeof(dmaSource); ++i) {
+      dmaSource[i] = static_cast<uint8_t>(i * 7 + 1);
+   }
+   const Dma::Channel channel(GPDMA1, 0);
+   Dma::Config config;
+   config.sourceIncrement = true;
+   config.destinationIncrement = true;
+   if(!channel.start(config, dmaSource, dmaTarget, 32) || !waitDone(channel) || !targetMatches(0, 32)) {
+      return false;
+   }
+
+   config.sourceSize = Dma::DataSize::Size32Bits;
+   config.destinationSize = Dma::DataSize::Size32Bits;
+   config.completeEvent = Dma::CompleteEvent::Channel;
+   dmaList[1] = Dma::LinkedListItem::make(config, dmaSource + 32, dmaTarget + 32, 16, nullptr);
+   dmaList[0] = Dma::LinkedListItem::make(config, dmaSource + 48, dmaTarget + 48, 16, &dmaList[1]);
+   for(auto &byte : dmaTarget) {
+      byte = 0;
+   }
+   channel.clearAllFlags();
+   return channel.startList(dmaList[0]) && waitDone(channel) && targetMatches(32, 32);
+}
+
 void selfTest() {
    Rcc::enableGPIOBClock();
    Rcc::enableUSART2Clock();
@@ -187,6 +242,7 @@ void selfTest() {
    print("\r\nsystem-stm32 STM32H5 test image\r\n");
    printResult("usart1 loopback (PA9-PA10)", usartLoopback());
    printResult("spi2 loopback (PB15-PB14)", spiLoopback());
+   printResult("gpdma memory-to-memory", exerciseDma());
    const bool adcOk = startAdc();
    printResult("adc1 calibration", adcOk);
    if(!adcOk) {

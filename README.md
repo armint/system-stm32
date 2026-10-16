@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2, ADC. DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2, ADC, GPDMA. EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -240,9 +240,10 @@ F1 peripherals. The skeleton has these properties:
   PB13 (CC1) and PB14 (CC2). `Pwr::disableUcpdDeadBattery()` sets
   `PWR_UCPDR.UCPD_DBDIS` and removes them. Call it before you use these
   pins, for example for SPI2.
-- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Spi.cpp`, `Dma`,
+- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Spi.cpp`, `Dma.cpp`,
   `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
-  these: the SPI v2, GPDMA (#35), and one EXTI IRQ for each line.
+  these: the SPI v2, GPDMA, and one EXTI IRQ for each line.
+  The GPDMA has its own driver, see [STM32H5 GPDMA](#stm32h5-gpdma).
 - The shared `Usart` driver works on the H5. See [STM32H5 USART](#stm32h5-usart).
 - The SPI v2 driver is in `families/stm32h5/SpiV2.{h,cpp}`.
   `peripherals/Spi.h` includes it on the H5. See [STM32H5 SPI v2](#stm32h5-spi-v2).
@@ -256,6 +257,32 @@ F1 peripherals. The skeleton has these properties:
 - Do not reset the backup domain (`RCC_BDCR.VSWRST`) after start-up. The
   reset also erases SRAM2 (errata ES0621, section 2.2.6), and SRAM2 is
   part of the RAM region of `mem-H533xE.ld`.
+
+### STM32H5 GPDMA
+
+The H5 has no DMA and no DMAMUX. It has GPDMA1 and GPDMA2 with eight
+channels each, and a request selector in each channel. The driver is in
+`families/stm32h5/GpdmaH5.{h,cpp}`. `peripherals/Dma.h` includes it on the
+H5, so the include stays the same. The `Dma` namespace has other types than
+on L0/G0: the H5 API does not match the DMA API of the other families.
+
+- Enable the clock first: `Rcc::enableGPDMA1Clock()`.
+- Channels are numbered from 0, as in the RM and the IRQ names. Channels 0
+  to 3 have a 8-byte FIFO. Channels 4 to 7 have a 32-byte FIFO.
+- `Dma::Config` holds the direction, the request (`Dma::Request`, for
+  example `spi1_tx`, `usart1_rx`, `tim1_upd`), the data widths and the
+  address increment. The block size is in bytes, 1 to 65535.
+- `Channel::start()` runs a single transfer. `Channel::startList()` runs a
+  linked list of `Dma::LinkedListItem`. Build each item with
+  `LinkedListItem::make()`. All items stay in SRAM, 4-byte aligned, in the
+  same 64 KiB region: align the item array to a power of 2 that is at least
+  its size. An item can point to itself for a circular transfer.
+- Both AHB ports stay on port 0. The 2D addressing of channels 6 and 7 is
+  not used. The trigger inputs, the link step mode and the suspend mode
+  are not used.
+- The test image runs a memory-to-memory transfer, single and with a list.
+  The transfer to a peripheral (the acceptance test of #35) is not yet
+  tested on the Nucleo board.
 
 ### STM32H5 clocks
 
@@ -565,6 +592,9 @@ this code:
   32-bit CPU stride of the packet memory. The tests also check the
   `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT` written as
   `old ^ wanted`, `DTOG` written as 0, and the configuration bits kept.
+
+- STM32H5 GPDMA driver: the `CTR1` and `CTR2` encoding, the linked-list
+  items, and the register writes of `Channel::start()` and `startList()`.
 
 The fake USB registers are plain memory. A register holds the last written
 value. The fake does not model the toggle bits and the `rc_w0` bits of the
