@@ -183,7 +183,7 @@ library) and, once installed, as `art::system-stm32`.
   never runs on hardware. Add new F1 drivers to it when they land.
 - `tests/stm32h5/` — STM32H5 test image, enabled in the same way with
   `STM32_FAMILY=STM32H5`. CI links it for the H533xE. On a NUCLEO-H533RE it
-  blinks LD2 (PA5). Add new H5 drivers to it when they land.
+  sets 250 MHz and blinks LD2 (PA5). Add new H5 drivers to it when they land.
 - `tests/common/` — the linker scripts of the test images: a copy of the
   µOS++ `sections.ld` and `libs.ld`.
 - `svd/` — SVD register descriptions, for reference/tooling use.
@@ -278,6 +278,9 @@ time. The system clock then stays on HSI.
   writes to the flash.
 - For a 1 ms SysTick, call `SysTick_Config(SystemCoreClock / 1000)` after
   the recipe.
+- The test image (`tests/stm32h5`) uses the HSE recipe. Hold B1 during reset
+  to use the HSI recipe. LD2 blinks at 1 Hz from SysTick when the clock is
+  correct, and at 5 Hz when the recipe fails.
 
 ## STM32F1 GPIO
 
