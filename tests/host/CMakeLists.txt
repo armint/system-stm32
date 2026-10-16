@@ -40,3 +40,12 @@ target_include_directories(test-gpio-moder PRIVATE
         ${_src})
 target_compile_options(test-gpio-moder PRIVATE -Wall -Wextra -Werror -Wno-volatile)
 add_test(NAME gpio-moder COMMAND test-gpio-moder)
+
+add_executable(test-gpdma-h5
+        test_gpdma_h5.cpp
+        ${_src}/families/stm32h5/GpdmaH5.cpp)
+target_include_directories(test-gpdma-h5 PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stubs-gpdma
+        ${_src}/families/stm32h5)
+target_compile_options(test-gpdma-h5 PRIVATE -Wall -Wextra -Werror -Wno-volatile)
+add_test(NAME gpdma-h5 COMMAND test-gpdma-h5)
