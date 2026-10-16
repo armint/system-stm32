@@ -1,5 +1,6 @@
 /*
- * Memory Spaces Definitions for STM32H533xE (also STM32H523xE).
+ * Memory Spaces Definitions for STM32H533xE. The STM32H523xE has the same
+ * memory map.
  *
  * FLASH: 512K at 0x08000000 (two banks of 256K, 8K sectors).
  * RAM: SRAM1 (128K), SRAM2 (80K) and SRAM3 (64K) are contiguous at

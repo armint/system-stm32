@@ -1,7 +1,9 @@
 // STM32H5 series interrupt vector table (Cortex-M33, TrustZone off).
 // Weak aliases allow application code to override individual handlers.
 // IRQ positions from the STM32H533xx CMSIS startup file (cmsis-device-h5
-// v1.7.0, RM0481). The STM32H523xx has the same table.
+// v1.7.0, RM0481). The STM32H523xx has the same IRQ positions, only without
+// the crypto IRQs (SAES, OTFDEC1, AES, PKA), so this table also fits it.
+// Other H5 parts (H503, H56x, H57x) have a different table.
 
 #include "cmsis-plus/cortexm/exception-handlers.h"
 
@@ -151,6 +153,9 @@ __attribute__((section(".isr_vector"), used)) pHandler g_pfnVectors[] = {
     SysTick_Handler,       // -1   SysTick
 
     // Device interrupts
+
+#if defined(STM32H533xx) || defined(STM32H523xx)
+
     WWDG_IRQHandler,                   // 0   WWDG
     PVD_AVD_IRQHandler,                // 1   PVD_AVD
     RTC_IRQHandler,                    // 2   RTC
@@ -284,6 +289,10 @@ __attribute__((section(".isr_vector"), used)) pHandler g_pfnVectors[] = {
     0,                                 // 130 Reserved
     I3C2_EV_IRQHandler,                // 131 I3C2_EV
     I3C2_ER_IRQHandler,                // 132 I3C2_ER
+
+#else
+#error "Unsupported STM32H5 device — add vector table entries"
+#endif
 };
 
 void __attribute__((section(".after_vectors"))) Default_Handler(void) {

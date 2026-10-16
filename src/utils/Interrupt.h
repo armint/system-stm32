@@ -8,7 +8,7 @@
 #elif defined(STM32F1)
 // STM32F103 medium density has 43 interrupt vectors + 16 cortex-m vectors
 #define VECTOR_TABLE_SIZE 59
-#elif defined(STM32H5)
+#elif defined(STM32H533xx) || defined(STM32H523xx)
 // STM32H523/H533 have 133 interrupt vectors + 16 cortex-m vectors
 #define VECTOR_TABLE_SIZE 149
 #endif

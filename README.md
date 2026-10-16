@@ -208,7 +208,8 @@ The H5 peripherals are close to the L0, G0 and L4 peripherals, not to the
 F1 peripherals. The skeleton has these properties:
 
 - Device `STM32H533xx`. The STM32H523xx has the same reference manual
-  (RM0481) and the same vector table.
+  (RM0481) and the same IRQ positions, so the vector table also fits it.
+  CI builds only the H533. Other H5 devices stop the build with `#error`.
 - Cortex-M33, compiled with `-mcpu=cortex-m33 -mfloat-abi=soft`. The FPU
   stays off, as on the other families. Thus all libraries of a consumer use
   the same ABI.
