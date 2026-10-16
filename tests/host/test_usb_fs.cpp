@@ -1,6 +1,9 @@
-// Host tests for the STM32F1 USB device driver: the COUNTn_RX encoding, the
-// packet memory allocation, the buffer descriptor table, and the packet copy
-// at the 32-bit CPU stride of the packet memory.
+// Host tests for the shared USB full-speed device driver
+// (peripherals/usbfs/UsbDeviceCore): the COUNTn_RX encoding, the packet
+// memory allocation, the buffer descriptor table, and the packet copy. CMake
+// builds this file once per family access layer (UsbFsFamily.h), with the
+// stub CMSIS header of that family: STM32F1 (512 bytes at a 32-bit CPU
+// stride) and STM32L0 (1024 bytes at a 16-bit stride).
 //
 // The registers and the packet memory are plain host memory, so a register
 // holds the value of the last write. The hardware toggle bits (STAT, DTOG)
@@ -24,6 +27,15 @@
 
 USB_TypeDef hostUsbRegisters;
 uint16_t hostUsbPacketMemory[512];
+
+#if defined(STM32F1)
+constexpr IRQn_Type UsbIrq = USB_LP_CAN1_RX0_IRQn;
+// CPU bytes per USB packet memory byte
+constexpr unsigned PmaStride = 2;
+#else
+constexpr IRQn_Type UsbIrq = USB_IRQn;
+constexpr unsigned PmaStride = 1;
+#endif
 
 namespace {
 
@@ -53,7 +65,7 @@ void resetFakes() {
 
 // The 16-bit word at USB-local offset `offset` (even), as the CPU sees it.
 uint16_t &pma(uint16_t offset) {
-   return hostUsbPacketMemory[offset];
+   return hostUsbPacketMemory[offset * PmaStride / 2];
 }
 
 uint16_t addrTx(uint8_t n) {
@@ -84,8 +96,12 @@ void setEprTxStatus(uint8_t n, uint16_t status) {
    epr(n) = static_cast<uint16_t>((epr(n) & ~USB_EPTX_STAT) | status);
 }
 
-// The CPU stride: the upper half of every 32-bit slot stays unused.
+// The CPU stride: the upper half of every 32-bit slot stays unused. Always
+// true for a 16-bit stride.
 bool upperHalvesUnused() {
+   if(PmaStride == 1) {
+      return true;
+   }
    for(size_t word = 1; word < 512; word += 2) {
       if(hostUsbPacketMemory[word] != 0) {
          return false;
@@ -96,7 +112,8 @@ bool upperHalvesUnused() {
 
 void onEvent(void *, const hw::usb::Event &) {}
 
-// Size in bytes of an RX buffer from its COUNTn_RX value (RM0008 23.5.3).
+// Size in bytes of an RX buffer from its COUNTn_RX value (RM0367 32.6.2,
+// RM0008 23.5.3).
 uint16_t decodeRxCount(uint16_t count) {
    uint16_t blocks = (count >> 10) & 0x1F;
    return (count & 0x8000) ? static_cast<uint16_t>((blocks + 1) * 32) : static_cast<uint16_t>(blocks * 2);
@@ -120,7 +137,7 @@ void testBeginLayout() {
    UsbDevice usb;
    usb.begin(&onEvent, nullptr);
 
-   CHECK(connectedIrq == USB_LP_CAN1_RX0_IRQn);
+   CHECK(connectedIrq == UsbIrq);
    CHECK(hostUsbRegisters.BTABLE == 0);
    CHECK(hostUsbRegisters.DADDR == USB_DADDR_EF);
    CHECK(hostUsbRegisters.CNTR == (USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SUSPM | USB_CNTR_WKUPM));
@@ -193,14 +210,19 @@ void testPacketMemoryFull() {
    UsbDevice usb;
    usb.begin(&onEvent, nullptr);
 
-   // 512 - 64 (table) - 128 (EP0) = 320 bytes: five 64-byte buffers.
-   CHECK(usb.openEndpoint(0x01, EndpointType::Bulk, 64));
-   CHECK(usb.openEndpoint(0x81, EndpointType::Bulk, 64));
-   CHECK(usb.openEndpoint(0x02, EndpointType::Bulk, 64));
-   CHECK(usb.openEndpoint(0x82, EndpointType::Bulk, 64));
-   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64));
-   CHECK(addrRx(3) == UsbDevice::PacketMemorySize - 64);
-   CHECK(!usb.openEndpoint(0x83, EndpointType::Bulk, 2));
+   // PacketMemorySize - 64 (table) - 128 (EP0) bytes of 64-byte buffers:
+   // five on STM32F1 (320 bytes), 13 on STM32L0 (832 bytes). Directions
+   // in the order 0x01, 0x81, 0x02, 0x82, ...
+   const unsigned fit = (UsbDevice::PacketMemorySize - BtableSize - 128) / 64;
+   static_assert((UsbDevice::PacketMemorySize - BtableSize - 128) % 64 == 0);
+   auto address = [](unsigned i) { return static_cast<uint8_t>((i / 2 + 1) | (i % 2 ? 0x80 : 0)); };
+   for(unsigned i = 0; i < fit; ++i) {
+      CHECK(usb.openEndpoint(address(i), EndpointType::Bulk, 64));
+   }
+   const uint8_t last = address(fit - 1);
+   const uint8_t n = last & 0x7F;
+   CHECK(((last & 0x80) ? addrTx(n) : addrRx(n)) == UsbDevice::PacketMemorySize - 64);
+   CHECK(!usb.openEndpoint(address(fit), EndpointType::Bulk, 2));
 
    // closeAllEndpoints() frees everything after the EP0 buffers.
    usb.closeAllEndpoints();
@@ -283,7 +305,7 @@ void testReadOutCopiesPacket() {
    CHECK(blockingDepth == 0);
 }
 
-// EPnR write encoding (RM0008 23.5.2): CTR_RX and CTR_TX are written as 1
+// EPnR write encoding (RM0367 32.6.1, RM0008 23.5.2): CTR_RX and CTR_TX are written as 1
 // (rc_w0: no change), STAT is written as old ^ wanted, DTOG is written as 0
 // (no change), and EP_TYPE, EP_KIND and EA keep their value.
 constexpr uint16_t CtrKeep = USB_EP_CTR_RX | USB_EP_CTR_TX;
@@ -418,7 +440,7 @@ void testDoubleBufferedOutLayout() {
    CHECK(usb.openEndpoint(0x81, EndpointType::Interrupt, 16));
    CHECK(usb.openEndpoint(0x04, EndpointType::Bulk, 64));
    CHECK(usb.openEndpoint(0x84, EndpointType::Bulk, 64));
-   // 504 of the 512 bytes
+   // 504 bytes, so it fits on STM32F1 (512 bytes)
    CHECK(addrTx(4) == first + 128 + 64 + 16 + 64);
    CHECK(addrTx(4) + 64 <= UsbDevice::PacketMemorySize);
    // A normal endpoint has no DBL_BUF.
@@ -546,7 +568,8 @@ void testDoubleBufferedOutFlow() {
    CHECK(blockingDepth == 0);
 }
 
-// The first packet after DBL_BUF sets STAT_RX to NAK (RM0008 23.4.3). The
+// The first packet after DBL_BUF sets STAT_RX to NAK (RM0367 32.5.3,
+// RM0008 23.4.3). The
 // interrupt makes an armed endpoint VALID again, and leaves a NAK of
 // setNak().
 void testDoubleBufferedOutFirstPacketNak() {
@@ -603,6 +626,59 @@ void testSetAddressAndStall() {
    CHECK(!usb.isStalled(0x88));
 }
 
+int pullupCalls = 0;
+bool pullupOn = false;
+
+void recordPullup(void *, bool enable) {
+   ++pullupCalls;
+   pullupOn = enable;
+}
+
+// STM32L0: begin() clears USB_BCDR, connect()/disconnect() switch
+// USB_BCDR.DPPU, and isConnected() reads it back. STM32F1: no USB_BCDR, so
+// isConnected() is the requested state. Both: the callback runs, if set.
+void testPullup() {
+   resetFakes();
+   pullupCalls = 0;
+   UsbDevice usb;
+#if defined(STM32L0)
+   hostUsbRegisters.BCDR = USB_BCDR_DPPU | 1u;
+#endif
+   usb.begin(&onEvent, nullptr);
+#if defined(STM32L0)
+   CHECK(hostUsbRegisters.BCDR == 0);
+#endif
+   CHECK(!usb.isConnected());
+
+   usb.connect(); // no callback
+   CHECK(usb.isConnected());
+#if defined(STM32L0)
+   CHECK(hostUsbRegisters.BCDR == USB_BCDR_DPPU);
+   // The state comes from the register.
+   hostUsbRegisters.BCDR = 0;
+   CHECK(!usb.isConnected());
+   hostUsbRegisters.BCDR = USB_BCDR_DPPU;
+#endif
+
+   usb.setPullupCallback(&recordPullup, nullptr);
+   usb.disconnect();
+   CHECK(!usb.isConnected());
+   CHECK(pullupCalls == 1 && !pullupOn);
+   usb.connect();
+   CHECK(usb.isConnected());
+   CHECK(pullupCalls == 2 && pullupOn);
+#if defined(STM32L0)
+   CHECK(hostUsbRegisters.BCDR == USB_BCDR_DPPU);
+#endif
+
+   usb.end();
+   CHECK(!usb.isConnected());
+   CHECK(pullupCalls == 3 && !pullupOn);
+#if defined(STM32L0)
+   CHECK(hostUsbRegisters.BCDR == 0);
+#endif
+}
+
 } // namespace
 
 // Host stand-ins for utils/Interrupt.cpp and the delay code.
@@ -642,10 +718,11 @@ int main() {
    testDoubleBufferedOutFlow();
    testDoubleBufferedOutFirstPacketNak();
    testDoubleBufferedOutToggles();
+   testPullup();
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
       return 1;
    }
-   std::printf("all USB F1 host tests passed (%d blocking sections)\n", blockingSections);
+   std::printf("all USB FS host tests passed for %s (%d blocking sections)\n", PmaStride == 2 ? "STM32F1" : "STM32L0", blockingSections);
    return 0;
 }

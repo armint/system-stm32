@@ -22,15 +22,23 @@ target_include_directories(test-gpio-f1 PRIVATE
 target_compile_options(test-gpio-f1 PRIVATE -Wall -Wextra -Werror -Wno-volatile)
 add_test(NAME gpio-f1 COMMAND test-gpio-f1)
 
-add_executable(test-usb-f1
-        test_usb_f1.cpp
-        ${_src}/families/stm32f1/UsbDevice.cpp)
-target_include_directories(test-usb-f1 PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/stubs
-        ${_src}
-        ${_src}/families/stm32f1)
-target_compile_options(test-usb-f1 PRIVATE -Wall -Wextra -Werror -Wno-volatile)
-add_test(NAME usb-f1 COMMAND test-usb-f1)
+# The shared USB FS driver core, once per family access layer.
+foreach(_family f1 l0)
+    add_executable(test-usb-${_family}
+            test_usb_fs.cpp
+            ${_src}/peripherals/usbfs/UsbDeviceCore.cpp)
+    if(_family STREQUAL "f1")
+        set(_stubs ${CMAKE_CURRENT_SOURCE_DIR}/stubs)
+    else()
+        set(_stubs ${CMAKE_CURRENT_SOURCE_DIR}/stubs-usb-${_family})
+    endif()
+    target_include_directories(test-usb-${_family} PRIVATE
+            ${_stubs}
+            ${_src}
+            ${_src}/families/stm32${_family})
+    target_compile_options(test-usb-${_family} PRIVATE -Wall -Wextra -Werror -Wno-volatile)
+    add_test(NAME usb-${_family} COMMAND test-usb-${_family})
+endforeach()
 
 add_executable(test-gpio-moder
         test_gpio_moder.cpp
