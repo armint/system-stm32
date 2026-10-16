@@ -352,7 +352,7 @@ hardware:
 | End of transfer | `waitUntilIdle()` waits for `TXC`. Call it before `disable()`. |
 | Flags | `isTxPacketSpaceAvailable()` (`TXP`), `isRxPacketAvailable()` (`RXP`), `isEndOfTransfer()`, `isTxComplete()`, `isOverrun()`, `isUnderrun()`, `isModeFault()`, `remainingFrames()`, and a `clear...()` function for each `IFCR` bit. |
 | Interrupts | RXP, TXP, end of transfer (EOT, SUSP, TXC), errors (OVR, UDR, MODF). |
-| Clock | `getClockFrequency()`: `pll1_q_ck` (125 MHz) for SPI1 to SPI3 with the reset mux. 0 for the other sources and for SPI4. |
+| Clock | `getClockFrequency()`: `pll1_q_ck` (125 MHz) for SPI1 to SPI3 with the reset mux, pclk2 for SPI4 with the reset mux. HSI, CSI and HSE for SPI4 too. 0 for PLL2, PLL3, AUDIOCLK and per_ck. |
 
 - With `TSIZE` = 0 the transfer is endless. In full-duplex and TX-only
   mode, the master sends a frame each time the TX FIFO has data. It stops

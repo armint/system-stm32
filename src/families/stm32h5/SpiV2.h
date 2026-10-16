@@ -340,8 +340,8 @@ struct Spi {
 
    /**
     * @brief The kernel clock (spi_ker_ck) in Hz, before the baud prescaler.
-    * Decodes RCC_CCIPR3.SPIxSEL for SPI1..SPI3. Returns 0 for a source that
-    * system-stm32 does not start (PLL2, PLL3, AUDIOCLK, per_ck) and for SPI4.
+    * Decodes RCC_CCIPR3.SPIxSEL for SPI1..SPI4. Returns 0 for a source that
+    * system-stm32 does not start (PLL2, PLL3, AUDIOCLK, per_ck).
     */
    uint32_t getClockFrequency() const;
 };

@@ -88,8 +88,22 @@ uint32_t Spi::getClockFrequency() const {
       sel = (RCC->CCIPR3 & RCC_CCIPR3_SPI2SEL) >> RCC_CCIPR3_SPI2SEL_Pos;
    } else if(base == SPI3_BASE) {
       sel = (RCC->CCIPR3 & RCC_CCIPR3_SPI3SEL) >> RCC_CCIPR3_SPI3SEL_Pos;
+   } else if(base == SPI4_BASE) {
+      // SPI4SEL: 000 pclk2, 001 pll2_q, 010 pll3_q, 011 hsi_ker, 100 csi_ker, 101 hse.
+      switch((RCC->CCIPR3 & RCC_CCIPR3_SPI4SEL) >> RCC_CCIPR3_SPI4SEL_Pos) {
+      case 0:
+         return Rcc::getAPB2Clock();
+      case 3:
+         return Rcc::getHSIClock();
+      case 4:
+         return Rcc::CSIHz;
+      case 5:
+         return HSE_VALUE;
+      default:
+         return 0; // PLL2, PLL3: not started by system-stm32
+      }
    } else {
-      return 0; // SPI4 has another mux (pclk2, PLL2Q, PLL3Q, HSI, CSI, HSE)
+      return 0;
    }
    // 000: pll1_q_ck. 001 pll2_p, 010 pll3_p, 011 AUDIOCLK, 100 per_ck: not started here.
    return sel == 0 ? Rcc::getPLL1QClock() : 0;
