@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS. USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART. SPI, ADC, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -238,10 +238,10 @@ F1 peripherals. The skeleton has these properties:
   PB13 (CC1) and PB14 (CC2). `Pwr::disableUcpdDeadBattery()` sets
   `PWR_UCPDR.UCPD_DBDIS` and removes them. Call it before you use these
   pins, for example for SPI2.
-- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Usart`, `Spi`,
-  `Dma`, `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register
-  blocks for these: the USART with FIFO and the SPI v2 (#34), GPDMA (#35),
-  and one EXTI IRQ for each line.
+- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Spi`, `Dma`,
+  `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
+  these: the SPI v2 (#34), GPDMA (#35), and one EXTI IRQ for each line.
+- The shared `Usart` driver works on the H5. See [STM32H5 USART](#stm32h5-usart).
 - The RCC of the H5 has its own driver, `families/stm32h5/RccH5.{h,cpp}`.
   `peripherals/Rcc.h` includes it on the H5, so the include stays the same.
   See [STM32H5 clocks](#stm32h5-clocks).
@@ -296,6 +296,27 @@ stays on HSI.
 - The test image (`tests/stm32h5`) uses the HSE recipe. Hold B1 during reset
   to use the HSI recipe. LD2 blinks at 1 Hz from SysTick when the clock is
   correct, and at 5 Hz when the recipe fails.
+
+### STM32H5 USART
+
+The H5 USART has the register set of the G0 USART. The shared driver
+`peripherals/Usart.{h,cpp}` has two H5 additions:
+
+- The kernel clock mux is in `RCC_CCIPR1`, with a 3-bit field for each
+  USART. `Usart::ClockSource` has the H5 values `PCLK`, `PLL2Q`, `PLL3Q`,
+  `HSIKER`, `CSIKER` and `LSE`. `PCLK` is pclk2 for USART1 and pclk1 for
+  USART2 and USART3.
+- `getClockFrequency()` decodes the field of USART1 to USART3. It returns 0
+  for `PLL2Q`, `PLL3Q` and for the other U(S)ARTs, because system-stm32
+  does not start PLL2 or PLL3. `setBaudRate()` then does not change `BRR`.
+- `enableFifo()` and `disableFifo()` set `CR1.FIFOEN`. They exist on all
+  parts that have FIFO mode (G0 and H5). In FIFO mode, `RXNE` means "RX FIFO
+  not empty" and `TXE` means "TX FIFO not full". Thus the receive and
+  transmit code stays the same. `FIFOEN` is only writable while the USART
+  is disabled: the functions disable it and then restore the enable bit.
+- Erratum ES0621 2.15.2: after `disableDmaTx()` and `enableDmaTx()`, the
+  USART sends no more DMA requests. Disable and enable the USART after the
+  clear of `DMAT`.
 
 ## STM32F1 GPIO
 

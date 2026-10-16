@@ -123,7 +123,7 @@ uint32_t getPLL1QClock() {
       inputHz = getHSIClock();
       break;
    case RCC_PLL1CFGR_PLL1SRC_1:
-      inputHz = 4000000UL; // CSI
+      inputHz = CSIHz;
       break;
    case RCC_PLL1CFGR_PLL1SRC:
       inputHz = HSE_VALUE;
