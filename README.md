@@ -858,7 +858,7 @@ libArT.
 | Family | Driver | Status |
 |---|---|---|
 | STM32L0 with USB (L052, L053, L062, L063, L072, L073, L082, L083) | `src/families/stm32l0/UsbDevice.{h,cpp}` | Available. On L0 devices without USB (for example L071), the files compile to nothing. |
-| STM32F102 / F103 | `src/families/stm32f1/UsbDevice.{h,cpp}` | Available. Same peripheral as on STM32L0, with the differences in [STM32F1 differences](#stm32f1-differences). On F1 devices without USB (for example F101), the files compile to nothing. |
+| STM32F102 / F103 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32f1/UsbFsFamily.h` | Available. Same peripheral as on STM32L0, with the differences in [STM32F1 differences](#stm32f1-differences). On F1 devices without USB (for example F101), the files compile to nothing. |
 | STM32G0B1 / G0C1 | — | Not yet. USB DRD peripheral: 2 KB packet memory with 32-bit access, `CHEP` registers. A new `src/families/stm32g0/UsbDevice.{h,cpp}` with the same interface is necessary. |
 | STM32G071, STM32C0, STM32WL | — | No USB peripheral |
 

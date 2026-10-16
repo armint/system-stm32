@@ -12,9 +12,11 @@ namespace {
 using usb::EndpointType;
 using usb::EventType;
 
-constexpr IRQn_Type UsbIrq = USB_LP_CAN1_RX0_IRQn;
+using usbfs::pma16;
 
-// --- Endpoint registers (USB_EPnR, RM0008 23.5.2) ----------------------------
+constexpr IRQn_Type UsbIrq = usbfs::Irq;
+
+// --- Endpoint registers (USB_EPnR, RM0367 32.6.1, RM0008 23.5.2) ------------
 // Bit types: CTR_RX/CTR_TX are rc_w0 (write 1 = no change), DTOG_x and
 // STAT_x are toggle bits (write 0 = no change), SETUP is read-only. Every
 // write therefore uses these "invariant" values for the bits it does not
@@ -50,9 +52,10 @@ void resetRxToggle(uint8_t n) {
    epr(n) = static_cast<uint16_t>((v & EpConfigBits) | EpCtrKeep | (v & USB_EP_DTOG_RX));
 }
 
-// Double-buffered OUT (RM0008 23.4.3): DTOG_RX selects the buffer of the
-// hardware, SW_BUF (the DTOG_TX bit) the buffer of the software. Start with
-// DTOG_RX = 0 and SW_BUF = 1: the hardware receives into buffer 0 first.
+// Double-buffered OUT (RM0367 32.5.3, RM0008 23.4.3): DTOG_RX selects the
+// buffer of the hardware, SW_BUF (the DTOG_TX bit) the buffer of the
+// software. Start with DTOG_RX = 0 and SW_BUF = 1: the hardware receives
+// into buffer 0 first.
 void resetDoubleBufferToggles(uint8_t n) {
    uint16_t v = epr(n);
    epr(n) = static_cast<uint16_t>((v & EpConfigBits) | EpCtrKeep | (v & USB_EP_DTOG_RX) | (~v & USB_EP_DTOG_TX));
@@ -94,16 +97,11 @@ void setTypeAndAddress(uint8_t n, EndpointType type, bool kind) {
    epr(n) = static_cast<uint16_t>(EpCtrKeep | t | (kind ? USB_EP_KIND : 0u) | n);
 }
 
-// --- Packet memory (RM0008 23.5, 23.5.3) -------------------------------------
-// 512 bytes, addressed by the USB peripheral with byte offsets. The CPU sees
-// them as 256 16-bit words at a 32-bit stride: USB offset o (even) is at
-// USB_PMAADDR + o * 2, and the upper half of each 32-bit slot is unused.
-// The driver uses 16-bit access. The buffer descriptor table is at offset 0
-// (USB_BTABLE). Every offset passed to pma16() is even.
-
-volatile uint16_t &pma16(uint16_t offset) {
-   return *reinterpret_cast<volatile uint16_t *>(USB_PMAADDR + offset * 2u);
-}
+// --- Packet memory (RM0367 32.6.2, RM0008 23.5.3) ---------------------------
+// usbfs::PacketMemorySize bytes, addressed by the USB peripheral with byte
+// offsets. usbfs::pma16() maps a USB offset to the CPU address of its
+// 16-bit word. The driver uses 16-bit access only. The buffer descriptor
+// table is at offset 0 (USB_BTABLE). Every offset passed to pma16() is even.
 
 volatile uint16_t &addrTx(uint8_t n) {
    return pma16(static_cast<uint16_t>(n * 8u));
@@ -144,7 +142,8 @@ constexpr uint16_t InterruptMask = USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SU
 
 } // namespace
 
-// Compile-time checks of the COUNTn_RX encoding (RM0008 23.5.3).
+// Compile-time checks of the COUNTn_RX encoding (RM0367 32.6.2, RM0008
+// 23.5.3).
 static_assert(UsbDevice::rxBufferSize(8).count == (4u << 10) && UsbDevice::rxBufferSize(8).pmaBytes == 8);
 static_assert(UsbDevice::rxBufferSize(9).pmaBytes == 10);
 static_assert(UsbDevice::rxBufferSize(62).count == (31u << 10) && UsbDevice::rxBufferSize(62).pmaBytes == 62);
@@ -162,9 +161,10 @@ void UsbDevice::begin(usb::EventCallback callback, void *context) {
    _callback = callback;
    _context = context;
 
-   // Power-up sequence (RM0008 23.4.2): clear PDWN with FRES still set,
-   // wait tSTARTUP (1 us max, STM32F103x8/B datasheet), then release FRES
-   // and clear spurious interrupt flags.
+   // Power-up sequence (RM0367 32.5.2, RM0008 23.4.2): clear PDWN with
+   // FRES still set, wait tSTARTUP (1 us max, STM32L073 and STM32F103x8/B
+   // datasheets), then release FRES and clear spurious interrupt flags.
+   usbfs::resetBcdr();
    USB->CNTR = USB_CNTR_FRES;
    delayuS(10);
    USB->CNTR = 0;
@@ -195,6 +195,7 @@ void UsbDevice::setPullupCallback(PullupCallback callback, void *context) {
 
 void UsbDevice::connect() {
    _connected = true;
+   usbfs::setInternalPullup(true);
    if(_pullupCallback != nullptr) {
       _pullupCallback(_pullupContext, true);
    }
@@ -202,13 +203,14 @@ void UsbDevice::connect() {
 
 void UsbDevice::disconnect() {
    _connected = false;
+   usbfs::setInternalPullup(false);
    if(_pullupCallback != nullptr) {
       _pullupCallback(_pullupContext, false);
    }
 }
 
 bool UsbDevice::isConnected() const {
-   return _connected;
+   return usbfs::HasInternalPullup ? usbfs::internalPullup() : _connected;
 }
 
 void UsbDevice::setAddress(uint8_t address) {
@@ -364,9 +366,9 @@ bool UsbDevice::armOut(uint8_t address) {
          reportDoubleBuffered(n, buffer);
       }
       out.armed = true;
-      // STAT stays VALID after the first packet (RM0008 23.4.3). It is NAK
-      // only before the first armOut(), after setNak(), and after the
-      // first packet.
+      // STAT stays VALID after the first packet (RM0367 32.5.3, RM0008
+      // 23.4.3). It is NAK only before the first armOut(), after setNak(),
+      // and after the first packet.
       if((epr(n) & USB_EPRX_STAT) != USB_EP_RX_VALID) {
          setRxStatus(n, USB_EP_RX_VALID);
       }
@@ -490,7 +492,8 @@ void UsbDevice::receiveDoubleBuffered(uint8_t n, uint16_t eprValue) {
       // the hardware NAKs until armOut() reports this packet.
       out.pendingBuffer = buffer;
    }
-   // The first packet after DBL_BUF sets STAT to NAK (RM0008 23.4.3).
+   // The first packet after DBL_BUF sets STAT to NAK (RM0367 32.5.3, RM0008
+   // 23.4.3).
    if(out.armed && (epr(n) & USB_EPRX_STAT) == USB_EP_RX_NAK) {
       setRxStatus(n, USB_EP_RX_VALID);
    }
@@ -566,14 +569,15 @@ void UsbDevice::handleInterrupt() {
    }
 
    if(istr & USB_ISTR_SUSP) {
-      // FSUSP stops further SUSP interrupts while suspended (RM0008 23.4.5).
+      // FSUSP stops further SUSP interrupts while suspended (RM0367 32.5.5,
+      // RM0008 23.4.5).
       USB->CNTR = static_cast<uint16_t>(USB->CNTR | USB_CNTR_FSUSP);
       USB->ISTR = static_cast<uint16_t>(~USB_ISTR_SUSP);
       report(EventType::Suspend, 0);
    }
 
    if(istr & USB_ISTR_WKUP) {
-      USB->CNTR = static_cast<uint16_t>(USB->CNTR & ~(USB_CNTR_FSUSP | USB_CNTR_LP_MODE));
+      USB->CNTR = static_cast<uint16_t>(USB->CNTR & ~(USB_CNTR_FSUSP | usbfs::CntrLowPowerMode));
       USB->ISTR = static_cast<uint16_t>(~USB_ISTR_WKUP);
       report(EventType::Resume, 0);
    }

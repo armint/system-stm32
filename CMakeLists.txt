@@ -231,6 +231,13 @@ if(STM32_FAMILY STREQUAL "STM32H5")
     endforeach()
 endif()
 
+# The shared USB full-speed device driver (src/peripherals/usbfs) needs the
+# access layer UsbFsFamily.h in the family directory. A family without this
+# file has no such USB peripheral.
+if(NOT EXISTS "${PROJECT_SOURCE_DIR}/src/families/${FAMILY_LOWER}/UsbFsFamily.h")
+    list(REMOVE_ITEM PROJECT_SOURCES "${PROJECT_SOURCE_DIR}/src/peripherals/usbfs/UsbDeviceCore.cpp")
+endif()
+
 # Delay functions: the Cortex-M3 and Cortex-M33 families count cycles with
 # the DWT cycle counter. The others (Cortex-M0+ has no DWT cycle counter,
 # STM32WL keeps its old behaviour) use the busy loop.

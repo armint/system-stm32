@@ -24,7 +24,7 @@ add_test(NAME gpio-f1 COMMAND test-gpio-f1)
 
 add_executable(test-usb-f1
         test_usb_f1.cpp
-        ${_src}/families/stm32f1/UsbDevice.cpp)
+        ${_src}/peripherals/usbfs/UsbDeviceCore.cpp)
 target_include_directories(test-usb-f1 PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/stubs
         ${_src}
