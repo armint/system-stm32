@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2. ADC, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2, ADC. DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -154,6 +154,8 @@ library) and, once installed, as `art::system-stm32`.
   and up to 1.26 V (105 °C). So VDDA from Vrefint has an error of about
   ±3.3 % (+5 % at the highest temperatures), plus the ADC error. In the
   worst case this is about ±110 mV at 3.3 V and ±120 mV at 3.6 V.
+  The STM32H5 `Adc` also has its own interface, because the H5 ADC is the
+  L4/G4 type. See [STM32H5 ADC](#stm32h5-adc).
 - `src/utils/` — interrupt vector-table relocation and C++ member-function
   binding (`Interrupt`), GPIO interrupt dispatch (`GpioInterrupt`, not
   built for STM32WL and STM32F1 — see above).
@@ -244,6 +246,8 @@ F1 peripherals. The skeleton has these properties:
 - The shared `Usart` driver works on the H5. See [STM32H5 USART](#stm32h5-usart).
 - The SPI v2 driver is in `families/stm32h5/SpiV2.{h,cpp}`.
   `peripherals/Spi.h` includes it on the H5. See [STM32H5 SPI v2](#stm32h5-spi-v2).
+- The ADC driver is in `families/stm32h5/Adc.{h,cpp}`. See
+  [STM32H5 ADC](#stm32h5-adc).
 - The RCC of the H5 has its own driver, `families/stm32h5/RccH5.{h,cpp}`.
   `peripherals/Rcc.h` includes it on the H5, so the include stays the same.
   See [STM32H5 clocks](#stm32h5-clocks).
@@ -355,6 +359,56 @@ hardware:
 - Erratum ES0621 2.17.2: a disable directly after `EOT` can cut the last
   SCK pulse. At a high PCLK/SCK ratio, wait half an SCK period between
   `waitUntilIdle()` and `disable()`.
+
+### STM32H5 ADC
+
+The H5 ADC is the L4/G4 type of ADC, not the G0 type. It has a sequencer
+for each group, a sample time for each channel, and a deep power-down
+mode. `Adc` (`families/stm32h5/Adc.h`) gives access to all functions of
+the block:
+
+| Area | Functions |
+|---|---|
+| Clock (static) | `enableClock()`, `reset()`, `setKernelClock()` (`RCC_CCIPR5.ADCDACSEL`), `setClockMode()` (`CKMODE`, `PRESC`), `configureClock()`, `clockHz()` |
+| Common (static) | `enableVrefint()`, `enableTemperatureSensor()`, `enableVbat()`, `setDualMode()`, `dualValue()` |
+| Power and calibration | `powerUp()`, `powerDown()`, `calibrate(InputMode)`, `getCalibrationFactors()`, `setCalibrationFactors()`, `enable()`, `disable()` |
+| Channels | `setSamplingTime()`, `setSamplingTimePlusOne()` (`SMPPLUS`), `setInputMode()` (single-ended or differential), `setChannel0Switch()` (`ADC_OR.OP0`) |
+| Regular group | `setRegularRank()` (ranks 1 to 16), `setRegularLength()`, `setResolution()`, `setAlignment()`, `setConversionMode()`, `setDiscontinuousCount()`, `setOverrunMode()`, `setDmaMode()`, `setAutoDelay()`, `setRegularTrigger()`, `setBulbSampling()`, `setSamplingTimeControlTrigger()`, `start()`, `stop()`, `value()` |
+| Injected group | `setInjectedSequence()` (1 to 4 ranks and the trigger in one `JSQR` write), `setInjectedQueue()`, `setInjectedAuto()`, `setInjectedDiscontinuous()`, `startInjected()`, `stopInjected()`, `injectedValue()` |
+| Offsets | `setOffset()` (4 units: subtract or add, saturation), `disableOffset()` |
+| Oversampling | `setOversampling()` (ratio 2 to 256, shift 0 to 8, regular and injected, triggered, continued or resumed) |
+| Analog watchdogs | `setWatchdog1()` (12-bit thresholds, one channel or all, filter), `setWatchdog23()` (channel set, 8-bit thresholds) |
+| Events | `isSet()`, `clear()`, `enableInterrupts()`, `disableInterrupts()` with the `Adc::Event` bits |
+| Helpers | `convert()` (one blocking software conversion), `readSupplyMillivolts()`, `toMillivolts()`, `supplyFromVrefint()`, `Calibration` (factory values) |
+
+Start-up sequence:
+
+1. `Adc::enableClock()` and `Adc::configureClock()`. The synchronous clock
+   is hclk / 4 at 250 MHz, thus 62.5 MHz. The maximum ADC clock is 75 MHz
+   (DS14539).
+2. `powerUp()`: the ADC leaves deep power-down. The regulator then needs
+   10 µs.
+3. `calibrate()`: once for single-ended inputs, once more with
+   `InputMode::Differential` if you use differential inputs.
+4. `enable()`.
+
+- The waits of the driver stop after `Adc::pollLimit` iterations and then
+  return `false`.
+- The `Channel` values are the ADC1 `VINP` numbers of the STM32H533. They
+  do not follow the pin order (for example PB0 is channel 9). PA0 also
+  needs `setChannel0Switch(true)`.
+- `Calibration::vrefint()`, `ts1()` and `ts2()` read the factory values at
+  0x08FFF810, 0x08FFF814 and 0x08FFF818 (VDDA = 3.3 V). `readSupplyMillivolts()`
+  calculates VDDA = 3.3 V × `VREFINT_CAL` / raw. It sets a sample time of
+  at least 5 µs for Vrefint.
+- `TemperatureSensorCalibration` gives the same names as on G0, for the
+  `InternalTemperatureSensor` of libArT.
+- The hardware allows most writes only while no conversion runs, and some
+  only while the ADC is disabled (RM0481 section 28.4.10). The driver does
+  not check these rules.
+- Errata ES0621 2.6.1 and 2.6.2 apply to the injected queue
+  (`setInjectedQueue(true)`). Erratum 2.6.5: before `stopInjected()`, wait
+  for `Event::InjectedEndOfSequence`.
 
 ## STM32F1 GPIO
 
