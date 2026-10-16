@@ -178,9 +178,10 @@ void UsbDevice::begin(usb::EventCallback callback, void *context) {
    _callback = callback;
    _context = context;
 
-   // Power-up sequence (RM0367 32.5.2, RM0008 23.4.2): clear PDWN with
-   // FRES still set, wait tSTARTUP (1 us max, STM32L073 and STM32F103x8/B
-   // datasheets), then release FRES and clear spurious interrupt flags.
+   // Power-up sequence (RM0367 32.5.2, RM0008 23.4.2, RM0481 61.5.2): clear
+   // PDWN with FRES (USBRST) still set, wait tSTARTUP (1 us max, STM32L073,
+   // STM32F103x8/B and STM32H533 datasheets), then release FRES and clear
+   // spurious interrupt flags.
    usbfs::beforePowerUp();
    usbfs::regs().CNTR = CntrReset;
    delayuS(10);

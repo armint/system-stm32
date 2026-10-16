@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2, ADC, GPDMA. EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, `FastPin`, UID, DBG, IWDG, delay, RCC (250 MHz), ICACHE, CRS, USART, SPI v2, ADC, GPDMA, USB device. EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -252,6 +252,9 @@ F1 peripherals. The skeleton has these properties:
 - The RCC of the H5 has its own driver, `families/stm32h5/RccH5.{h,cpp}`.
   `peripherals/Rcc.h` includes it on the H5, so the include stays the same.
   See [STM32H5 clocks](#stm32h5-clocks).
+- `hw::UsbDevice` works on the H5, with the access layer
+  `families/stm32h5/UsbFsFamily.h` for the USB DRD block. See
+  [STM32H5 USB DRD](#stm32h5-usb-drd).
 - The CMSIS `SystemCoreClockUpdate()` of the H5 uses `float`. The start-up
   calls it, so every image links the soft-float routines (about 1.3 KB).
 - Do not reset the backup domain (`RCC_BDCR.VSWRST`) after start-up. The
@@ -588,11 +591,12 @@ this code:
 - STM32F1 GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
   and the address and store order of the `FastPin` direction switch.
 - USB device driver (the shared core in `src/peripherals/usbfs/`): the
-  `COUNTn_RX` encoding, the packet memory allocation, the buffer
-  descriptor table, the packet copy, double-buffered bulk OUT and the D+
-  pull-up. The same test (`test_usb_fs.cpp`) runs once with each family
-  access layer: STM32F1 (32-bit CPU stride, stub `stubs/`) and STM32L0
-  (16-bit stride and `USB_BCDR`, stub `stubs-usb-l0/`). The tests also
+  `COUNTn_RX` encoding, the packet memory allocation and alignment, the
+  buffer descriptor table, the packet copy, double-buffered bulk OUT and
+  the D+ pull-up. The same test (`test_usb_fs.cpp`) runs once with each
+  family access layer: STM32F1 (32-bit CPU stride, stub `stubs/`), STM32L0
+  (16-bit stride and `USB_BCDR`, stub `stubs-usb-l0/`) and STM32H5 (USB DRD:
+  32-bit access, `USB_CHEPnR` and VDDUSB, stub `stubs-usb-h5/`). The tests also
   check the `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT`
   written as `old ^ wanted`, `DTOG` written as 0, and the configuration
   bits kept.
@@ -863,7 +867,8 @@ libArT.
 |---|---|---|
 | STM32L0 with USB (L052, L053, L062, L063, L072, L073, L082, L083) | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32l0/UsbFsFamily.h` | Available. On L0 devices without USB (for example L071), the files compile to nothing. |
 | STM32F102 / F103 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32f1/UsbFsFamily.h` | Available. Same peripheral as on STM32L0, with the differences in [Family differences](#family-differences). On F1 devices without USB (for example F101), the files compile to nothing. |
-| STM32G0B1 / G0C1 | — | Not yet. USB DRD peripheral: 2 KB packet memory with 32-bit access, `CHEP` registers. A new `src/families/stm32g0/UsbDevice.{h,cpp}` with the same interface is necessary. |
+| STM32H533 / H523 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32h5/UsbFsFamily.h` | Available, host tests only (not tested on hardware yet). USB DRD peripheral, see [STM32H5 USB DRD](#stm32h5-usb-drd). |
+| STM32G0B1 / G0C1 | — | Not yet. The same USB DRD peripheral as on STM32H5. A copy of `src/families/stm32h5/UsbFsFamily.h` in `src/families/stm32g0/`, with the G0 IRQ and supply, is necessary. |
 | STM32G071, STM32C0, STM32WL | — | No USB peripheral |
 
 The family-neutral types are in `src/peripherals/UsbDeviceTypes.h`
@@ -874,8 +879,8 @@ driver.
 
 ### Requirements
 
-- A 48 MHz USB clock. On STM32L0, use HSI48 with the CRS on USB SOF. See
-  [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs). On STM32F1, the
+- A 48 MHz USB clock. On STM32L0 and STM32H5, use HSI48 with the CRS on
+  USB SOF. See [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs). On STM32F1, the
   USB clock comes from the PLL: 72 MHz / 1.5 or 48 MHz / 1
   (`RCC_CFGR.USBPRE`). Thus STM32F1 needs a crystal (HSE) for USB.
   `Rcc::setClock72MhzHSE()` sets this clock (see
@@ -887,9 +892,12 @@ driver.
 - On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
   errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
   underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section
-  23.4.2).
-- PA11 (DM) and PA12 (DP) need no GPIO setup. The transceiver uses them
-  when the peripheral is powered up.
+  23.4.2). On STM32H5, an APB2 clock of 12 MHz or more (RM0481 section
+  61.5.2).
+- On STM32L0 and STM32F1, PA11 (DM) and PA12 (DP) need no GPIO setup. The
+  transceiver uses them when the peripheral is powered up. On STM32H5, set
+  PA11 and PA12 to alternate function AF10. The datasheet of the STM32H533
+  lists `USB_DM` and `USB_DP` as AF10.
 
 ### Use
 
@@ -908,10 +916,10 @@ usb.connect();                   // D+ pull-up on: the host sees the device
 
 | Function | Purpose |
 |---|---|
-| `begin(callback, context)` / `end()` | Power-up sequence (STM32L0: RM0367 32.5.2; STM32F1: RM0008 23.4.2), interrupt connection through `Interrupt::connectMemberHandler()` (STM32L0: `USB_IRQn`; STM32F1: `USB_LP_CAN1_RX0_IRQn`), and power-down. |
-| `connect()` / `disconnect()` | D+ pull-up on or off. STM32L0: internal pull-up (`USB_BCDR.DPPU`). Then the board callback from `setPullupCallback()`, if set. |
-| `setPullupCallback(callback, context)` | Sets the board function that switches an external D+ pull-up. STM32F1 needs it, because it has no internal pull-up. STM32L0 boards usually do not need it. |
-| `isConnected()` | STM32L0: the state of `USB_BCDR.DPPU`. STM32F1: the state that the last `connect()` or `disconnect()` requested. |
+| `begin(callback, context)` / `end()` | Power-up sequence (STM32L0: RM0367 32.5.2; STM32F1: RM0008 23.4.2; STM32H5: RM0481 61.5.2), interrupt connection through `Interrupt::connectMemberHandler()` (STM32L0: `USB_IRQn`; STM32F1: `USB_LP_CAN1_RX0_IRQn`; STM32H5: `USB_DRD_FS_IRQn`), and power-down. On STM32H5, `begin()` also sets `PWR_USBSCR.USB33SV` (VDDUSB valid). |
+| `connect()` / `disconnect()` | D+ pull-up on or off. STM32L0 and STM32H5: internal pull-up (`USB_BCDR.DPPU`). Then the board callback from `setPullupCallback()`, if set. |
+| `setPullupCallback(callback, context)` | Sets the board function that switches an external D+ pull-up. STM32F1 needs it, because it has no internal pull-up. STM32L0 and STM32H5 boards usually do not need it. |
+| `isConnected()` | STM32L0 and STM32H5: the state of `USB_BCDR.DPPU`. STM32F1: the state that the last `connect()` or `disconnect()` requested. |
 | `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
 | `UsbDevice(endpointCount)` | `endpointCount` is the highest endpoint number of the device plus 1 (default 8). The buffer descriptor table then has `endpointCount * 8` bytes. |
 | `openEndpoint(address, type, maxPacketSize, doubleBuffered)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize` and `doubleBuffered`. `doubleBuffered` (default `false`) opens a double-buffered bulk OUT endpoint (see [Double-buffered bulk OUT](#double-buffered-bulk-out)). |
@@ -951,7 +959,8 @@ can run in the callback or later in the main loop, until the next
 Every public function can run in the event callback (USB interrupt) or in
 the main loop. `begin()` and `end()` are the exception: call them from the
 main loop only. The endpoint functions mask the USB interrupt (`USB_IRQn`
-on STM32L0, `USB_LP_CAN1_RX0_IRQn` on STM32F1) while they run. Thus
+on STM32L0, `USB_LP_CAN1_RX0_IRQn` on STM32F1, `USB_DRD_FS_IRQn` on
+STM32H5) while they run. Thus
 a bus reset in the interrupt cannot interleave with `openEndpoint()` or
 `closeAllEndpoints()` in the main loop.
 
@@ -989,14 +998,17 @@ driver never reads them: `readOut()` copies only the payload.
 
 ### Family differences
 
-STM32L0 and STM32F1 use one driver: `src/peripherals/usbfs/UsbDeviceCore`.
-The register interface, the event model, the `USB_EPnR` toggle logic and
-the `COUNTn_RX` encoding are the same. A small access layer per family,
-`src/families/<family>/UsbFsFamily.h` (namespace `hw::usbfs`), holds the
-differences: the packet memory size and its CPU address, the interrupt,
-the D+ pull-up and register names. CMake compiles the driver only for a
-family with this file. A fix in the shared logic thus applies to all
-these families.
+STM32L0, STM32F1 and STM32H5 use one driver:
+`src/peripherals/usbfs/UsbDeviceCore`. The event model, the endpoint
+register toggle logic and the `COUNTn_RX` encoding are the same. A small
+access layer per family, `src/families/<family>/UsbFsFamily.h` (namespace
+`hw::usbfs`), holds the differences: the register and packet memory
+access, the packet memory size, the buffer alignment, the interrupt, the
+D+ pull-up and the power-up. The access layer defines
+`SYSTEM_STM32_USBFS` on a device with the peripheral. CMake compiles the
+driver only for a family with this file. A fix in the shared logic thus
+applies to all these families. STM32L0 and STM32F1 share the 16-bit access
+functions in `src/peripherals/usbfs/UsbFs16Access.h`.
 
 On STM32L0, the packet memory has 1024 bytes at a 16-bit stride, the
 interrupt is `USB_IRQn`, and the D+ pull-up is internal (`USB_BCDR.DPPU`).
@@ -1035,12 +1047,47 @@ usb.begin(&onUsbEvent, nullptr);
 usb.connect();
 ```
 
+### STM32H5 USB DRD
+
+The STM32H5 has the USB DRD block (RM0481 section 61). The STM32G0B1 and
+the STM32U5 have the same block. The driver uses it in Device mode only.
+These items are different from STM32L0:
+
+- Packet memory: 2048 bytes. The CPU must use 32-bit access only (RM0481
+  section 61.7). Every packet buffer starts at a 4-byte boundary. The
+  driver copies the packets in 32-bit words.
+- The buffer descriptors are 32-bit words, `TXBD` and `RXBD`. Their low and
+  high halves have the layout of the 16-bit descriptor fields of STM32L0.
+  The driver changes one half with a read-modify-write of the word, only
+  while the hardware does not use the descriptor.
+- `USB_CHEPnR` is 32 bits wide. The low 16 bits are the same as
+  `USB_EPnR`. The upper bits are for Host mode. The driver writes them as
+  0.
+- No `USB_BTABLE` register. The descriptor table is at offset 0.
+- Some register bits have other CMSIS names, for example `USB_EP_VTRX`
+  for `USB_EP_CTR_RX` and `USB_CNTR_SUSPEN` for `USB_CNTR_FSUSP`. The bit
+  positions are the same. The core has its own constants for these bits,
+  with `static_assert` checks against CMSIS.
+- The transceiver has its own supply, VDDUSB. `begin()` enables the
+  VDDUSB monitor (`USB33DEN`), waits up to 100 µs for `USB33RDY`, and then
+  sets `USB33SV` (RM0481 section 10.4.6).
+- Errata ES0621 2.19.1: the hardware sets `CTR` for an OUT or SETUP packet
+  before its last packet memory writes. The interrupt handler waits 1 µs
+  before it reads the packet.
+- `SUSPEN` (the `FSUSP` bit on STM32L0) stops the USB clock. The hardware
+  clears it at wakeup.
+
+libart-stm32 enables its USB adapter with `defined(USB_BASE)`. The H5
+CMSIS header defines `USB_DRD_BASE` instead. Use `SYSTEM_STM32_USBFS` in
+the adapter for all families.
+
 ### Double-buffered bulk OUT
 
 With a single buffer, an OUT endpoint answers NAK from the end of a packet
 until the next `armOut()`. The host then sends the next packet again
 later, so the transfer rate goes down. A double-buffered bulk OUT endpoint
-(RM0367 section 32.5.3, RM0008 section 23.4.3) has two buffers. The hardware receives the next
+(RM0367 section 32.5.3, RM0008 section 23.4.3, RM0481 section 61.5.3) has
+two buffers. The hardware receives the next
 packet into one buffer while the software reads the other.
 
 `openEndpoint(address, EndpointType::Bulk, maxPacketSize, true)` opens it.
