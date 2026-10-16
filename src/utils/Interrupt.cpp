@@ -72,7 +72,7 @@ void releaseHandler(IRQn_Type IRQn) {
 
 AdvancedHandler getObjectHandler(IRQn_Type irq) {
    int i = static_cast<int>(irq);
-   if(i < 0 || i >= VECTOR_TABLE_SIZE) {
+   if(i < 0 || i >= VECTOR_TABLE_SIZE - 16) {
       return {};
    }
    return getAdvancedHandler(i);
@@ -81,7 +81,7 @@ AdvancedHandler getObjectHandler(IRQn_Type irq) {
 Handler_t getHandler(IRQn_Type irq) {
    auto *handlers = reinterpret_cast<Handler_t *>(SCB->VTOR);
    int index = static_cast<int>(irq) + 16;
-   return (index < 0 || index > VECTOR_TABLE_SIZE) ? nullptr : handlers[index];
+   return (index < 0 || index >= VECTOR_TABLE_SIZE) ? nullptr : handlers[index];
 }
 
 BlockingSection::BlockingSection(IRQn_Type IRQn) {
