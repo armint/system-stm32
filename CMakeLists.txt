@@ -191,12 +191,19 @@ if(STM32_FAMILY STREQUAL "STM32F1")
         "${PROJECT_SOURCE_DIR}/src/peripherals/Rtc.cpp"
         "${PROJECT_SOURCE_DIR}/src/peripherals/Usart.cpp"
         "${PROJECT_SOURCE_DIR}/src/utils/GpioInterrupt.cpp"
-        # The Cortex-M0+ busy loop; F1 has its own DWT version in families/stm32f1.
-        "${PROJECT_SOURCE_DIR}/src/delaybusywait.cpp"
     )
     foreach(_excl ${_F1_EXCLUDE})
         list(REMOVE_ITEM PROJECT_SOURCES "${_excl}")
     endforeach()
+endif()
+
+# Delay functions: the Cortex-M3 family counts cycles with the DWT cycle
+# counter. The others (Cortex-M0+ has no DWT cycle counter, STM32WL keeps
+# its old behaviour) use the busy loop.
+if(STM32_FAMILY STREQUAL "STM32F1")
+    list(REMOVE_ITEM PROJECT_SOURCES "${PROJECT_SOURCE_DIR}/src/delaybusywait.cpp")
+else()
+    list(REMOVE_ITEM PROJECT_SOURCES "${PROJECT_SOURCE_DIR}/src/delaybusywait-dwt.cpp")
 endif()
 
 file(GLOB_RECURSE PROJECT_HEADERS

@@ -131,7 +131,7 @@ library) and, once installed, as `art::system-stm32`.
 - `src/delaybusywait.{h,cpp}` — `delaymS()`, `delayuS()` and `delayCycles()`.
   The Cortex-M0+ families use a busy loop of about 3 cycles per iteration.
   STM32F1 (Cortex-M3) uses the DWT cycle counter instead, in
-  `src/families/stm32f1/delaybusywait.cpp`. The delay is then exact to a few
+  `src/delaybusywait-dwt.cpp`. The delay is then exact to a few
   cycles, also with flash wait states. The code enables the counter on its
   own. `SystemCoreClock` must be correct.
 - `src/families/<family>/` — family-specific implementations (currently
