@@ -13,7 +13,7 @@ foreach(_dev x8 xB)
         -Wl,--no-warn-rwx-segments
         -Wl,-Map=${_name}.map
         -L${PROJECT_SOURCE_DIR}/ldscripts
-        -L${CMAKE_CURRENT_SOURCE_DIR}
+        -L${CMAKE_CURRENT_SOURCE_DIR}/../common
         -Tmem-F103${_dev}.ld
         -Tlibs.ld
         -Tsections.ld)
