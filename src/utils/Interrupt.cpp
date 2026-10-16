@@ -11,6 +11,10 @@
 // .data. VTOR also needs the table aligned to the next power of two of its size.
 static_assert(VECTOR_TABLE_SIZE * sizeof(uint32_t) <= 0x100, "vector table does not fit in the RAM reserved by ldscripts/mem-F103*.ld");
 #endif
+#if defined(STM32H5)
+// Same for ldscripts/mem-H5*.ld: 0x400 bytes, the VTOR alignment of 149 entries.
+static_assert(VECTOR_TABLE_SIZE * sizeof(uint32_t) <= 0x400, "vector table does not fit in the RAM reserved by ldscripts/mem-H5*.ld");
+#endif
 
 extern uintptr_t __vectors_start;
 

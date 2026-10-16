@@ -9,4 +9,6 @@
 #include <stm32wlxx.h>
 #elif defined(STM32F1)
 #include <stm32f1xx.h>
+#elif defined(STM32H5)
+#include <stm32h5xx.h>
 #endif
