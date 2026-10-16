@@ -252,8 +252,10 @@ target_include_directories(system-stm32
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
-# Export CMSIS headers to dependents as part of the public interface
-target_include_directories(system-stm32
+# Export CMSIS headers to dependents as part of the public interface.
+# SYSTEM: these are vendor headers, so warnings in them do not stop a
+# -Wpedantic -Werror build.
+target_include_directories(system-stm32 SYSTEM
         PUBLIC
             $<BUILD_INTERFACE:${cmsis_device_SOURCE_DIR}/Include>
             $<BUILD_INTERFACE:${cmsis_core_SOURCE_DIR}/Core/Include>

@@ -54,6 +54,8 @@ it at C++17, give `-D CMAKE_CXX_STANDARD=17`.
 
 CMSIS device headers and CMSIS core are fetched automatically via
 `FetchContent` for the selected family; nothing needs to be vendored.
+The target exports them as `SYSTEM` include directories. Thus warnings in
+these vendor headers do not stop a `-Wpedantic -Werror` build.
 
 ### Span type
 
