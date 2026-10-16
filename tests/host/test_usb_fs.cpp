@@ -3,7 +3,9 @@
 // memory allocation, the buffer descriptor table, and the packet copy. CMake
 // builds this file once per family access layer (UsbFsFamily.h), with the
 // stub CMSIS header of that family: STM32F1 (512 bytes at a 32-bit CPU
-// stride) and STM32L0 (1024 bytes at a 16-bit stride).
+// stride), STM32L0 (1024 bytes at a 16-bit stride) and STM32H5 (USB DRD
+// block: 2048 bytes with 32-bit access, 32-bit USB_CHEPnR). The test reads
+// the packet memory as 16-bit words at the USB offset.
 //
 // The registers and the packet memory are plain host memory, so a register
 // holds the value of the last write. The hardware toggle bits (STAT, DTOG)
@@ -25,17 +27,33 @@
 #include <cstring>
 #include <vector>
 
-USB_TypeDef hostUsbRegisters;
-uint16_t hostUsbPacketMemory[512];
+HostUsbTypeDef hostUsbRegisters;
+alignas(4) uint16_t hostUsbPacketMemory[HOST_USB_PMA_WORDS];
 
 #if defined(STM32F1)
 constexpr IRQn_Type UsbIrq = USB_LP_CAN1_RX0_IRQn;
 // CPU bytes per USB packet memory byte
 constexpr unsigned PmaStride = 2;
+#elif defined(STM32H5)
+PWR_TypeDef hostPwr;
+constexpr IRQn_Type UsbIrq = USB_DRD_FS_IRQn;
+constexpr unsigned PmaStride = 1;
+// The USB DRD names of the bits that the test uses (same positions).
+#define USB_EP_CTR_RX USB_EP_VTRX
+#define USB_EP_CTR_TX USB_EP_VTTX
+#define USB_EPRX_STAT USB_CHEP_RX_STRX
+#define USB_EPTX_STAT USB_CHEP_TX_STTX
+#define USB_EP_T_FIELD USB_EP_UTYPE
+#define USB_EPADDR_FIELD USB_CHEP_ADDR
 #else
 constexpr IRQn_Type UsbIrq = USB_IRQn;
 constexpr unsigned PmaStride = 1;
 #endif
+
+// Packet buffers start at a multiple of this (USB DRD: 32-bit words).
+constexpr uint16_t align(uint16_t bytes) {
+   return static_cast<uint16_t>((bytes + hw::usbfs::BufferAlignment - 1u) & ~(hw::usbfs::BufferAlignment - 1u));
+}
 
 namespace {
 
@@ -59,8 +77,11 @@ using hw::usb::EndpointType;
 constexpr uint16_t BtableSize = UsbDevice::EndpointCount * 8;
 
 void resetFakes() {
-   std::memset(const_cast<USB_TypeDef *>(&hostUsbRegisters), 0, sizeof(hostUsbRegisters));
+   std::memset(const_cast<HostUsbTypeDef *>(&hostUsbRegisters), 0, sizeof(hostUsbRegisters));
    std::memset(hostUsbPacketMemory, 0, sizeof(hostUsbPacketMemory));
+#if defined(STM32H5)
+   std::memset(const_cast<PWR_TypeDef *>(&hostPwr), 0, sizeof(hostPwr));
+#endif
 }
 
 // The 16-bit word at USB-local offset `offset` (even), as the CPU sees it.
@@ -88,8 +109,8 @@ void pma16Write(uint16_t pmaOffset, uint16_t i, uint8_t first, uint16_t size) {
    pma(static_cast<uint16_t>(pmaOffset + i)) = static_cast<uint16_t>(byte(i) | byte(static_cast<uint16_t>(i + 1)) << 8);
 }
 
-volatile uint16_t &epr(uint8_t n) {
-   return (&hostUsbRegisters.EP0R)[n * 2];
+auto &epr(uint8_t n) {
+   return hostEpr(n);
 }
 
 void setEprTxStatus(uint8_t n, uint16_t status) {
@@ -120,7 +141,9 @@ uint16_t decodeRxCount(uint16_t count) {
 }
 
 void testRxBufferSize() {
-   for(uint16_t size = 1; size <= UsbDevice::PacketMemorySize; ++size) {
+   // BLSIZE 1 and NUM_BLOCK 31 encode the largest buffer: 1024 bytes.
+   constexpr uint16_t Largest = UsbDevice::PacketMemorySize < 1024 ? UsbDevice::PacketMemorySize : 1024;
+   for(uint16_t size = 1; size <= Largest; ++size) {
       auto rx = UsbDevice::rxBufferSize(size);
       bool largeBlocks = (rx.count & 0x8000) != 0;
       CHECK((rx.count & 0x03FF) == 0); // COUNT is written by the hardware
@@ -138,7 +161,9 @@ void testBeginLayout() {
    usb.begin(&onEvent, nullptr);
 
    CHECK(connectedIrq == UsbIrq);
+#if !defined(STM32H5) // the USB DRD block has no USB_BTABLE
    CHECK(hostUsbRegisters.BTABLE == 0);
+#endif
    CHECK(hostUsbRegisters.DADDR == USB_DADDR_EF);
    CHECK(hostUsbRegisters.CNTR == (USB_CNTR_CTRM | USB_CNTR_RESETM | USB_CNTR_SUSPM | USB_CNTR_WKUPM));
    // EP0 buffers directly after the buffer descriptor table, OUT first.
@@ -165,11 +190,11 @@ void testOpenEndpointLayout() {
    CHECK(countTx(1) == 0);
    CHECK((epr(1) & (USB_EP_T_FIELD | USB_EPADDR_FIELD)) == (USB_EP_BULK | 1));
 
-   // Odd sizes take a half-word aligned buffer.
+   // Odd sizes take an aligned buffer: half-word, or word on USB DRD.
    CHECK(usb.openEndpoint(0x82, EndpointType::Interrupt, 9));
    CHECK(usb.openEndpoint(0x02, EndpointType::Interrupt, 9));
    CHECK(addrTx(2) == first + 128);
-   CHECK(addrRx(2) == first + 128 + 10);
+   CHECK(addrRx(2) == first + 128 + align(9));
    CHECK(countRx(2) == (5u << 10));
    CHECK((epr(2) & (USB_EP_T_FIELD | USB_EPADDR_FIELD)) == (USB_EP_INTERRUPT | 2));
 
@@ -177,7 +202,7 @@ void testOpenEndpointLayout() {
    CHECK(usb.openEndpoint(0x01, EndpointType::Bulk, 64));
    CHECK(addrRx(1) == first);
    CHECK(usb.openEndpoint(0x83, EndpointType::Bulk, 8));
-   CHECK(addrTx(3) == first + 148);
+   CHECK(addrTx(3) == first + 128 + align(9) + align(10));
 
    CHECK(upperHalvesUnused());
    CHECK(blockingDepth == 0);
@@ -212,17 +237,23 @@ void testPacketMemoryFull() {
 
    // PacketMemorySize - 64 (table) - 128 (EP0) bytes of 64-byte buffers:
    // five on STM32F1 (320 bytes), 13 on STM32L0 (832 bytes). Directions
-   // in the order 0x01, 0x81, 0x02, 0x82, ...
+   // in the order 0x01, 0x81, 0x02, 0x82, ... The 14 directions of EP1..EP7
+   // do not fill the 2048 bytes of the USB DRD block.
+   constexpr unsigned Directions = 14;
    const unsigned fit = (UsbDevice::PacketMemorySize - BtableSize - 128) / 64;
    static_assert((UsbDevice::PacketMemorySize - BtableSize - 128) % 64 == 0);
    auto address = [](unsigned i) { return static_cast<uint8_t>((i / 2 + 1) | (i % 2 ? 0x80 : 0)); };
-   for(unsigned i = 0; i < fit; ++i) {
+   const unsigned opened = fit < Directions ? fit : Directions;
+   for(unsigned i = 0; i < opened; ++i) {
       CHECK(usb.openEndpoint(address(i), EndpointType::Bulk, 64));
    }
-   const uint8_t last = address(fit - 1);
+   const uint8_t last = address(opened - 1);
    const uint8_t n = last & 0x7F;
-   CHECK(((last & 0x80) ? addrTx(n) : addrRx(n)) == UsbDevice::PacketMemorySize - 64);
-   CHECK(!usb.openEndpoint(address(fit), EndpointType::Bulk, 2));
+   CHECK(((last & 0x80) ? addrTx(n) : addrRx(n)) == BtableSize + 128 + 64 * (opened - 1));
+   if(fit < Directions) {
+      CHECK(addrRx(n) == UsbDevice::PacketMemorySize - 64);
+      CHECK(!usb.openEndpoint(address(fit), EndpointType::Bulk, 2));
+   }
 
    // closeAllEndpoints() frees everything after the EP0 buffers.
    usb.closeAllEndpoints();
@@ -230,7 +261,7 @@ void testPacketMemoryFull() {
    CHECK(usb.openEndpoint(0x83, EndpointType::Bulk, 2));
    CHECK(addrTx(3) == BtableSize + 128);
    CHECK(usb.openEndpoint(0x01, EndpointType::Bulk, 64));
-   CHECK(addrRx(1) == BtableSize + 130);
+   CHECK(addrRx(1) == BtableSize + 128 + align(2));
    CHECK(blockingDepth == 0);
 }
 
@@ -634,25 +665,25 @@ void recordPullup(void *, bool enable) {
    pullupOn = enable;
 }
 
-// STM32L0: begin() clears USB_BCDR, connect()/disconnect() switch
+// STM32L0, STM32H5: begin() clears USB_BCDR, connect()/disconnect() switch
 // USB_BCDR.DPPU, and isConnected() reads it back. STM32F1: no USB_BCDR, so
 // isConnected() is the requested state. Both: the callback runs, if set.
 void testPullup() {
    resetFakes();
    pullupCalls = 0;
    UsbDevice usb;
-#if defined(STM32L0)
+#if defined(USB_BCDR_DPPU)
    hostUsbRegisters.BCDR = USB_BCDR_DPPU | 1u;
 #endif
    usb.begin(&onEvent, nullptr);
-#if defined(STM32L0)
+#if defined(USB_BCDR_DPPU)
    CHECK(hostUsbRegisters.BCDR == 0);
 #endif
    CHECK(!usb.isConnected());
 
    usb.connect(); // no callback
    CHECK(usb.isConnected());
-#if defined(STM32L0)
+#if defined(USB_BCDR_DPPU)
    CHECK(hostUsbRegisters.BCDR == USB_BCDR_DPPU);
    // The state comes from the register.
    hostUsbRegisters.BCDR = 0;
@@ -667,17 +698,61 @@ void testPullup() {
    usb.connect();
    CHECK(usb.isConnected());
    CHECK(pullupCalls == 2 && pullupOn);
-#if defined(STM32L0)
+#if defined(USB_BCDR_DPPU)
    CHECK(hostUsbRegisters.BCDR == USB_BCDR_DPPU);
 #endif
 
    usb.end();
    CHECK(!usb.isConnected());
    CHECK(pullupCalls == 3 && !pullupOn);
-#if defined(STM32L0)
+#if defined(USB_BCDR_DPPU)
    CHECK(hostUsbRegisters.BCDR == 0);
 #endif
 }
+
+// Every buffer starts at BufferAlignment, also the second buffer of a
+// double-buffered endpoint with an odd size.
+void testBufferAlignment() {
+   resetFakes();
+   UsbDevice usb{ 5 };
+   usb.begin(&onEvent, nullptr);
+   CHECK(usb.openEndpoint(0x81, EndpointType::Interrupt, 9));
+   CHECK(usb.openEndpoint(0x02, EndpointType::Bulk, 9, true));
+   CHECK(usb.openEndpoint(0x83, EndpointType::Bulk, 3));
+   for(uint16_t a : { addrTx(1), addrTx(2), addrRx(2), addrTx(3) }) {
+      CHECK(a % hw::usbfs::BufferAlignment == 0);
+   }
+   CHECK(addrRx(2) == addrTx(2) + align(UsbDevice::rxBufferSize(9).pmaBytes));
+   CHECK(blockingDepth == 0);
+}
+
+#if defined(STM32H5)
+// USB DRD block: begin() validates VDDUSB, and the driver writes the upper
+// (Host mode) bits of USB_CHEPnR as 0.
+void testUsbDrd() {
+   resetFakes();
+   UsbDevice usb;
+   usb.begin(&onEvent, nullptr);
+   CHECK((hostPwr.USBSCR & (PWR_USBSCR_USB33DEN | PWR_USBSCR_USB33SV)) == (PWR_USBSCR_USB33DEN | PWR_USBSCR_USB33SV));
+
+   CHECK(usb.openEndpoint(0x81, EndpointType::Bulk, 64));
+   epr(1) = 0x06000000u | USB_EP_BULK | 1 | USB_EP_TX_STALL;
+   usb.setNak(0x81);
+   CHECK(epr(1) == (CtrKeep | USB_EP_BULK | 1 | (USB_EP_TX_STALL ^ USB_EP_TX_NAK)));
+
+   // A packet of 5 bytes fills two words; the rest of the last word is 0.
+   const uint16_t buffer = addrTx(1);
+   pma(static_cast<uint16_t>(buffer + 6)) = 0xFFFF;
+   const std::array<uint8_t, 5> data{ 0x11, 0x22, 0x33, 0x44, 0x55 };
+   epr(1) = USB_EP_BULK | 1 | USB_EP_TX_NAK;
+   CHECK(usb.startIn(0x81, data));
+   CHECK(pma(buffer) == 0x2211 && pma(static_cast<uint16_t>(buffer + 2)) == 0x4433);
+   CHECK(pma(static_cast<uint16_t>(buffer + 4)) == 0x0055 && pma(static_cast<uint16_t>(buffer + 6)) == 0);
+   // COUNT_TX in the high half of TXBD; ADDR_TX in the low half is kept.
+   CHECK(countTx(1) == 5 && addrTx(1) == buffer);
+   CHECK(blockingDepth == 0);
+}
+#endif
 
 } // namespace
 
@@ -719,10 +794,21 @@ int main() {
    testDoubleBufferedOutFirstPacketNak();
    testDoubleBufferedOutToggles();
    testPullup();
+   testBufferAlignment();
+#if defined(STM32H5)
+   testUsbDrd();
+#endif
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
       return 1;
    }
-   std::printf("all USB FS host tests passed for %s (%d blocking sections)\n", PmaStride == 2 ? "STM32F1" : "STM32L0", blockingSections);
+#if defined(STM32F1)
+   const char *family = "STM32F1";
+#elif defined(STM32H5)
+   const char *family = "STM32H5";
+#else
+   const char *family = "STM32L0";
+#endif
+   std::printf("all USB FS host tests passed for %s (%d blocking sections)\n", family, blockingSections);
    return 0;
 }

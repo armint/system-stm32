@@ -23,7 +23,7 @@ target_compile_options(test-gpio-f1 PRIVATE -Wall -Wextra -Werror -Wno-volatile)
 add_test(NAME gpio-f1 COMMAND test-gpio-f1)
 
 # The shared USB FS driver core, once per family access layer.
-foreach(_family f1 l0)
+foreach(_family f1 l0 h5)
     add_executable(test-usb-${_family}
             test_usb_fs.cpp
             ${_src}/peripherals/usbfs/UsbDeviceCore.cpp)
@@ -36,7 +36,9 @@ foreach(_family f1 l0)
             ${_stubs}
             ${_src}
             ${_src}/families/stm32${_family})
-    target_compile_options(test-usb-${_family} PRIVATE -Wall -Wextra -Werror -Wno-volatile)
+    # -fno-strict-aliasing: the test reads the 32-bit packet memory of the
+    # USB DRD block as 16-bit words.
+    target_compile_options(test-usb-${_family} PRIVATE -Wall -Wextra -Werror -Wno-volatile -fno-strict-aliasing)
     add_test(NAME usb-${_family} COMMAND test-usb-${_family})
 endforeach()
 
