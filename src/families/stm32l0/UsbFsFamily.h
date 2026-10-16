@@ -9,6 +9,8 @@
 
 #if defined(USB_BASE)
 
+#define SYSTEM_STM32_USBFS 1
+
 namespace hw::usbfs {
 
 constexpr IRQn_Type Irq = USB_IRQn;
@@ -27,7 +29,7 @@ constexpr uint16_t CntrLowPowerMode = USB_CNTR_LPMODE;
 constexpr bool HasInternalPullup = true;
 
 // BCD and the pull-up off, before the power-up sequence.
-inline void resetBcdr() {
+inline void beforePowerUp() {
    USB->BCDR = 0;
 }
 
@@ -44,5 +46,7 @@ inline bool internalPullup() {
 }
 
 } // namespace hw::usbfs
+
+#include "peripherals/usbfs/UsbFs16Access.h"
 
 #endif

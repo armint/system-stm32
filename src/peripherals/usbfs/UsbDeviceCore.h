@@ -6,10 +6,10 @@
 #include <cmsis_device.h>
 #include <cstdint>
 
-// Only devices with a USB full-speed device peripheral (STM32L0: L05x/L06x/
-// L07x/L08x except L051/L071/L081; STM32F1: F102, F103) define USB_BASE; on
-// the others this header is empty.
-#if defined(USB_BASE)
+// The access layer defines SYSTEM_STM32_USBFS only on devices with the USB
+// peripheral (STM32L0: L05x/L06x/L07x/L08x except L051/L071/L081; STM32F1:
+// F102, F103). On the others this header is empty.
+#if defined(SYSTEM_STM32_USBFS)
 
 namespace hw {
 
