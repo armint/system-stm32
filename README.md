@@ -221,7 +221,9 @@ F1 peripherals. The skeleton has these properties:
 - The memory script `ldscripts/mem-H533xE.ld` has 512 KB flash and the
   272 KB of SRAM1 to SRAM3 as one RAM region.
 - `GpioPin` (the shared `MODER` driver), `FastPin`, `Timer`, `Crs`, `Rtc`
-  and the interrupt table code compile unchanged.
+  and the interrupt table code compile. `Rtc` sets the backup domain write
+  access in `PWR_DBPCR` on the H5. None of them is tested on H5 hardware
+  yet.
 - `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc`, `Usart`, `Spi`, `Dma`,
   `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
   these: the RCC with PLL1 to PLL3 (system-stm32#32), the USART with FIFO
