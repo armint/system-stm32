@@ -1,8 +1,17 @@
 // Minimal STM32H5 test image. CI links it to prove that the H5 part of the
 // library builds, links and fits in memory: start-up, vector table, fault
 // handlers, the interrupt table copy, the DWT delay, the RCC with the 250 MHz
-// recipes, the ICACHE, HSI48, the CRS, GpioPin, FastPin, UID, DBG, IWDG and
-// the UCPD dead-battery disable.
+// recipes, the ICACHE, HSI48, the CRS, GpioPin, FastPin, UID, DBG, IWDG, the
+// UCPD dead-battery disable, the USART, the SPI v2 and the ADC.
+//
+// After the clock setup it runs self-tests and prints the results on USART2
+// (PA2/PA3, the ST-LINK virtual COM port, 115200 8N1):
+// - USART1 loopback: a wire from PA9 (TX) to PA10 (RX).
+// - SPI2 loopback, master, 8 bits: a wire from PB15 (MOSI) to PB14 (MISO).
+//   SCK is on PB13.
+// - ADC1: VDDA from Vrefint and the factory VREFINT_CAL, and PB0 (channel
+//   9) in mV. Then PB0 again at each LD2 toggle.
+// A missing wire gives "FAIL" for that test only.
 //
 // On a NUCLEO-H533RE it sets 250 MHz from the 24 MHz HSE crystal. Hold B1
 // (PC13) during reset to use HSI instead. LD2 (PA5) then toggles every
@@ -10,6 +19,7 @@
 // is the real core clock. If the clock recipe fails, LD2 blinks fast (5 Hz)
 // on the reset clock (HSI, 32 MHz). The IWDG (about 2 s) resets the board if
 // the main loop stops; it stops while a debugger halts the core.
+#include <Adc.h>
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/Crs.h>
@@ -19,8 +29,10 @@
 #include <peripherals/Iwdg.h>
 #include <peripherals/Pwr.h>
 #include <peripherals/Rcc.h>
+#include <peripherals/Spi.h>
 #include <peripherals/Timer.h>
 #include <peripherals/Uid.h>
+#include <peripherals/Usart.h>
 #include <utils/Interrupt.h>
 #include <utils/Timekeeping.h>
 
@@ -46,6 +58,151 @@ void exerciseUsbClock() {
       hw::Crs::enable();
    }
 }
+
+using Pin = hw::GpioPin;
+
+// RX pins get a pull-up: without the loopback wire they then idle high.
+void alternate(GPIO_TypeDef *port, uint8_t pin, Pin::AlternateFunction af, Pin::Pull pull = Pin::Pull::None) {
+   const Pin p(port, pin);
+   p.setAlternateFunction(af);
+   p.configure(Pin::Mode::Alternate, Pin::OutputType::PushPull, pull, Pin::Speed::High);
+}
+
+void startUsart(const hw::Usart &usart) {
+   usart.configure(115200);
+   usart.enableFifo();
+   usart.enableTx();
+   usart.enableRx();
+   usart.enable();
+}
+
+// USART2: the ST-LINK virtual COM port of the NUCLEO-H533RE.
+const hw::Usart vcp(USART2);
+
+void print(const char *text) {
+   for(; *text != '\0'; ++text) {
+      while(!vcp.isTxRegisterEmpty()) {
+      }
+      vcp.setData(static_cast<uint8_t>(*text));
+   }
+}
+
+void print(uint32_t value) {
+   char digits[11];
+   int n = 0;
+   do {
+      digits[n++] = static_cast<char>('0' + value % 10);
+      value /= 10;
+   } while(value != 0);
+   char text[12];
+   for(int i = 0; i < n; ++i) {
+      text[i] = digits[n - 1 - i];
+   }
+   text[n] = '\0';
+   print(text);
+}
+
+void printResult(const char *name, bool ok) {
+   print(name);
+   print(ok ? ": ok\r\n" : ": FAIL\r\n");
+}
+
+// USART1 with the FIFO on: PA9 (TX) to PA10 (RX), AF7.
+bool usartLoopback() {
+   Rcc::enableUSART1Clock();
+   alternate(GPIOA, 9, Pin::AlternateFunction::AF7);
+   alternate(GPIOA, 10, Pin::AlternateFunction::AF7, Pin::Pull::Up);
+   const hw::Usart usart(USART1);
+   startUsart(usart);
+   while(usart.isRxRegisterNotEmpty()) {
+      (void)usart.getData();
+   }
+   for(const uint8_t byte : { 0x55U, 0xA5U, 0x00U, 0xFFU }) {
+      usart.setData(byte);
+      uint32_t loops = 1000000;
+      while(!usart.isRxRegisterNotEmpty()) {
+         if(--loops == 0) {
+            return false;
+         }
+      }
+      if(usart.getData() != byte) {
+         return false;
+      }
+   }
+   return true;
+}
+
+// SPI2 master, 8 bits, 125 MHz / 64: PB13 SCK, PB14 MISO, PB15 MOSI, AF5.
+bool spiLoopback() {
+   Rcc::enableSPI2Clock();
+   for(const uint8_t pin : { 13, 14, 15 }) {
+      alternate(GPIOB, pin, Pin::AlternateFunction::AF5);
+   }
+   const hw::Spi spi(SPI2);
+   spi.configure(hw::Spi::BaudRatePrescaler::Div64);
+   spi.enable();
+   bool ok = true;
+   for(const uint8_t byte : { 0x5AU, 0x81U, 0x00U, 0xFFU }) {
+      const auto rx = spi.transfer(byte);
+      ok = ok && rx && *rx == byte;
+   }
+   ok = spi.waitUntilIdle() && ok;
+   spi.disable();
+   return ok;
+}
+
+const Adc adc(ADC1);
+
+bool startAdc() {
+   Pin(GPIOB, 0).configure(Pin::Mode::Analog);
+   Adc::enableClock();
+   if(Adc::configureClock() == 0 || !adc.powerUp() || !adc.calibrate() || !adc.enable()) {
+      return false;
+   }
+   adc.setSamplingTime(Adc::PB0, Adc::SamplingCycles::Cycles247_5);
+   return true;
+}
+
+uint32_t vddaMv = 3300;
+
+void printPb0() {
+   uint16_t raw = 0;
+   if(!adc.convert(Adc::PB0, raw)) {
+      printResult("pb0", false);
+      return;
+   }
+   print("pb0: ");
+   print(raw);
+   print(" raw, ");
+   print(Adc::toMillivolts(raw, vddaMv));
+   print(" mV\r\n");
+}
+
+void selfTest() {
+   Rcc::enableGPIOBClock();
+   Rcc::enableUSART2Clock();
+   alternate(GPIOA, 2, Pin::AlternateFunction::AF7);
+   alternate(GPIOA, 3, Pin::AlternateFunction::AF7, Pin::Pull::Up);
+   startUsart(vcp);
+   print("\r\nsystem-stm32 STM32H5 test image\r\n");
+   printResult("usart1 loopback (PA9-PA10)", usartLoopback());
+   printResult("spi2 loopback (PB15-PB14)", spiLoopback());
+   const bool adcOk = startAdc();
+   printResult("adc1 calibration", adcOk);
+   if(!adcOk) {
+      return;
+   }
+   uint32_t mv = 0;
+   if(adc.readSupplyMillivolts(mv)) {
+      vddaMv = mv;
+      print("vdda: ");
+      print(vddaMv);
+      print(" mV\r\n");
+   } else {
+      printResult("vdda", false);
+   }
+   printPb0();
+}
 } // namespace
 
 int main() {
@@ -55,7 +212,6 @@ int main() {
    // PB13/PB14 (UCPD1 CC1/CC2) are SPI2 on the Versaloon pin map.
    hw::Pwr::disableUcpdDeadBattery();
 
-   using Pin = hw::GpioPin;
    Led::pin().configure(Pin::Mode::Output, Pin::OutputType::PushPull);
    // Links the direction switch; LD2 ends as an output.
    Led::setInput();
@@ -68,6 +224,7 @@ int main() {
    exerciseUsbClock();
    sink = Rcc::getAPBClock() + Rcc::getAPB2Clock() + Rcc::getAPB3Clock() + Rcc::getPLL1QClock();
    sink = hw::Uid::hash();
+   selfTest();
 
    // Enable first: the H5 updates PR and RLR only while LSI runs.
    hw::Dbg::freezeIwdgOnDebug();
@@ -99,6 +256,7 @@ int main() {
          next += 500;
          Led::write(!Led::read());
          iwdg.reload();
+         printPb0();
       }
    }
 }

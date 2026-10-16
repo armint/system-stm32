@@ -302,6 +302,15 @@ stays on HSI.
 - The test image (`tests/stm32h5`) uses the HSE recipe. Hold B1 during reset
   to use the HSI recipe. LD2 blinks at 1 Hz from SysTick when the clock is
   correct, and at 5 Hz when the recipe fails.
+- The test image also prints self-test results on the ST-LINK virtual COM
+  port (USART2, PA2/PA3, 115200 8N1):
+  - USART1 loopback. Connect PA9 (TX) to PA10 (RX).
+  - SPI2 loopback in master mode. Connect PB15 (MOSI) to PB14 (MISO).
+  - ADC1 calibration, VDDA from Vrefint, and PB0 in mV. The image prints
+    PB0 again at each LD2 toggle.
+
+  A missing wire gives `FAIL` for that test only. The SPI test needs the
+  250 MHz clock, because the SPI kernel clock is `pll1_q_ck`.
 
 ### STM32H5 USART
 
@@ -373,7 +382,7 @@ the block:
 | Common (static) | `enableVrefint()`, `enableTemperatureSensor()`, `enableVbat()`, `setDualMode()`, `dualValue()` |
 | Power and calibration | `powerUp()`, `powerDown()`, `calibrate(InputMode)`, `getCalibrationFactors()`, `setCalibrationFactors()`, `enable()`, `disable()` |
 | Channels | `setSamplingTime()`, `setSamplingTimePlusOne()` (`SMPPLUS`), `setInputMode()` (single-ended or differential), `setChannel0Switch()` (`ADC_OR.OP0`) |
-| Regular group | `setRegularRank()` (ranks 1 to 16), `setRegularLength()`, `setResolution()`, `setAlignment()`, `setConversionMode()`, `setDiscontinuousCount()`, `setOverrunMode()`, `setDmaMode()`, `setAutoDelay()`, `setRegularTrigger()`, `setBulbSampling()`, `setSamplingTimeControlTrigger()`, `start()`, `stop()`, `value()` |
+| Regular group | `setRegularRank()` (ranks 1 to 16), `setRegularLength()`, `setResolution()`, `setAlignment()`, `setConversionMode()`, `setDiscontinuousCount()`, `setOverrunMode()`, `setDmaMode()`, `setAutoDelay()`, `setRegularTrigger()`, `setBulbSampling()`, `setSamplingTimeControlTrigger()`, `setSamplingSoftwareTrigger()`, `start()`, `stop()`, `value()` |
 | Injected group | `setInjectedSequence()` (1 to 4 ranks and the trigger in one `JSQR` write), `setInjectedQueue()`, `setInjectedAuto()`, `setInjectedDiscontinuous()`, `startInjected()`, `stopInjected()`, `injectedValue()` |
 | Offsets | `setOffset()` (4 units: subtract or add, saturation), `disableOffset()` |
 | Oversampling | `setOversampling()` (ratio 2 to 256, shift 0 to 8, regular and injected, triggered, continued or resumed) |
