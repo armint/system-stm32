@@ -25,6 +25,7 @@
 #include <array>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <vector>
 
 HostUsbTypeDef hostUsbRegisters;
@@ -70,6 +71,10 @@ int failures = 0;
 int blockingDepth = 0;
 int blockingSections = 0;
 IRQn_Type connectedIrq = TIM2_IRQn;
+
+// Runs once at the next delayuS() call, then clears itself: the test uses
+// it for hardware writes that come during a delay of the driver.
+std::function<void()> delayHook;
 
 using hw::UsbDevice;
 using hw::usb::EndpointType;
@@ -752,6 +757,69 @@ void testUsbDrd() {
    CHECK(countTx(1) == 5 && addrTx(1) == buffer);
    CHECK(blockingDepth == 0);
 }
+
+// begin() enables the VDDUSB monitor, waits for USB33RDY, then sets
+// USB33SV. The hook runs at the first wait: DEN is set, SV not yet.
+void testVddUsbOrder() {
+   resetFakes();
+   bool denBeforeSv = false;
+   delayHook = [&] {
+      denBeforeSv = (hostPwr.USBSCR & PWR_USBSCR_USB33DEN) != 0 && (hostPwr.USBSCR & PWR_USBSCR_USB33SV) == 0;
+      hostPwr.VMSR = PWR_VMSR_USB33RDY;
+   };
+   UsbDevice usb;
+   usb.begin(&onEvent, nullptr);
+   CHECK(denBeforeSv);
+   CHECK(!delayHook); // the hook ran
+   CHECK((hostPwr.USBSCR & PWR_USBSCR_USB33SV) != 0);
+}
+
+// Errata ES0621 2.19.1: COUNT_RX and the last packet bytes arrive after
+// CTR_RX. The hook writes them at the wait of the driver, so the event and
+// readOut() see the old values if the driver reads before the wait.
+void testRxWaitBeforeRead() {
+   resetFakes();
+   events.clear();
+   UsbDevice usb{ 5 };
+   usb.begin(&recordEvent, nullptr);
+   std::array<uint8_t, 64> out{};
+
+   // Single-buffered bulk OUT.
+   CHECK(usb.openEndpoint(0x01, EndpointType::Bulk, 64));
+   CHECK(usb.armOut(0x01));
+   const uint16_t rx = addrRx(1);
+   delayHook = [&] {
+      pma(rx) = 0xBBAA;
+      pma(static_cast<uint16_t>(rx + 2)) = 0x00CC;
+      countRx(1) = static_cast<uint16_t>((countRx(1) & ~0x03FFu) | 3);
+   };
+   epr(1) = USB_EP_CTR_RX | USB_EP_BULK | 1 | USB_EP_RX_NAK;
+   hostUsbRegisters.ISTR = USB_ISTR_CTR | 1;
+   usb.handleInterrupt();
+   CHECK(!delayHook);
+   CHECK(events.size() == 1 && events.back().size == 3);
+   CHECK(usb.readOut(0x01, out) == 3);
+   CHECK(out[0] == 0xAA && out[1] == 0xBB && out[2] == 0xCC);
+
+   // Double-buffered bulk OUT: the packet goes into buffer 0 (COUNT in the
+   // TXBD half).
+   CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
+   CHECK(usb.armOut(0x03));
+   const uint16_t buffer0 = addrTx(3);
+   delayHook = [&] {
+      pma(buffer0) = 0x2211;
+      uint16_t &count = pma(static_cast<uint16_t>(3 * 8 + 2));
+      count = static_cast<uint16_t>((count & ~0x03FFu) | 2);
+   };
+   epr(3) = USB_EP_CTR_RX | USB_EP_BULK | USB_EP_KIND | 3 | USB_EP_RX_VALID | USB_EP_DTOG_RX;
+   hostUsbRegisters.ISTR = USB_ISTR_CTR | 3;
+   usb.handleInterrupt();
+   CHECK(!delayHook);
+   CHECK(events.size() == 2 && events.back().endpoint == 3 && events.back().size == 2);
+   CHECK(usb.readOut(0x03, out) == 2);
+   CHECK(out[0] == 0x11 && out[1] == 0x22);
+   CHECK(blockingDepth == 0);
+}
 #endif
 
 } // namespace
@@ -775,7 +843,13 @@ void connectHandler(IRQn_Type IRQn, AdvancedHandler_t, void *) {
 void releaseHandler(IRQn_Type) {}
 } // namespace Interrupt
 
-extern "C" void delayuS(duration_t) {}
+extern "C" void delayuS(duration_t) {
+   if(delayHook) {
+      auto hook = std::move(delayHook);
+      delayHook = nullptr;
+      hook();
+   }
+}
 
 int main() {
    testRxBufferSize();
@@ -797,6 +871,8 @@ int main() {
    testBufferAlignment();
 #if defined(STM32H5)
    testUsbDrd();
+   testVddUsbOrder();
+   testRxWaitBeforeRead();
 #endif
    if(failures != 0) {
       std::printf("%d check(s) failed\n", failures);
