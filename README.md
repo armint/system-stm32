@@ -344,8 +344,31 @@ example the main loop), or disable interrupts around the change.
 
 ### FastPin direction switch
 
-On STM32F1, `FastPin` can change the pin configuration fast, for example
-the SWDIO direction at each SWD turnaround:
+`FastPin` can change the pin direction fast, for example the SWDIO
+direction at each SWD turnaround.
+
+On the `MODER` families (L0, G0, WL, H5), `setOutput()`, `setInput()` and
+`setMode<GpioPin::Mode>()` write the 2-bit `MODER` field of the pin:
+
+```cpp
+using Swdio = hw::FastPin<GPIOB_BASE, 4>;
+
+Swdio::pin().configure(hw::GpioPin::Mode::Input, hw::GpioPin::OutputType::PushPull,
+                       hw::GpioPin::Pull::Up, hw::GpioPin::Speed::VeryHigh);
+Swdio::setOutput(); // push-pull output with the speed and pull from configure()
+Swdio::setInput();  // input with the pull-up from configure()
+```
+
+The calls do not change `OTYPER`, `OSPEEDR`, `PUPDR` or `ODR`. Set these
+once with `pin().configure()`. Each call is a read-modify-write of `MODER`
+with interrupts off (`PRIMASK`), so an interrupt cannot lose a change to
+another pin. The call restores the old `PRIMASK` value. In the H5 test
+image, one call is 6 or 7 instructions: `mrs`, `cpsid`, load, `bic`,
+`orr` (not for an input), store and `msr`. An input to
+output change and an output to input change each go through no other
+mode, because only `MODER` bit 0 of the pin changes.
+
+On STM32F1, `FastPin` changes the 4-bit `CNF`/`MODE` field:
 
 ```cpp
 using Swdio = hw::FastPin<GPIOB_BASE, 4>;
@@ -387,11 +410,14 @@ Measure it on hardware with the DWT cycle counter (`DWT->CYCCNT`).
 
 `tests/host/` holds unit tests that run on the build machine, with fake
 registers. They test the code that needs no hardware. Today they test
-this STM32F1 code:
+this code:
 
-- GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
+- GPIO on the `MODER` families: the `FastPin` direction switch and the
+  `AFR` mapping of `GpioPin`. `FastPin` needs a constant port address, so
+  the test maps a fake port at `GPIOA_BASE` with `mmap()` (Linux only).
+- STM32F1 GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
   and the address and store order of the `FastPin` direction switch.
-- USB device driver: the `COUNTn_RX` encoding, the packet memory
+- STM32F1 USB device driver: the `COUNTn_RX` encoding, the packet memory
   allocation, the buffer descriptor table, and the packet copy at the
   32-bit CPU stride of the packet memory. The tests also check the
   `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT` written as

@@ -17,13 +17,19 @@ namespace hw {
  * BSRR or one load from IDR, with a constant address and mask, and no
  * read-modify-write. Use pin() to get a GpioPin for configure().
  *
- * STM32F1 only: setOutput(), setInput() and setConfig<>() switch the pin
- * configuration (e.g. the SWDIO direction at an SWD turnaround). Each one
- * is four stores to the bit-band aliases of the pin's CNF/MODE bits in
- * CRL/CRH, with constant addresses: no function call, no branch, no
- * read-modify-write, and safe against interrupts that change other pins
- * of the same register. See gpio_f1::writeOrder() for the intermediate
- * states.
+ * setOutput() and setInput() switch the pin direction (e.g. SWDIO at an
+ * SWD turnaround).
+ *
+ * STM32F1: setOutput(), setInput() and setConfig<>() are four stores to the
+ * bit-band aliases of the pin's CNF/MODE bits in CRL/CRH, with constant
+ * addresses: no function call, no branch, no read-modify-write, and safe
+ * against interrupts that change other pins of the same register. See
+ * gpio_f1::writeOrder() for the intermediate states.
+ *
+ * Other families: setOutput(), setInput() and setMode<>() write the 2-bit
+ * MODER field only, with a read-modify-write in a short PRIMASK critical
+ * section. OTYPER, OSPEEDR and PUPDR do not change: set them once with
+ * pin().configure().
  *
  * Example: using Tck = hw::FastPin<GPIOA_BASE, 5>;
  *
@@ -101,6 +107,30 @@ struct FastPin {
    [[gnu::always_inline]] static inline void writeBits(std::index_sequence<I...>) {
       constexpr auto order = gpio_f1::writeOrder(Config);
       (storeWord(gpio_f1::bitBandAlias(configRegister, gpio_f1::configShift(Pin) + order[I].bit), order[I].value), ...);
+   }
+#else
+   /**
+    * @brief Writes the MODER field of this pin. ODR and the other GPIO
+    * registers do not change. Interrupts are off for the read-modify-write,
+    * so an interrupt that changes another pin of the port cannot lose a
+    * change.
+    */
+   template <GpioPin::Mode M>
+   [[gnu::always_inline]] static inline void setMode() {
+      constexpr uint32_t field = 3UL << (Pin * 2U);
+      constexpr uint32_t value = static_cast<uint32_t>(M) << (Pin * 2U);
+      const uint32_t primask = __get_PRIMASK();
+      __disable_irq();
+      port()->MODER = (port()->MODER & ~field) | value;
+      __set_PRIMASK(primask);
+   }
+
+   [[gnu::always_inline]] static inline void setOutput() {
+      setMode<GpioPin::Mode::Output>();
+   }
+
+   [[gnu::always_inline]] static inline void setInput() {
+      setMode<GpioPin::Mode::Input>();
    }
 #endif
 };

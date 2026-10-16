@@ -31,3 +31,12 @@ target_include_directories(test-usb-f1 PRIVATE
         ${_src}/families/stm32f1)
 target_compile_options(test-usb-f1 PRIVATE -Wall -Wextra -Werror -Wno-volatile)
 add_test(NAME usb-f1 COMMAND test-usb-f1)
+
+add_executable(test-gpio-moder
+        test_gpio_moder.cpp
+        ${_src}/peripherals/GpioPin.cpp)
+target_include_directories(test-gpio-moder PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stubs-moder
+        ${_src})
+target_compile_options(test-gpio-moder PRIVATE -Wall -Wextra -Werror -Wno-volatile)
+add_test(NAME gpio-moder COMMAND test-gpio-moder)
