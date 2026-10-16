@@ -14,7 +14,7 @@ sources with `#ifdef STM32xx`.
 | `STM32G0`      | cmsis\_device\_g0 v1.4.4 | Cortex-M0+ | built in CI (STM32G071 and STM32G0B1) |
 | `STM32WL`      | cmsis\_device\_wl v1.4.0 | Cortex-M4  | built in CI |
 | `STM32F1`      | cmsis\_device\_f1 v4.3.5 | Cortex-M3  | built in CI (STM32F103xB); EXTI, I2C and RTC not ported; ADC and USART in `families/stm32f1` (see below) |
-| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); skeleton only: start-up, vectors, GPIO, delay. RCC, USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
+| `STM32H5`      | cmsis\_device\_h5 v1.7.0 | Cortex-M33 | built in CI (STM32H533xx); start-up, vectors, GPIO, delay, RCC (250 MHz), ICACHE, CRS. USART, SPI, DMA, EXTI and I2C not ported (see [STM32H5](#stm32h5)) |
 | `STM32C0`      | cmsis\_device\_c0 v1.0.0 | Cortex-M0+ | known-broken, non-blocking CI job (see `.gitlab-ci.yml`) |
 
 CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
@@ -224,17 +224,60 @@ F1 peripherals. The skeleton has these properties:
   and the interrupt table code compile. `Rtc` sets the backup domain write
   access in `PWR_DBPCR` on the H5. None of them is tested on H5 hardware
   yet.
-- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc`, `Usart`, `Spi`, `Dma`,
-  `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register blocks for
-  these: the RCC with PLL1 to PLL3 (system-stm32#32), the USART with FIFO
-  and the SPI v2 (#34), GPDMA (#35), and one EXTI IRQ for each line.
-- Until the RCC port (#32), the core runs on the reset clock: HSI at
-  32 MHz. Enable peripheral clocks with direct `RCC` register writes.
+- `_H5_EXCLUDE` in `CMakeLists.txt` removes `Rcc.cpp`, `Usart`, `Spi`,
+  `Dma`, `Exti`, `I2c` and `GpioInterrupt`. The H5 has other register
+  blocks for these: the USART with FIFO and the SPI v2 (#34), GPDMA (#35),
+  and one EXTI IRQ for each line.
+- The RCC of the H5 has its own driver, `families/stm32h5/RccH5.{h,cpp}`.
+  `peripherals/Rcc.h` includes it on the H5, so the include stays the same.
+  See [STM32H5 clocks](#stm32h5-clocks).
 - The CMSIS `SystemCoreClockUpdate()` of the H5 uses `float`. The start-up
   calls it, so every image links the soft-float routines (about 1.3 KB).
 - Do not reset the backup domain (`RCC_BDCR.VSWRST`) after start-up. The
   reset also erases SRAM2 (errata ES0621, section 2.2.6), and SRAM2 is
   part of the RAM region of `mem-H533xE.ld`.
+
+### STM32H5 clocks
+
+After reset, the core runs on HSI at 32 MHz (64 MHz, `HSIDIV` /2).
+Two recipes set 250 MHz, the maximum of the H5:
+
+| Function | PLL1 input | PLL1 settings |
+|---|---|---|
+| `Rcc::setClock250MhzHSE(hseHz = HSE_VALUE)` | HSE crystal | M = HSE / 2 MHz, N = 250, P = 2, Q = 4 |
+| `Rcc::setClock250MhzHSI()` | `hsi_ck` (64 MHz / `HSIDIV`) | M = `hsi_ck` / 2 MHz, N = 250, P = 2, Q = 4 |
+
+Each recipe does these steps:
+
+1. Move the system clock to HSI.
+2. Increase the voltage scaling one level at a time to VOS0.
+3. Start the HSE (HSE recipe only) and PLL1.
+4. Set 5 flash wait states, `WRHIGHFREQ` = 2 and the prefetch.
+5. Set all bus prescalers to /1 and select PLL1 as system clock.
+6. Call `SystemCoreClockUpdate()`.
+
+The recipe returns `false` if the input clock is not a multiple of 2 MHz
+(for example a 25 MHz crystal), or if HSE, VOS0 or PLL1 is not ready in
+time. The system clock then stays on HSI.
+
+- The PLL input (`ref1_ck`) is 2 MHz. This is the minimum for the wide VCO
+  range, and it gives the lowest long-term jitter (DS14539 table 47).
+  The VCO runs at 500 MHz.
+- `pll1_q_ck` is 125 MHz. It is the reset kernel clock of SPI1 to SPI3.
+  The SPI baud prescaler then gives 62.5 MHz, 31.25 MHz and so on, down to
+  0.49 MHz. Each value is just below a power-of-two MHz value, a usual JTAG
+  or SWD clock request. `Rcc::getPLL1QClock()` returns the value.
+- Set `SYSTEM_STM32_HSE_VALUE` to the crystal frequency (NUCLEO-H533RE:
+  24000000). Without it, `HSE_VALUE` is 25 MHz, the CMSIS default.
+- USB uses HSI48, trimmed by the CRS from USB SOF, as on L0 and G0B1:
+  `Rcc::enableHSI48()`, `Rcc::setUSBClockSource(Rcc::USBClockSource::HSI48)`,
+  `Rcc::enableCRSClock()` and `peripherals/Crs.h`.
+- `Rcc::enableICache()` enables the instruction cache after the end of the
+  cache invalidation after reset. The ICACHE reports a cacheable write as an
+  error. Thus, disable it with `Rcc::disableICache()` while the firmware
+  writes to the flash.
+- For a 1 ms SysTick, call `SysTick_Config(SystemCoreClock / 1000)` after
+  the recipe.
 
 ## STM32F1 GPIO
 

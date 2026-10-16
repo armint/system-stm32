@@ -209,8 +209,8 @@ if(STM32_FAMILY STREQUAL "STM32F1")
 endif()
 
 # STM32H5 skeleton: these drivers do not match the H5 register blocks yet.
-# The H5 has the RCC with PLL1..PLL3 and CFGR1/CFGR2 (system-stm32#32), the
-# SPI v2 with FIFO and TSIZE and a USART with FIFO (#34), and GPDMA instead
+# The H5 has the RCC with PLL1..PLL3 and CFGR1/CFGR2 (its own driver in
+# families/stm32h5/RccH5.{h,cpp} replaces Rcc.cpp), the SPI v2 with FIFO and TSIZE and a USART with FIFO (#34), and GPDMA instead
 # of DMA + DMAMUX (#35). EXTI has one IRQ per line (EXTI0..EXTI15) instead
 # of the grouped G0 IRQs. I2c.cpp and GpioInterrupt.cpp need Rcc and Exti.
 # The other shared drivers (GPIO with MODER as on L0/G0, RTC, timers, CRS,
@@ -258,9 +258,10 @@ target_compile_definitions(system-stm32 PUBLIC ${STM32_FAMILY} ${STM32_DEVICE})
 # it in SystemCoreClockUpdate() and Rcc.h uses it in the clock recipes.
 # Each of them has its own fallback when HSE_VALUE is not defined (8 MHz in
 # the CMSIS file, 48 MHz in Rcc.h), so the value goes onto the target as a
-# PUBLIC define. Empty keeps the old behaviour, except on STM32F1: there the
-# 72 MHz recipe runs from HSE, so the CMSIS default (8 MHz) is made explicit
-# to keep Rcc.h and SystemCoreClockUpdate() in agreement.
+# PUBLIC define. Empty keeps the old behaviour, except on STM32F1 and
+# STM32H5: there the clock recipes run from HSE, so the CMSIS default (F1:
+# 8 MHz, H5: 25 MHz) is made explicit to keep Rcc.h and
+# SystemCoreClockUpdate() in agreement.
 set(SYSTEM_STM32_HSE_VALUE "" CACHE STRING
     "HSE crystal frequency in Hz (e.g. 12000000). Empty: family default")
 if(SYSTEM_STM32_HSE_VALUE)
@@ -270,6 +271,8 @@ if(SYSTEM_STM32_HSE_VALUE)
     target_compile_definitions(system-stm32 PUBLIC HSE_VALUE=${SYSTEM_STM32_HSE_VALUE}UL)
 elseif(STM32_FAMILY STREQUAL "STM32F1")
     target_compile_definitions(system-stm32 PUBLIC HSE_VALUE=8000000UL)
+elseif(STM32_FAMILY STREQUAL "STM32H5")
+    target_compile_definitions(system-stm32 PUBLIC HSE_VALUE=25000000UL)
 endif()
 
 # STM32WL uses SRAM1_BASE (no generic SRAM_BASE alias) and has 78 vectors
