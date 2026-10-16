@@ -415,9 +415,16 @@ Start-up sequence:
 - The hardware allows most writes only while no conversion runs, and some
   only while the ADC is disabled (RM0481 section 28.4.10). The driver does
   not check these rules.
-- Errata ES0621 2.6.1 and 2.6.2 apply to the injected queue
-  (`setInjectedQueue(true)`). Erratum 2.6.5: before `stopInjected()`, wait
-  for `Event::InjectedEndOfSequence`.
+- With the injected queue on (`setInjectedQueue(true)`), the injected
+  group needs a hardware trigger. `setInjectedSequence()` refuses
+  `TriggerEdge::Software` then and returns `false`.
+- Errata ES0621 2.6.1 and 2.6.2 apply to the injected queue. Erratum 2.6.5:
+  before `stopInjected()`, wait for `Event::InjectedEndOfSequence`.
+- With `OverrunMode::Preserve` (the reset value), `ADC_DR` is a 3-stage
+  FIFO. `convert()` sets `Overwrite` while it runs, so it never returns an
+  older unread result.
+- `readSupplyMillivolts()` works on ADC1 only. On ADC2, channel 17 is
+  VDDCORE.
 
 ## STM32F1 GPIO
 

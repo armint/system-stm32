@@ -133,8 +133,8 @@ bool Adc::powerUp() const {
    if((_adc.CR & (ADC_CR_DEEPPWD | ADC_CR_ADVREGEN)) == ADC_CR_ADVREGEN) {
       return true;
    }
-   _adc.CR &= ~ADC_CR_DEEPPWD;
-   _adc.CR |= ADC_CR_ADVREGEN;
+   writeCrConfig(ADC_CR_DEEPPWD | ADC_CR_ADVREGEN, 0);
+   writeCrConfig(ADC_CR_ADVREGEN, ADC_CR_ADVREGEN);
    delayuS(10); // tADCVREG_STUP, DS14539 table 179: 10 us maximum
    return true;
 }
@@ -143,8 +143,8 @@ bool Adc::powerDown() const {
    if(!disable()) {
       return false;
    }
-   _adc.CR &= ~ADC_CR_ADVREGEN;
-   _adc.CR |= ADC_CR_DEEPPWD;
+   writeCrConfig(ADC_CR_ADVREGEN, 0);
+   writeCrConfig(ADC_CR_DEEPPWD, ADC_CR_DEEPPWD);
    return true;
 }
 
@@ -156,18 +156,16 @@ bool Adc::calibrate(InputMode mode) const {
    if(wasEnabled && !disable()) {
       return false;
    }
-   _adc.CR = (_adc.CR & ~ADC_CR_ADCALDIF) | (mode == InputMode::Differential ? ADC_CR_ADCALDIF : 0U);
-   _adc.CR |= ADC_CR_ADCAL;
+   writeCrConfig(ADC_CR_ADCALDIF, mode == InputMode::Differential ? ADC_CR_ADCALDIF : 0U);
+   command(ADC_CR_ADCAL);
    if(!waitClear(_adc.CR, ADC_CR_ADCAL)) {
       return false;
    }
-   if(wasEnabled) {
-      // ADEN is ignored during four ADC clock cycles after ADCAL clears.
-      // 4 cycles of the slowest ADC clock (1.5 MHz) are less than 3 us.
-      delayuS(3);
-      return enable();
-   }
-   return true;
+   // ADEN is ignored during four ADC clock cycles after ADCAL clears
+   // (RM0481 section 28.4.9). 4 cycles of the slowest ADC clock (1.5 MHz)
+   // are less than 3 us. enable() also sets ADEN again while it reads 0.
+   delayuS(3);
+   return wasEnabled ? enable() : true;
 }
 
 bool Adc::enable() const {
@@ -175,12 +173,18 @@ bool Adc::enable() const {
       return true;
    }
    _adc.ISR = ADC_ISR_ADRDY;
-   _adc.CR |= ADC_CR_ADEN;
-   if(!waitSet(_adc.ISR, ADC_ISR_ADRDY)) {
-      return false;
+   command(ADC_CR_ADEN);
+   for(uint32_t i = 0; i < pollLimit; ++i) {
+      if(_adc.ISR & ADC_ISR_ADRDY) {
+         _adc.ISR = ADC_ISR_ADRDY;
+         return true;
+      }
+      // The hardware ignores ADEN shortly after a calibration: set it again.
+      if(!isEnabled()) {
+         command(ADC_CR_ADEN);
+      }
    }
-   _adc.ISR = ADC_ISR_ADRDY;
-   return true;
+   return false;
 }
 
 bool Adc::disable() const {
@@ -190,20 +194,20 @@ bool Adc::disable() const {
    if(!stop() || !stopInjected()) {
       return false;
    }
-   _adc.CR |= ADC_CR_ADDIS;
+   command(ADC_CR_ADDIS);
    return waitClear(_adc.CR, ADC_CR_ADEN);
 }
 
 bool Adc::stop() const {
    if(_adc.CR & ADC_CR_ADSTART) {
-      _adc.CR |= ADC_CR_ADSTP;
+      command(ADC_CR_ADSTP);
    }
    return waitClear(_adc.CR, ADC_CR_ADSTP);
 }
 
 bool Adc::stopInjected() const {
    if(_adc.CR & ADC_CR_JADSTART) {
-      _adc.CR |= ADC_CR_JADSTP;
+      command(ADC_CR_JADSTP);
    }
    return waitClear(_adc.CR, ADC_CR_JADSTP);
 }
@@ -229,20 +233,28 @@ bool Adc::convert(Channel channel, uint16_t &value) const {
       return false;
    }
    _adc.SQR1 = static_cast<uint32_t>(channel & 0x1FU) << ADC_SQR1_SQ1_Pos; // L = 0: one rank
-   _adc.CFGR &= ~(ADC_CFGR_EXTEN | ADC_CFGR_CONT | ADC_CFGR_DISCEN);
+   // OVRMOD = 1 disables the 3-stage DR FIFO, so DR holds this result and
+   // not older unread data (RM0481 section 28.4.27). Restored afterwards.
+   const uint32_t ovrmod = _adc.CFGR & ADC_CFGR_OVRMOD;
+   _adc.CFGR = (_adc.CFGR & ~(ADC_CFGR_EXTEN | ADC_CFGR_CONT | ADC_CFGR_DISCEN)) | ADC_CFGR_OVRMOD;
    _adc.ISR = ADC_ISR_EOC | ADC_ISR_EOS | ADC_ISR_OVR;
    start();
-   if(!waitSet(_adc.ISR, ADC_ISR_EOC)) {
+   const bool ok = waitSet(_adc.ISR, ADC_ISR_EOC);
+   if(ok) {
+      value = static_cast<uint16_t>(_adc.DR);
+   } else {
       (void)stop();
-      return false;
    }
-   value = static_cast<uint16_t>(_adc.DR);
-   return true;
+   _adc.CFGR = (_adc.CFGR & ~ADC_CFGR_OVRMOD) | ovrmod;
+   return ok;
 }
 
 bool Adc::readSupplyMillivolts(uint32_t &vddaMv) const {
+   if(&_adc != ADC1) {
+      return false; // channel 17 is VDDCORE on ADC2
+   }
    enableVrefint();
-   // Smallest sample time of at least internalChannelSampleNs.
+   // Smallest sample time of at least vrefintSampleNs (rounded up to 5 us).
    const uint32_t hz = clockHz();
    constexpr uint16_t halfCycles[8] = { 5, 13, 25, 49, 95, 185, 495, 1281 };
    uint32_t smp = 7;
@@ -263,9 +275,12 @@ bool Adc::readSupplyMillivolts(uint32_t &vddaMv) const {
    return true;
 }
 
-void Adc::setInjectedSequence(const Channel *channels, uint8_t count, InjectedTrigger trigger, TriggerEdge edge) const {
-   if(count < 1 || count > 4) {
-      return;
+bool Adc::setInjectedSequence(const Channel *channels, uint8_t count, InjectedTrigger trigger, TriggerEdge edge) const {
+   // With the queue on, JEXTEN = 00 disables the software trigger too
+   // (RM0481 section 28.6.16): the sequence would never convert.
+   const bool queueOn = (_adc.CFGR & ADC_CFGR_JQDIS) == 0;
+   if(count < 1 || count > 4 || (queueOn && edge == TriggerEdge::Software)) {
+      return false;
    }
    uint32_t jsqr = (static_cast<uint32_t>(count - 1U) << ADC_JSQR_JL_Pos) |
                    (static_cast<uint32_t>(trigger) << ADC_JSQR_JEXTSEL_Pos) |
@@ -275,18 +290,19 @@ void Adc::setInjectedSequence(const Channel *channels, uint8_t count, InjectedTr
       jsqr |= static_cast<uint32_t>(channels[i] & 0x1FU) << pos[i];
    }
    _adc.JSQR = jsqr;
+   return true;
 }
 
-int16_t Adc::injectedValue(uint8_t rank) const {
+uint16_t Adc::injectedValue(uint8_t rank) const {
    switch(rank) {
    case 1:
-      return static_cast<int16_t>(_adc.JDR1);
+      return static_cast<uint16_t>(_adc.JDR1);
    case 2:
-      return static_cast<int16_t>(_adc.JDR2);
+      return static_cast<uint16_t>(_adc.JDR2);
    case 3:
-      return static_cast<int16_t>(_adc.JDR3);
+      return static_cast<uint16_t>(_adc.JDR3);
    case 4:
-      return static_cast<int16_t>(_adc.JDR4);
+      return static_cast<uint16_t>(_adc.JDR4);
    default:
       return 0;
    }

@@ -37,10 +37,11 @@ struct Adc {
    // Channels
    // ---------------------------------------------------------------------
    /// ADC1 inputs (VINP) of the STM32H533 (DS14539 table 14). PF11/PF12 exist
-   /// only in the 100/144-pin packages. ADC2: the same pins, but channel 16 is
-   /// VBAT/4 and channel 17 is VDDCORE (needs ADC_OR.OP0 on ADC2).
+   /// only in the 100/144-pin packages. ADC2 has the same pins, except
+   /// channel 2 (PF13) and channel 6 (PF14). On ADC2, channel 16 is VBAT/4
+   /// and channel 17 is VDDCORE (needs ADC_OR.OP0 on ADC2).
    enum Channel : uint8_t {
-      PA0 = 0, // needs ADC_OR.OP0 on ADC1: setChannel0Switch()
+      PA0 = 0, // needs ADC_OR.OP0: setChannel0Switch(), also for VINN1 (differential channel 1)
       PA1 = 1,
       PF11 = 2,
       PA6 = 3,
@@ -164,13 +165,19 @@ struct Adc {
       Tim3Oc1 = 13,
       Tim6Trgo = 14,
       Tim15Trgo = 15,
+      Lptim1Ch1 = 18,
+      Lptim2Ch1 = 19,
    };
 
    /// Single: one sequence per trigger. Continuous: CONT = 1.
    /// Discontinuous: DISCEN = 1, `n` ranks per trigger (setDiscontinuousCount()).
    enum class ConversionMode : uint32_t { Single = 0, Continuous = ADC_CFGR_CONT, Discontinuous = ADC_CFGR_DISCEN };
 
-   /// Preserve: DR keeps the old value on overrun. Overwrite: the new value.
+   /// Preserve (reset value): DR is a 3-stage FIFO; on overrun the new
+   /// result is lost and up to 3 old results stay unread in the FIFO.
+   /// Overwrite: no FIFO, DR always holds the latest result. Erratum ES0621
+   /// 2.6.6: dual regular simultaneous mode with DMA needs Overwrite (or one
+   /// DMA channel per ADC).
    enum class OverrunMode : uint32_t { Preserve = 0, Overwrite = ADC_CFGR_OVRMOD };
 
    /// ADC_CFGR.DMAEN/DMACFG.
@@ -254,12 +261,29 @@ struct Adc {
    };
 
    static constexpr uint32_t maxRaw = 4095;
-   /// Minimum Vrefint and Vsense sample time (DS14539: 4.3 us, 5 us).
-   static constexpr uint32_t internalChannelSampleNs = 5000;
+   /// Minimum sample time of Vrefint (DS14539: 4.3 us) and of the
+   /// temperature sensor (9 us). After enableTemperatureSensor(), wait
+   /// 25.2 us (sensor buffer start-up) before the first Vsense conversion.
+   static constexpr uint32_t vrefintSampleNs = 4300;
+   static constexpr uint32_t vsenseSampleNs = 9000;
    /// Bound of all poll loops: far more than a 640.5-cycle conversion at 1.5 MHz.
    static constexpr uint32_t pollLimit = 1000000;
 
    ADC_TypeDef &_adc;
+
+   /// The ADC_CR bits of type rs (ADEN, ADDIS, ADSTART, JADSTART, ADSTP,
+   /// JADSTP, ADCAL). A read-modify-write must write them as 0, or it starts
+   /// a conversion that just ended again (ADC_CR_BITS_PROPERTY_RS in ST's HAL).
+   static constexpr uint32_t crCommandBits = ADC_CR_ADEN | ADC_CR_ADDIS | ADC_CR_ADSTART | ADC_CR_JADSTART |
+                                             ADC_CR_ADSTP | ADC_CR_JADSTP | ADC_CR_ADCAL;
+   /// Sets one rs bit of ADC_CR.
+   void command(uint32_t bit) const {
+      _adc.CR = (_adc.CR & ~crCommandBits) | bit;
+   }
+   /// Writes the configuration bits `mask` of ADC_CR (DEEPPWD, ADVREGEN, ADCALDIF).
+   void writeCrConfig(uint32_t mask, uint32_t value) const {
+      _adc.CR = (_adc.CR & ~(crCommandBits | mask)) | value;
+   }
 
    explicit Adc(ADC_TypeDef *adc)
       : _adc(*adc) {}
@@ -415,6 +439,9 @@ struct Adc {
 
    /// Number of ranks, 1..16.
    void setRegularLength(uint8_t length) const {
+      if(length == 0) {
+         return;
+      }
       _adc.SQR1 = (_adc.SQR1 & ~ADC_SQR1_L) | (static_cast<uint32_t>((length - 1U) & 0xFU) << ADC_SQR1_L_Pos);
    }
 
@@ -429,6 +456,9 @@ struct Adc {
    }
    /// Ranks per trigger in ConversionMode::Discontinuous, 1..8.
    void setDiscontinuousCount(uint8_t ranks) const {
+      if(ranks == 0) {
+         return;
+      }
       _adc.CFGR = (_adc.CFGR & ~ADC_CFGR_DISCNUM) | (static_cast<uint32_t>((ranks - 1U) & 0x7U) << ADC_CFGR_DISCNUM_Pos);
    }
    void setOverrunMode(OverrunMode mode) const {
@@ -467,7 +497,7 @@ struct Adc {
    }
 
    void start() const {
-      _adc.CR |= ADC_CR_ADSTART;
+      command(ADC_CR_ADSTART);
    }
    /// @return false on a timeout.
    bool stop() const;
@@ -517,11 +547,15 @@ struct Adc {
     * queue on (setInjectedQueue()), each write adds a context to a 2-entry
     * queue; see the STM32H5 errata ES0621 2.6.1 and 2.6.2 for the queue.
     * `channels` points to `count` channels.
+    * @return false (and no write) for a count outside 1..4, or for
+    * TriggerEdge::Software with the queue on: then JEXTEN = 00 also
+    * disables the software trigger (RM0481 section 28.6.16).
     */
-   void setInjectedSequence(const Channel *channels, uint8_t count, InjectedTrigger trigger = InjectedTrigger::Tim1Trgo,
+   bool setInjectedSequence(const Channel *channels, uint8_t count, InjectedTrigger trigger = InjectedTrigger::Tim1Trgo,
                             TriggerEdge edge = TriggerEdge::Software) const;
 
    /// queue = false: JQDIS = 1 (reset value), one context. emptyStops = JQM.
+   /// With the queue on, the injected group needs a hardware trigger.
    void setInjectedQueue(bool queue, bool emptyStops = false) const {
       _adc.CFGR = (_adc.CFGR & ~(ADC_CFGR_JQDIS | ADC_CFGR_JQM)) | (queue ? 0U : ADC_CFGR_JQDIS) |
                   (emptyStops ? ADC_CFGR_JQM : 0U);
@@ -535,15 +569,17 @@ struct Adc {
       _adc.CFGR = (_adc.CFGR & ~ADC_CFGR_JDISCEN) | (on ? ADC_CFGR_JDISCEN : 0U);
    }
    void startInjected() const {
-      _adc.CR |= ADC_CR_JADSTART;
+      command(ADC_CR_JADSTART);
    }
    bool isInjectedConverting() const {
       return (_adc.CR & ADC_CR_JADSTART) != 0;
    }
    /// @return false on a timeout. Erratum ES0621 2.6.5: wait for JEOS first.
    bool stopInjected() const;
-   /// Rank 1..4. The value is signed when an offset is on.
-   int16_t injectedValue(uint8_t rank) const;
+   /// Rank 1..4. Unsigned, as value() (an oversampled result can use all
+   /// 16 bits). With an offset and no saturation the result is signed:
+   /// cast it to int16_t.
+   uint16_t injectedValue(uint8_t rank) const;
 
    // ---------------------------------------------------------------------
    // Offsets
