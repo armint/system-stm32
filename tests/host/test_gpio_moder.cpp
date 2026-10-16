@@ -24,6 +24,11 @@ using hw::GpioPin;
 using M = GpioPin::Mode;
 
 uint32_t primask = 0;
+// MODER when interrupts go off and when PRIMASK is restored: the write to
+// MODER must fall between the two.
+int disableCalls = 0;
+uint32_t moderAtDisable = 0;
+uint32_t moderAtRestore = 0;
 
 GPIO_TypeDef *gpio = nullptr;
 
@@ -74,16 +79,25 @@ void testDirectionSwitch() {
    checkDirectionSwitch<15>();
 }
 
-// The switch restores PRIMASK: it does not enable interrupts that the
-// caller has disabled.
-void testDirectionSwitchKeepsPrimask() {
+// The switch writes MODER with interrupts off, and then restores PRIMASK:
+// it does not enable interrupts that the caller has disabled.
+void testDirectionSwitchIsCritical() {
    using P = hw::FastPin<GPIOA_BASE, 3>;
-   primask = 0;
-   P::setOutput();
-   CHECK(primask == 0);
-   primask = 1;
-   P::setInput();
-   CHECK(primask == 1);
+   for(uint32_t callerPrimask : { 0U, 1U }) {
+      gpio->MODER = 0;
+      primask = callerPrimask;
+      disableCalls = 0;
+      P::setOutput();
+      CHECK(disableCalls == 1);
+      CHECK(moderAtDisable == 0);
+      CHECK(moderAtRestore == (1U << 6));
+      CHECK(primask == callerPrimask);
+      P::setInput();
+      CHECK(disableCalls == 2);
+      CHECK(moderAtDisable == (1U << 6));
+      CHECK(moderAtRestore == 0);
+      CHECK(primask == callerPrimask);
+   }
    primask = 0;
 }
 
@@ -118,10 +132,13 @@ uint32_t __get_PRIMASK() {
 }
 
 void __set_PRIMASK(uint32_t value) {
+   moderAtRestore = gpio->MODER;
    primask = value;
 }
 
 void __disable_irq() {
+   ++disableCalls;
+   moderAtDisable = gpio->MODER;
    primask = 1;
 }
 
@@ -130,7 +147,7 @@ int main() {
       return 1;
    }
    testDirectionSwitch();
-   testDirectionSwitchKeepsPrimask();
+   testDirectionSwitchIsCritical();
    testAlternateFunction();
    testWriteUsesBsrr();
    if(failures != 0) {
