@@ -372,8 +372,9 @@ struct Usart {
       return (usart_.ISR);
    }
 
+   /// @param flag USART_ICR_* mask (ISR is read-only; flags clear via ICR).
    inline void clearStatusFlag(uint32_t flag) const {
-      usart_.ISR |= flag;
+      usart_.ICR = flag;
    }
 
 
