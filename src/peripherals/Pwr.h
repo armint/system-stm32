@@ -77,6 +77,11 @@ inline void disableUcpdDeadBattery() {
 inline void setStopMode(StopMode mode) {
 #if defined(PWR_CR1_LPMS)
    PWR->CR1 = (PWR->CR1 & ~PWR_CR1_LPMS) | static_cast<uint32_t>(mode);
+#elif defined(PWR_PMCR_LPMS)
+   // STM32H5: LPMS is one bit (0 = Stop, 1 = Standby), so there is no Stop
+   // variant to select. Clear it so that deep sleep enters Stop, not Standby.
+   (void)mode;
+   PWR->PMCR &= ~PWR_PMCR_LPMS;
 #elif defined(PWR_CR_PDDS) && defined(PWR_CR_LPSDSR)
    // STM32L0 and similar
    (void)mode;
