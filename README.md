@@ -328,7 +328,11 @@ stays on HSI.
 - `Rcc::enableICache()` enables the instruction cache after the end of the
   cache invalidation after reset. The ICACHE reports a cacheable write as an
   error. Thus, disable it with `Rcc::disableICache()` while the firmware
-  writes to the flash.
+  writes to the flash. The ICACHE must not cache the read-only flash area
+  0x08FFF000 to 0x08FFFFFF (UID, VREFINT_CAL, TS_CAL): a cached read takes a
+  bus fault. Call `Rcc::disableCacheOfReadOnlyFlash()` before
+  `Rcc::enableICache()`. It programs MPU region 0 and enables the MPU. Loads
+  from this area must be 32 bits wide.
 - For a 1 ms SysTick, call `SysTick_Config(SystemCoreClock / 1000)` after
   the recipe.
 - The test image (`tests/stm32h5`) uses the HSE recipe. Hold B1 during reset
