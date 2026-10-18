@@ -217,11 +217,43 @@ constexpr uint32_t VOSReadyLoops = 10000;
  * The ICACHE caches the code region (0x0000 0000 to 0x1FFF FFFF), thus also
  * the flash. It reports a cacheable write as an error: disable it while the
  * firmware programs the flash (RM0481 section 8.4.5).
+ *
+ * The read-only flash area (UID, VREFINT_CAL, TS_CAL) must not be cached
+ * (RM0481 section 7.3.2): without the MPU region of
+ * disableCacheOfReadOnlyFlash(), reading it faults. Call that function
+ * before this one, or program an equivalent MPU region.
  */
 inline void enableICache() {
    while(ICACHE->SR & ICACHE_SR_BUSYF) {
    }
    ICACHE->CR |= ICACHE_CR_EN;
+}
+
+/**
+ * @brief Makes the read-only flash area 0x08FFF000 to 0x08FFFFFF normal
+ * non-cacheable memory (RM0481 section 7.3.2), so the ICACHE skips it.
+ *
+ * Uses MPU region 0 and memory attribute 0 (MAIR0 byte 0), and enables the
+ * MPU with the default memory map as background for privileged code. The
+ * area is read-only and never executable. Call it before enableICache().
+ * Limit: it overwrites region 0 and attribute 0. If the firmware has its own
+ * MPU setup, program an equivalent region there instead.
+ */
+inline void disableCacheOfReadOnlyFlash() {
+   constexpr uint32_t base = 0x08FFF000UL;
+   constexpr uint32_t last = 0x08FFFFFFUL;
+   constexpr uint32_t attrNormalNonCacheable = 0x44UL; // inner and outer
+   constexpr uint32_t apReadOnlyAny = 3UL << MPU_RBAR_AP_Pos;
+   MPU->CTRL &= ~MPU_CTRL_ENABLE_Msk;
+   __DSB();
+   __ISB();
+   MPU->MAIR0 = (MPU->MAIR0 & ~0xFFUL) | attrNormalNonCacheable;
+   MPU->RNR = 0;
+   MPU->RBAR = base | apReadOnlyAny | MPU_RBAR_XN_Msk;
+   MPU->RLAR = (last & MPU_RLAR_LIMIT_Msk) | MPU_RLAR_EN_Msk; // AttrIndx 0
+   MPU->CTRL |= MPU_CTRL_PRIVDEFENA_Msk | MPU_CTRL_ENABLE_Msk;
+   __DSB();
+   __ISB();
 }
 
 inline void disableICache() {
