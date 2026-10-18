@@ -194,8 +194,14 @@ bool spiLoopback() {
    for(const uint8_t pin : { 13, 14, 15 }) {
       alternate(GPIOB, pin, Pin::AlternateFunction::AF5);
    }
+   // NSS (PB12) held low: configure() must not depend on the pin level. If
+   // MASTER were written before the NSS bits, the SPI would take a mode fault.
+   alternate(GPIOB, 12, Pin::AlternateFunction::AF5, Pin::Pull::Down);
    const hw::Spi spi(SPI2);
    spi.configure(hw::Spi::BaudRatePrescaler::Div64);
+   if(spi.isModeFault() || (SPI2->CFG2 & SPI_CFG2_MASTER) == 0) {
+      return false;
+   }
    spi.enable();
    bool ok = true;
    for(const uint8_t byte : { 0x5AU, 0x81U, 0x00U, 0xFFU }) {
