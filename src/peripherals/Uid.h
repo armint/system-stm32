@@ -25,12 +25,15 @@ inline uint32_t word(size_t index) {
 
 /**
  * @brief Reads the full 96-bit UID into a caller-supplied 12-byte span.
+ * The bytes are in memory order (little endian).
+ *
+ * The UID is read with 32-bit loads: an 8-bit load from the read-only flash
+ * area takes a bus fault on the STM32H533 (issue #44).
  */
 inline void read(hw::span<uint8_t, SizeBytes> dest) {
 #if defined(UID_BASE)
-   const auto *uid = reinterpret_cast<const uint8_t *>(UID_BASE);
    for(size_t i = 0u; i < SizeBytes; ++i) {
-      dest[i] = uid[i];
+      dest[i] = static_cast<uint8_t>(word(i / 4u) >> (8u * (i % 4u)));
    }
 #else
    for(size_t i = 0u; i < SizeBytes; ++i) {
