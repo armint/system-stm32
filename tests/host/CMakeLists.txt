@@ -59,3 +59,11 @@ target_include_directories(test-gpdma-h5 PRIVATE
         ${_src}/families/stm32h5)
 target_compile_options(test-gpdma-h5 PRIVATE -Wall -Wextra -Werror -Wno-volatile)
 add_test(NAME gpdma-h5 COMMAND test-gpdma-h5)
+
+add_executable(test-uid
+        test_uid.cpp)
+target_include_directories(test-uid PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stubs-uid
+        ${_src})
+target_compile_options(test-uid PRIVATE -Wall -Wextra -Werror -Wno-volatile)
+add_test(NAME uid COMMAND test-uid)
