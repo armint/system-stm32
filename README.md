@@ -229,7 +229,9 @@ F1 peripherals. The skeleton has these properties:
   yet.
 - `FastPin::setOutput()`, `setInput()` and `setMode<>()` change the
   `MODER` field of the pin. See [FastPin direction switch](#fastpin-direction-switch).
-- `Uid` reads the 96-bit unique ID at `UID_BASE` (0x08FFF800). It uses 32-bit loads, because an 8-bit load faults on the STM32H533.
+- `Uid` reads the 96-bit unique ID at `UID_BASE` (0x08FFF800). It uses 32-bit
+  loads on all families. On a NUCLEO-H533RE, an 8-bit load took a bus fault
+  (issue #44).
   `Dbg::freezeIwdgOnDebug()` and `Dbg::freezeWwdgOnDebug()` set the
   freeze bits in `DBGMCU_APB1FZR1`.
 - `Iwdg` has the two extra H5 prescalers `Div512` and `Div1024`. On the H5,

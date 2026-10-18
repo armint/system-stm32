@@ -16,7 +16,8 @@ constexpr size_t SizeWords = 3u;
 inline uint32_t word(size_t index) {
 #if defined(UID_BASE)
    if(index < SizeWords) {
-      const auto *uid = reinterpret_cast<const uint32_t *>(UID_BASE);
+      // volatile: the compiler must not narrow the load to 8 or 16 bits (issue #44).
+      const auto *uid = reinterpret_cast<const volatile uint32_t *>(UID_BASE);
       return uid[index];
    }
 #endif
@@ -27,13 +28,18 @@ inline uint32_t word(size_t index) {
  * @brief Reads the full 96-bit UID into a caller-supplied 12-byte span.
  * The bytes are in memory order (little endian).
  *
- * The UID is read with 32-bit loads: an 8-bit load from the read-only flash
- * area takes a bus fault on the STM32H533 (issue #44).
+ * The UID is read with one 32-bit load per word. On a NUCLEO-H533RE, an
+ * 8-bit load from UID_BASE took a bus fault with the ICACHE on and an MPU
+ * non-cacheable region over the read-only flash area. The cause is not
+ * confirmed (issue #44).
  */
 inline void read(hw::span<uint8_t, SizeBytes> dest) {
 #if defined(UID_BASE)
-   for(size_t i = 0u; i < SizeBytes; ++i) {
-      dest[i] = static_cast<uint8_t>(word(i / 4u) >> (8u * (i % 4u)));
+   for(size_t w = 0u; w < SizeWords; ++w) {
+      const uint32_t value = word(w);
+      for(size_t b = 0u; b < 4u; ++b) {
+         dest[4u * w + b] = static_cast<uint8_t>(value >> (8u * b));
+      }
    }
 #else
    for(size_t i = 0u; i < SizeBytes; ++i) {
