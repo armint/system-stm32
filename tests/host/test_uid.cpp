@@ -25,7 +25,7 @@ int failures = 0;
 int main() {
    void *page = mmap(reinterpret_cast<void *>(UID_BASE & ~0xFFFUL), 4096, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0);
-   if(page == MAP_FAILED) {
+   if(page != reinterpret_cast<void *>(UID_BASE & ~0xFFFUL)) {
       std::printf("cannot map the fake UID at 0x%lx\n", UID_BASE);
       return 2;
    }
