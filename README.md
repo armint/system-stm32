@@ -818,7 +818,7 @@ library build and every CI job compiles it.
 
 | Function | Purpose |
 |---|---|
-| `configure(Config)` | Writes `CRS_CFGR`: sync source, divider, polarity, `RELOAD`, `FELIM`. The defaults are USB SOF, 48 MHz / 1 kHz. Returns `false` while the counter runs, because the hardware then write-protects `CRS_CFGR`. |
+| `configure(Config)` | Writes `CRS_CFGR`: sync source, divider, polarity, `RELOAD`, `FELIM`. The defaults are USB SOF, 48 MHz / 1 kHz. `FELIM` is 34 on L0 and G0, and 42 on H5 because the H5 trimming step is larger. Returns `false` while the counter runs, because the hardware then write-protects `CRS_CFGR`. |
 | `enable(autoTrim = true)` / `disable()` | Starts or stops the frequency error counter (`CEN`) and automatic trimming (`AUTOTRIMEN`). |
 | `getSyncStatus()` | Returns `None`, `Ok`, `Warning` or `Error` from the `CRS_ISR` flags. |
 | `isFlagSet(Flag)` / `clearFlags()` | Reads one `CRS_ISR` flag or clears all of them. |
@@ -836,7 +836,7 @@ if(!Rcc::enableHSI48()) {
 }
 Rcc::setUSBClockSource(Rcc::USBClockSource::HSI48);
 Rcc::enableCRSClock();
-(void)hw::Crs::configure({}); // USB SOF, RELOAD = 47999, FELIM = 34
+(void)hw::Crs::configure({}); // USB SOF, RELOAD = 47999, FELIM = 34 (42 on H5)
 hw::Crs::enable();             // counter and automatic trimming on
 Rcc::enableUSBClock();
 ```

@@ -38,9 +38,16 @@ enum class SyncDivider : uint32_t {
 
 // RELOAD = fTARGET / fSYNC - 1 = 48 MHz / 1 kHz - 1 (reset value).
 constexpr uint16_t ReloadUsbSof = 48000 - 1;
-// FELIM = fTARGET / fSYNC * step / 2, rounded up. 48000 * 0.14 % / 2 = 33.6
-// -> 34 (reset value; 0.14 % is the typical HSI48 trimming step).
+// FELIM = fTARGET / fSYNC * step / 2, rounded up. The HSI48 trimming step
+// differs by family, so the default does too.
+#if defined(STM32H5)
+// H5: 0.175 % typical step (DS14539 table 43): 48000 * 0.175 % / 2 = 42.
+// The maximum step of 0.25 % would give 60.
+constexpr uint8_t FrequencyErrorLimitDefault = 42;
+#else
+// L0, G0: 0.14 % typical step: 48000 * 0.14 % / 2 = 33.6 -> 34 (reset value).
 constexpr uint8_t FrequencyErrorLimitDefault = 34;
+#endif
 
 constexpr uint32_t TrimMax = CRS_CR_TRIM_Msk >> CRS_CR_TRIM_Pos;
 // Middle of the trimming range: 32 on L0, 64 on G0 (reset value).

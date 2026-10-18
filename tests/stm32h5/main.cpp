@@ -321,6 +321,9 @@ void selfTest() {
 }
 } // namespace
 
+// H5 trimming step is 0.175 %: FELIM = 48000 * 0.175 % / 2 (issue #41).
+static_assert(hw::Crs::FrequencyErrorLimitDefault == 42);
+
 int main() {
    Rcc::enableGPIOAClock();
    Rcc::enableGPIOCClock();
