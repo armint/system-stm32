@@ -394,6 +394,7 @@ hardware:
   inactive for a master (no mode fault) and active for a slave.
   `setNssMode(nss, mode)` takes the mode as an argument. Call it before
   `setMode(Mode::Master)`, because a master with `SSI` = 0 takes a mode fault.
+  To switch to slave, call `setMode(Mode::Slave)` first.
   `configure()` does this and clears a pending `MODF`.
 - `enableAlternateFunctionControl()` (`AFCNTR`) keeps SCK, MOSI and NSS at
   their idle levels while the SPI is disabled. Use it in master mode only.

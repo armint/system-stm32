@@ -9,7 +9,7 @@
 // (PA2/PA3, the ST-LINK virtual COM port, 115200 8N1):
 // - USART1 loopback: a wire from PA9 (TX) to PA10 (RX).
 // - SPI2 loopback, master, 8 bits: a wire from PB15 (MOSI) to PB14 (MISO).
-//   SCK is on PB13.
+//   SCK is on PB13. PB12 (NSS) is held low by its pull-down: leave it unconnected.
 // - ADC1: VDDA from Vrefint and the factory VREFINT_CAL, and PB0 (channel
 //   9) in mV. Then PB0 again at each LD2 toggle.
 // - GPDMA1 memory-to-memory: one transfer and a two-item linked list.

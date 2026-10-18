@@ -172,7 +172,8 @@ struct Spi {
     * @brief Writes SSM/SSOE (CFG2) and SSI (CR1) for `nss`. `mode` selects the
     * SSI level of NssMode::Soft: high for a master, low for a slave. Call it
     * before setMode(Mode::Master), never after: a master with SSI = 0 takes a
-    * mode fault. configure() does this.
+    * mode fault. To switch to slave, call setMode(Mode::Slave) first. Rule:
+    * MASTER must be 0 whenever SSI goes low. configure() does this.
     */
    void setNssMode(NssMode nss, Mode mode) const;
 
