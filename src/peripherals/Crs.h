@@ -6,8 +6,9 @@
 // Clock Recovery System (CRS): trims the HSI48 oscillator against a
 // synchronisation signal, normally the 1 kHz USB start-of-frame (SOF).
 // The register layout is the same on STM32L0 (RM0367 section 8),
-// STM32G0B1/G0C1 (RM0444 section 6) and STM32H5 (RM0481 section 12). Only the TRIM field width differs
-// (6 bits on L0 and H5, 7 bits on G0), which TrimMax/TrimDefault take from CMSIS.
+// STM32G0B1/G0C1 (RM0444 section 6) and STM32H5 (RM0481 section 12). Only
+// the TRIM field width differs (6 bits on L0 and H5, 7 bits on G0), which
+// TrimMax/TrimDefault take from CMSIS.
 //
 // The caller enables the CRS bus clock (Rcc::enableCRSClock()) and HSI48
 // (Rcc::enableHSI48()) first. Typical USB use:
