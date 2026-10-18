@@ -339,6 +339,7 @@ int main() {
    key.configure(Pin::Mode::Input);
 
    const bool clockOk = key.read() ? Rcc::setClock250MhzHSI() : Rcc::setClock250MhzHSE();
+   Rcc::disableCacheOfReadOnlyFlash();
    Rcc::enableICache();
    exerciseUsbClock();
    exerciseUsb();
