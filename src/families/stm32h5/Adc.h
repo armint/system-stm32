@@ -232,16 +232,21 @@ struct Adc {
    // Factory calibration (read-only area, DS14539 tables 26 and 96)
    // ---------------------------------------------------------------------
    struct Calibration {
+      // The area faults on 8-bit loads (#44): load the aligned 32-bit word
+      // and keep the low half-word (little endian).
+      static uint16_t read(uint32_t address) {
+         return static_cast<uint16_t>(*reinterpret_cast<const volatile uint32_t *>(address));
+      }
       /// Vrefint raw value at 30 degC, VDDA = 3.3 V.
       static uint16_t vrefint() {
-         return *reinterpret_cast<const volatile uint16_t *>(0x08FFF810UL);
+         return read(0x08FFF810UL);
       }
       /// Temperature sensor raw values at 30 and 130 degC, VDDA = 3.3 V.
       static uint16_t ts1() {
-         return *reinterpret_cast<const volatile uint16_t *>(0x08FFF814UL);
+         return read(0x08FFF814UL);
       }
       static uint16_t ts2() {
-         return *reinterpret_cast<const volatile uint16_t *>(0x08FFF818UL);
+         return read(0x08FFF818UL);
       }
       static constexpr int32_t ts1Celsius = 30;
       static constexpr int32_t ts2Celsius = 130;

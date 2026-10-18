@@ -235,7 +235,10 @@ inline void enableICache() {
  *
  * Uses MPU region 0 and memory attribute 0 (MAIR0 byte 0), and enables the
  * MPU with the default memory map as background for privileged code. The
- * area is read-only and never executable. Call it before enableICache().
+ * region covers the OTP area (0x08FFF000 to 0x08FFF7FF) and the read-only
+ * area above it. It is read-only and never executable, thus a write to the
+ * OTP faults: change the region first to program the OTP. Unprivileged code
+ * cannot access anything outside this region. Call it before enableICache().
  * Limit: it overwrites region 0 and attribute 0. If the firmware has its own
  * MPU setup, program an equivalent region there instead.
  */
