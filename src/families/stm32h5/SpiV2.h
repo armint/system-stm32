@@ -86,6 +86,8 @@ struct Spi {
    /**
     * @brief Writes CFG1 and CFG2 (FIFO threshold 1 frame, no CRC, no DMA,
     * TSIZE = 0). Disables the SPI for the change and restores SPE.
+    * The NSS bits (SSM, SSI, SSOE) are written before MASTER, so a master
+    * never sees its NSS input low: that would set MODF and clear MASTER.
     */
    void configure(BaudRatePrescaler prescaler,
                   Mode mode = Mode::Master,
@@ -166,8 +168,14 @@ struct Spi {
       spi_.CFG2 = (spi_.CFG2 & ~SPI_CFG2_LSBFRST) | static_cast<uint32_t>(firstBit);
    }
 
-   /// Uses CFG2.MASTER for the SSI level of NssMode::Soft: call setMode() first.
-   void setNssMode(NssMode nss) const;
+   /**
+    * @brief Writes SSM/SSOE (CFG2) and SSI (CR1) for `nss`. `mode` selects the
+    * SSI level of NssMode::Soft: high for a master, low for a slave. Call it
+    * before setMode(Mode::Master), never after: a master with SSI = 0 takes a
+    * mode fault. To switch to slave, call setMode(Mode::Slave) first. Rule:
+    * MASTER must be 0 whenever SSI goes low. configure() does this.
+    */
+   void setNssMode(NssMode nss, Mode mode) const;
 
    /// RXP/TXP and the DMA requests come per `frames` data frames (1 to 16).
    inline void setFifoThreshold(uint8_t frames) const {

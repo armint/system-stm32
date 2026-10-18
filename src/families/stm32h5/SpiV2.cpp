@@ -12,28 +12,36 @@ void Spi::configure(BaudRatePrescaler prescaler, Mode mode, ClockPolarity cpol, 
    // CRCSIZE = 7: keep it, CRCEN stays 0.
    spi_.CFG1 = (spi_.CFG1 & SPI_CFG1_CRCSIZE) | static_cast<uint32_t>(prescaler) |
                (static_cast<uint32_t>(dataSize) << SPI_CFG1_DSIZE_Pos);
-   spi_.CFG2 = static_cast<uint32_t>(mode) | static_cast<uint32_t>(cpol) | static_cast<uint32_t>(cpha) |
-               static_cast<uint32_t>(firstBit) | static_cast<uint32_t>(direction);
+   // MASTER goes last. With SSM = 0 and SSOE = 0 a master reads the NSS pin,
+   // with SSM = 1 it reads SSI. If that input is low, the SPI sets MODF and
+   // clears MASTER, even with SPE = 0. Thus the NSS bits come first, and SSI
+   // follows `mode`, not CFG2.
+   spi_.CFG2 = static_cast<uint32_t>(cpol) | static_cast<uint32_t>(cpha) | static_cast<uint32_t>(firstBit) |
+               static_cast<uint32_t>(direction);
    spi_.CR2 = 0; // TSIZE = 0: endless transfer
-   setNssMode(nss);
+   setNssMode(nss, mode);
+   // A pending MODF would block SPE. With NssMode::HardInput a master still
+   // takes a new MODF when the NSS pin is low (multi-master): check isModeFault().
+   spi_.IFCR = SPI_IFCR_MODFC;
+   spi_.CFG2 |= static_cast<uint32_t>(mode);
 
    if(wasEnabled) {
       enable();
    }
 }
 
-void Spi::setNssMode(NssMode nss) const {
+void Spi::setNssMode(NssMode nss, Mode mode) const {
+   const bool master = mode == Mode::Master;
    uint32_t cfg2 = spi_.CFG2 & ~(SPI_CFG2_SSM | SPI_CFG2_SSOE);
-   const bool master = (cfg2 & SPI_CFG2_MASTER) != 0;
    if(nss == NssMode::Soft) {
-      cfg2 |= SPI_CFG2_SSM;
       // SSI is the internal slave select (active low, SSIOP = 0): high for a
-      // master (no mode fault), low for a slave (selected).
+      // master (no mode fault), low for a slave (selected). Set it before SSM.
       if(master) {
          spi_.CR1 |= SPI_CR1_SSI;
       } else {
          spi_.CR1 &= ~SPI_CR1_SSI;
       }
+      cfg2 |= SPI_CFG2_SSM;
    } else if(nss == NssMode::HardOutput) {
       cfg2 |= SPI_CFG2_SSOE;
    }

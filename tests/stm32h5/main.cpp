@@ -9,7 +9,7 @@
 // (PA2/PA3, the ST-LINK virtual COM port, 115200 8N1):
 // - USART1 loopback: a wire from PA9 (TX) to PA10 (RX).
 // - SPI2 loopback, master, 8 bits: a wire from PB15 (MOSI) to PB14 (MISO).
-//   SCK is on PB13.
+//   SCK is on PB13. PB12 (NSS) is held low by its pull-down: leave it unconnected.
 // - ADC1: VDDA from Vrefint and the factory VREFINT_CAL, and PB0 (channel
 //   9) in mV. Then PB0 again at each LD2 toggle.
 // - GPDMA1 memory-to-memory: one transfer and a two-item linked list.
@@ -194,8 +194,14 @@ bool spiLoopback() {
    for(const uint8_t pin : { 13, 14, 15 }) {
       alternate(GPIOB, pin, Pin::AlternateFunction::AF5);
    }
+   // NSS (PB12) held low: configure() must not depend on the pin level. If
+   // MASTER were written before the NSS bits, the SPI would take a mode fault.
+   alternate(GPIOB, 12, Pin::AlternateFunction::AF5, Pin::Pull::Down);
    const hw::Spi spi(SPI2);
    spi.configure(hw::Spi::BaudRatePrescaler::Div64);
+   if(spi.isModeFault() || (SPI2->CFG2 & SPI_CFG2_MASTER) == 0) {
+      return false;
+   }
    spi.enable();
    bool ok = true;
    for(const uint8_t byte : { 0x5AU, 0x81U, 0x00U, 0xFFU }) {
