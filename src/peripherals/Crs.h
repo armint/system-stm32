@@ -5,9 +5,9 @@
 
 // Clock Recovery System (CRS): trims the HSI48 oscillator against a
 // synchronisation signal, normally the 1 kHz USB start-of-frame (SOF).
-// The register layout is the same on STM32L0 (RM0367 section 8) and
-// STM32G0B1/G0C1 (RM0444 section 6). Only the TRIM field width differs
-// (6 bits on L0, 7 bits on G0), which TrimMax/TrimDefault take from CMSIS.
+// The register layout is the same on STM32L0 (RM0367 section 8),
+// STM32G0B1/G0C1 (RM0444 section 6) and STM32H5 (RM0481 section 12). Only the TRIM field width differs
+// (6 bits on L0 and H5, 7 bits on G0), which TrimMax/TrimDefault take from CMSIS.
 //
 // The caller enables the CRS bus clock (Rcc::enableCRSClock()) and HSI48
 // (Rcc::enableHSI48()) first. Typical USB use:
@@ -45,7 +45,8 @@ constexpr uint16_t ReloadUsbSof = 48000 - 1;
 // The maximum step of 0.25 % would give 60.
 constexpr uint8_t FrequencyErrorLimitDefault = 42;
 #else
-// L0, G0: 0.14 % typical step: 48000 * 0.14 % / 2 = 33.6 -> 34 (reset value).
+// L0: 0.14 % typical step: 48000 * 0.14 % / 2 = 33.6 -> 34 (reset value).
+// G0B1 has a smaller step (0.11 %, DS13560 table 45), so 34 is safe there too.
 constexpr uint8_t FrequencyErrorLimitDefault = 34;
 #endif
 
