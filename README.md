@@ -391,8 +391,10 @@ hardware:
   the clock when the TX FIFO is empty. With `TSIZE` > 0 the hardware clears
   `CSTART` and sets `EOT` after `TSIZE` frames.
 - `NssMode::Soft` sets `SSM`. The internal slave select (`SSI`) is then
-  inactive for a master (no mode fault) and active for a slave. Call
-  `setMode()` before `setNssMode()`; `configure()` does this.
+  inactive for a master (no mode fault) and active for a slave.
+  `setNssMode(nss, mode)` takes the mode as an argument. Call it before
+  `setMode(Mode::Master)`, because a master with `SSI` = 0 takes a mode fault.
+  `configure()` does this and clears a pending `MODF`.
 - `enableAlternateFunctionControl()` (`AFCNTR`) keeps SCK, MOSI and NSS at
   their idle levels while the SPI is disabled. Use it in master mode only.
 - SPI1 to SPI3 take 4 to 32 data bits and have a 16-byte FIFO. SPI4 takes

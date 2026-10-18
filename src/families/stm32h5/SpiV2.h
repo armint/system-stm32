@@ -168,11 +168,13 @@ struct Spi {
       spi_.CFG2 = (spi_.CFG2 & ~SPI_CFG2_LSBFRST) | static_cast<uint32_t>(firstBit);
    }
 
-   /// Uses CFG2.MASTER for the SSI level of NssMode::Soft: call setMode() first.
-   void setNssMode(NssMode nss) const;
-
-   /// Internal: CFG2 and CR1 for `nss`. `master` selects the SSI level of NssMode::Soft.
-   void applyNssMode(NssMode nss, bool master) const;
+   /**
+    * @brief Writes SSM/SSOE (CFG2) and SSI (CR1) for `nss`. `mode` selects the
+    * SSI level of NssMode::Soft: high for a master, low for a slave. Call it
+    * before setMode(Mode::Master), never after: a master with SSI = 0 takes a
+    * mode fault. configure() does this.
+    */
+   void setNssMode(NssMode nss, Mode mode) const;
 
    /// RXP/TXP and the DMA requests come per `frames` data frames (1 to 16).
    inline void setFifoThreshold(uint8_t frames) const {

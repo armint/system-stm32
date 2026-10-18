@@ -12,13 +12,17 @@ void Spi::configure(BaudRatePrescaler prescaler, Mode mode, ClockPolarity cpol, 
    // CRCSIZE = 7: keep it, CRCEN stays 0.
    spi_.CFG1 = (spi_.CFG1 & SPI_CFG1_CRCSIZE) | static_cast<uint32_t>(prescaler) |
                (static_cast<uint32_t>(dataSize) << SPI_CFG1_DSIZE_Pos);
-   // MASTER goes last. A master with SSM = 0, or with SSI = 0, sees NSS low,
-   // takes a mode fault (MODF) and the hardware clears MASTER, even with
-   // SPE = 0. Thus the NSS bits come first, and SSI follows `mode`, not CFG2.
+   // MASTER goes last. With SSM = 0 and SSOE = 0 a master reads the NSS pin,
+   // with SSM = 1 it reads SSI. If that input is low, the SPI sets MODF and
+   // clears MASTER, even with SPE = 0. Thus the NSS bits come first, and SSI
+   // follows `mode`, not CFG2.
    spi_.CFG2 = static_cast<uint32_t>(cpol) | static_cast<uint32_t>(cpha) | static_cast<uint32_t>(firstBit) |
                static_cast<uint32_t>(direction);
    spi_.CR2 = 0; // TSIZE = 0: endless transfer
-   applyNssMode(nss, mode == Mode::Master);
+   setNssMode(nss, mode);
+   // A pending MODF would block SPE. With NssMode::HardInput a master still
+   // takes a new MODF when the NSS pin is low (multi-master): check isModeFault().
+   spi_.IFCR = SPI_IFCR_MODFC;
    spi_.CFG2 |= static_cast<uint32_t>(mode);
 
    if(wasEnabled) {
@@ -26,7 +30,8 @@ void Spi::configure(BaudRatePrescaler prescaler, Mode mode, ClockPolarity cpol, 
    }
 }
 
-void Spi::applyNssMode(NssMode nss, bool master) const {
+void Spi::setNssMode(NssMode nss, Mode mode) const {
+   const bool master = mode == Mode::Master;
    uint32_t cfg2 = spi_.CFG2 & ~(SPI_CFG2_SSM | SPI_CFG2_SSOE);
    if(nss == NssMode::Soft) {
       // SSI is the internal slave select (active low, SSIOP = 0): high for a
@@ -41,10 +46,6 @@ void Spi::applyNssMode(NssMode nss, bool master) const {
       cfg2 |= SPI_CFG2_SSOE;
    }
    spi_.CFG2 = cfg2;
-}
-
-void Spi::setNssMode(NssMode nss) const {
-   applyNssMode(nss, (spi_.CFG2 & SPI_CFG2_MASTER) != 0);
 }
 
 std::optional<uint32_t> Spi::transfer(uint32_t data, uint32_t timeoutLoops) const {
