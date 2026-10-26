@@ -43,7 +43,8 @@ struct Usart {
    USART_TypeDef &usart_;
 
    Usart(USART_TypeDef *uartBase)
-      : usart_(*uartBase) {}
+      : usart_(*uartBase) {
+   }
 
    Usart(const Usart &) = default;
    Usart(Usart &&) = default;
@@ -69,7 +70,8 @@ struct Usart {
    inline bool isReceiverTimeoutFlag() const {
       return false;
    }
-   inline void clearReceiverTimeoutFlag() const {}
+   inline void clearReceiverTimeoutFlag() const {
+   }
 
    inline void enableTx() const {
       usart_.CR1 |= USART_CR1_TE;
@@ -347,7 +349,7 @@ struct Usart {
       usart_.SR = ~(USART_SR_TC | USART_SR_LBD | USART_SR_CTS);
    }
 
-private:
+   private:
    inline void clearReadSequenceFlags() const {
       static_cast<void>(usart_.SR);
       static_cast<void>(usart_.DR);

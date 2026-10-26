@@ -16,8 +16,8 @@ namespace {
 constexpr uint32_t kPollLimit = 1000000;
 
 // AHB prescaler shift for HPRE field values 8..15, and APB prescaler shift for PPRE 4..7.
-constexpr uint8_t kAhbShift[8] = {1, 2, 3, 4, 6, 7, 8, 9};
-constexpr uint8_t kApbShift[4] = {1, 2, 3, 4};
+constexpr uint8_t kAhbShift[8] = { 1, 2, 3, 4, 6, 7, 8, 9 };
+constexpr uint8_t kApbShift[4] = { 1, 2, 3, 4 };
 
 uint32_t pclk2Hz() {
    // SystemCoreClock can be stale, for example after Rcc::setClock72MhzHSE().

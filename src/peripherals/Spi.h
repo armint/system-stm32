@@ -78,7 +78,8 @@ struct Spi {
    SPI_TypeDef &spi_;
 
    explicit Spi(SPI_TypeDef *spiBase)
-      : spi_(*spiBase) {}
+      : spi_(*spiBase) {
+   }
 
    Spi(const Spi &) = default;
    Spi(Spi &&) = default;
@@ -227,8 +228,7 @@ struct Spi {
     *       a known state (RX drained, OVR cleared) by this call, so it is safe to call transfer()
     *       or waitUntilIdle() again immediately. A caller does not need its own recovery step.
     */
-   [[nodiscard]] inline std::optional<uint16_t> transfer(uint16_t data,
-                                                          uint32_t timeoutLoops = defaultTimeoutLoops) const {
+   [[nodiscard]] inline std::optional<uint16_t> transfer(uint16_t data, uint32_t timeoutLoops = defaultTimeoutLoops) const {
       uint32_t remaining = timeoutLoops;
       while(!isTxEmpty()) {
          if(remaining == 0u) {

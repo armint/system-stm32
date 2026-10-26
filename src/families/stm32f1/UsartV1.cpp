@@ -1,5 +1,5 @@
-#include "peripherals/Usart.h"
 #include "peripherals/Rcc.h"
+#include "peripherals/Usart.h"
 
 namespace hw {
 

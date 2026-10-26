@@ -55,7 +55,8 @@ class GpioPin {
     */
    GpioPin(GPIO_TypeDef *port, uint8_t pin)
       : port(port)
-      , pin(pin) {}
+      , pin(pin) {
+   }
 
    GpioPin(const GpioPin &) = default;
    GpioPin(GpioPin &&) = default;

@@ -26,9 +26,12 @@ struct GPIO_TypeDef {
 enum IRQn_Type { USB_LP_CAN1_RX0_IRQn = 20, TIM2_IRQn = 28 };
 
 // NVIC: the host tests do not check it.
-inline void NVIC_EnableIRQ(IRQn_Type) {}
-inline void NVIC_DisableIRQ(IRQn_Type) {}
-inline void NVIC_ClearPendingIRQ(IRQn_Type) {}
+inline void NVIC_EnableIRQ(IRQn_Type) {
+}
+inline void NVIC_DisableIRQ(IRQn_Type) {
+}
+inline void NVIC_ClearPendingIRQ(IRQn_Type) {
+}
 
 // USB device peripheral. The registers and the packet memory are plain host
 // memory (defined by the USB test), so the toggle and rc_w0 bits of the

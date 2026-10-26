@@ -7,7 +7,7 @@ namespace GpioInterrupt {
 
 struct LineConnection {
    Interrupt::AdvancedHandler_t handler;
-   void* handler_arg;
+   void *handler_arg;
    Exti::Port port;
 };
 
@@ -80,7 +80,7 @@ void GpioHandler() {
 }
 
 
-bool connectHandler(Interrupt::AdvancedHandler_t handler, void* handler_arg, GPIO_TypeDef *port, uint8_t pin, Exti::TriggerEdge edge, bool enableInterruptLine) {
+bool connectHandler(Interrupt::AdvancedHandler_t handler, void *handler_arg, GPIO_TypeDef *port, uint8_t pin, Exti::TriggerEdge edge, bool enableInterruptLine) {
    if(pin > 15) {
       return false;
    }

@@ -19,14 +19,14 @@ constexpr IRQn_Type UsbIrq = usbfs::Irq;
 // USB_EP_VTRX, USB_CHEP_RX_STRX, USB_CNTR_USBRST, ...) than on the USB block
 // (STM32L0, STM32F1: USB_EP_CTR_RX, USB_EPRX_STAT, USB_CNTR_FRES, ...). The
 // bit positions are the same. The other bits have the same CMSIS names.
-constexpr uint16_t EpCtrRx = 0x8000;   // CTR_RX, VTRX
-constexpr uint16_t EpRxStat = 0x3000;  // STAT_RX, STATRX
-constexpr uint16_t EpType = 0x0600;    // EP_TYPE, UTYPE
-constexpr uint16_t EpCtrTx = 0x0080;   // CTR_TX, VTTX
-constexpr uint16_t EpTxStat = 0x0030;  // STAT_TX, STATTX
-constexpr uint16_t EpAddress = 0x000F; // EA
-constexpr uint16_t CntrReset = 0x0001;   // FRES, USBRST
-constexpr uint16_t CntrSuspend = 0x0008; // FSUSP, SUSPEN
+constexpr uint16_t EpCtrRx = 0x8000;      // CTR_RX, VTRX
+constexpr uint16_t EpRxStat = 0x3000;     // STAT_RX, STATRX
+constexpr uint16_t EpType = 0x0600;       // EP_TYPE, UTYPE
+constexpr uint16_t EpCtrTx = 0x0080;      // CTR_TX, VTTX
+constexpr uint16_t EpTxStat = 0x0030;     // STAT_TX, STATTX
+constexpr uint16_t EpAddress = 0x000F;    // EA
+constexpr uint16_t CntrReset = 0x0001;    // FRES, USBRST
+constexpr uint16_t CntrSuspend = 0x0008;  // FSUSP, SUSPEN
 constexpr uint16_t IstrEndpoint = 0x000F; // EP_ID, IDN
 
 #if defined(USB_EP_CTR_RX)
@@ -108,17 +108,17 @@ void clearCtrTx(uint8_t n) {
 void setTypeAndAddress(uint8_t n, EndpointType type, bool kind) {
    uint16_t t = USB_EP_BULK;
    switch(type) {
-      case EndpointType::Control:
-         t = USB_EP_CONTROL;
-         break;
-      case EndpointType::Interrupt:
-         t = USB_EP_INTERRUPT;
-         break;
-      case EndpointType::Isochronous:
-         t = USB_EP_ISOCHRONOUS;
-         break;
-      case EndpointType::Bulk:
-         break;
+   case EndpointType::Control:
+      t = USB_EP_CONTROL;
+      break;
+   case EndpointType::Interrupt:
+      t = USB_EP_INTERRUPT;
+      break;
+   case EndpointType::Isochronous:
+      t = USB_EP_ISOCHRONOUS;
+      break;
+   case EndpointType::Bulk:
+      break;
    }
    usbfs::writeEpr(n, static_cast<uint16_t>(EpCtrKeep | t | (kind ? USB_EP_KIND : 0u) | n));
 }
@@ -358,8 +358,7 @@ bool UsbDevice::startIn(uint8_t address, hw::span<const uint8_t> data) {
    }
    const Direction *dir = direction(address);
    uint8_t n = usb::endpointNumber(address);
-   if(dir == nullptr || !dir->open || data.size() > dir->maxPacketSize ||
-      (epr(n) & EpTxStat) == USB_EP_TX_VALID) {
+   if(dir == nullptr || !dir->open || data.size() > dir->maxPacketSize || (epr(n) & EpTxStat) == USB_EP_TX_VALID) {
       return false;
    }
    uint16_t size = static_cast<uint16_t>(data.size());

@@ -23,10 +23,7 @@ namespace hw {
 #define I2C_CR2_SADD (0x3FFUL << 0)
 #endif
 
-void I2c::configureMaster(uint32_t clockFrequency,
-                           Mode mode,
-                           bool addressMode,
-                           uint16_t ownAddress) const {
+void I2c::configureMaster(uint32_t clockFrequency, Mode mode, bool addressMode, uint16_t ownAddress) const {
    bool wasEnabled = isEnabled();
    if(wasEnabled)
       disable();
@@ -38,43 +35,43 @@ void I2c::configureMaster(uint32_t clockFrequency,
       // Standard mode: calculate timing for desired clock frequency
       // Simple approximation - adjust based on actual clock
       if(clockFreq >= 40000000) {
-         i2c_.TIMINGR = 0x107076B7;  // 100kHz @ 48MHz
+         i2c_.TIMINGR = 0x107076B7; // 100kHz @ 48MHz
       } else if(clockFreq >= 25000000) {
-         i2c_.TIMINGR = 0x10504494;  // 100kHz @ 25MHz
-      } else if (clockFreq >= 16000000) {
-          i2c_.TIMINGR = 0x00303D5B; // 100kHz @ 16MHz
-      } else if (clockFreq >= 8000000) {
-          i2c_.TIMINGR = 0x00101D2D; // 100kHz @ 8MHz
+         i2c_.TIMINGR = 0x10504494; // 100kHz @ 25MHz
+      } else if(clockFreq >= 16000000) {
+         i2c_.TIMINGR = 0x00303D5B; // 100kHz @ 16MHz
+      } else if(clockFreq >= 8000000) {
+         i2c_.TIMINGR = 0x00101D2D; // 100kHz @ 8MHz
       } else {
-         i2c_.TIMINGR = 0x00000000;  // Fallback
+         i2c_.TIMINGR = 0x00000000; // Fallback
       }
    } else {
       // Fast mode
       if(clockFreq >= 40000000) {
-         i2c_.TIMINGR = 0x0060362A;  // 400kHz @ 48MHz
+         i2c_.TIMINGR = 0x0060362A; // 400kHz @ 48MHz
       } else if(clockFreq >= 25000000) {
-         i2c_.TIMINGR = 0x0050281D;  // 400kHz @ 25MHz
+         i2c_.TIMINGR = 0x0050281D; // 400kHz @ 25MHz
       } else {
-         i2c_.TIMINGR = 0x00000000;  // Fallback
+         i2c_.TIMINGR = 0x00000000; // Fallback
       }
    }
 
    // Configure Own Address 1 if provided
    if(ownAddress != 0) {
-       uint32_t oar1 = 0;
-       if(addressMode) {
-           // 10-bit addressing
-           oar1 |= I2C_OAR1_OA1MODE;
-           oar1 |= (ownAddress & 0x3FF);
-       } else {
-           // 7-bit addressing
-           // OA1[7:1] contains the 7-bit address
-           oar1 |= (ownAddress << 1) & 0xFE;
-       }
-       oar1 |= I2C_OAR1_OA1EN;
-       i2c_.OAR1 = oar1;
+      uint32_t oar1 = 0;
+      if(addressMode) {
+         // 10-bit addressing
+         oar1 |= I2C_OAR1_OA1MODE;
+         oar1 |= (ownAddress & 0x3FF);
+      } else {
+         // 7-bit addressing
+         // OA1[7:1] contains the 7-bit address
+         oar1 |= (ownAddress << 1) & 0xFE;
+      }
+      oar1 |= I2C_OAR1_OA1EN;
+      i2c_.OAR1 = oar1;
    } else {
-       i2c_.OAR1 = 0;
+      i2c_.OAR1 = 0;
    }
 
    // Disable Own Address 2
@@ -112,12 +109,10 @@ void I2c::configureSlave(bool addressMode, uint16_t ownAddress) const {
       enable();
 }
 
-void I2c::setTransferConfig(uint8_t address,
-                             uint8_t numberOfBytes,
-                             TransferDirection direction,
-                             bool autoEnd) const {
+void I2c::setTransferConfig(uint8_t address, uint8_t numberOfBytes, TransferDirection direction, bool autoEnd) const {
    // Clear NBYTES, SADD, RD_WRN, START, STOP, AUTOEND, RELOAD
-   uint32_t cr2 = i2c_.CR2 & ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP | I2C_CR2_AUTOEND | I2C_CR2_RELOAD);
+   uint32_t cr2 = i2c_.CR2 & ~(I2C_CR2_SADD | I2C_CR2_NBYTES | I2C_CR2_RD_WRN | I2C_CR2_START | I2C_CR2_STOP |
+                               I2C_CR2_AUTOEND | I2C_CR2_RELOAD);
 
    // SADD[7:1] is address for 7-bit mode
    cr2 |= (static_cast<uint32_t>(address) << 1) & I2C_CR2_SADD;
@@ -131,18 +126,13 @@ void I2c::setTransferConfig(uint8_t address,
    i2c_.CR2 = cr2;
 }
 
-void I2c::transmit(uint8_t slaveAddress,
-                   const uint8_t *data,
-                   uint8_t length,
-                   bool stopCondition) const {
+void I2c::transmit(uint8_t slaveAddress, const uint8_t *data, uint8_t length, bool stopCondition) const {
    // Wait for bus to be idle
-   while(isBusBusy()) {}
+   while(isBusBusy()) {
+   }
 
    // Configure transfer
-   setTransferConfig(slaveAddress,
-                     length,
-                     TransferDirection::Tx,
-                     stopCondition);
+   setTransferConfig(slaveAddress, length, TransferDirection::Tx, stopCondition);
 
    // Generate start condition
    generateStart();
@@ -180,18 +170,13 @@ void I2c::transmit(uint8_t slaveAddress,
    }
 }
 
-void I2c::receive(uint8_t slaveAddress,
-                  uint8_t *data,
-                  uint8_t length,
-                  bool stopCondition) const {
+void I2c::receive(uint8_t slaveAddress, uint8_t *data, uint8_t length, bool stopCondition) const {
    // Wait for bus to be idle
-   while(isBusBusy()) {}
+   while(isBusBusy()) {
+   }
 
    // Configure transfer
-   setTransferConfig(slaveAddress,
-                     length,
-                     TransferDirection::Rx,
-                     stopCondition);
+   setTransferConfig(slaveAddress, length, TransferDirection::Rx, stopCondition);
 
    // Generate start condition
    generateStart();
@@ -200,8 +185,8 @@ void I2c::receive(uint8_t slaveAddress,
    for(uint8_t i = 0; i < length; ++i) {
       while(!isRxNotEmpty()) {
          if(isNackReceived()) {
-             clearNackFlag();
-             return;
+            clearNackFlag();
+            return;
          }
       }
       data[i] = read();

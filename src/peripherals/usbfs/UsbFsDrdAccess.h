@@ -38,7 +38,8 @@ inline volatile uint32_t &pma32(uint16_t offset) {
    return *reinterpret_cast<volatile uint32_t *>(USB_DRD_PMAADDR + (offset & ~3u));
 }
 
-inline void resetBtable() {}
+inline void resetBtable() {
+}
 
 // A 16-bit field of the buffer descriptor table (offset even): the low or
 // the high half of a TXBD or RXBD word. The driver writes a descriptor

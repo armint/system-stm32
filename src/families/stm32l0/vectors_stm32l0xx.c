@@ -85,7 +85,7 @@ __attribute__((section(".isr_vector"), used)) pHandler g_pfnVectors[] = {
 #if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__)
    DebugMon_Handler, // Debug monitor handler
 #else
-   0,       // Reserved
+   0, // Reserved
 #endif
    0,               // Reserved
    PendSV_Handler,  // The PendSV handler

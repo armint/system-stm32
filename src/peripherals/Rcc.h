@@ -46,9 +46,9 @@ enum class SystemClockSource : uint32_t {
    // STM32L0 and similar: named HSI/HSE/PLL aliases
    HSI = RCC_CFGR_SWS_HSI,
    HSE = RCC_CFGR_SWS_HSE,
-#  if defined(RCC_CFGR_SWS_PLL)
+#if defined(RCC_CFGR_SWS_PLL)
    PLL = RCC_CFGR_SWS_PLL,
-#  endif
+#endif
 #elif defined(RCC_CFGR_SWS_0)
    // STM32WL: only bit-position defines; SWS encoding: 00=MSI, 01=HSI16, 10=HSE, 11=PLL
    HSI = RCC_CFGR_SWS_0,
@@ -1840,10 +1840,9 @@ inline void setClock64MhzHSI() {
 // from hseHz, or if HSE or the PLL does not become ready. After a PLL failure
 // the flash latency and the prescalers are already set; that is safe on HSI.
 // It does not access global variables, so it can run before DATA/BSS init.
-#if defined(RCC_CFGR_PLLMULL) && defined(RCC_CFGR_PLLXTPRE) && defined(RCC_CFGR_USBPRE) &&         \
+#if defined(RCC_CFGR_PLLMULL) && defined(RCC_CFGR_PLLXTPRE) && defined(RCC_CFGR_USBPRE) &&                   \
 defined(RCC_CFGR_ADCPRE_DIV6) && defined(RCC_CR_HSEON) && defined(RCC_CR_HSERDY) && defined(RCC_CR_PLLON) && \
-defined(RCC_CR_PLLRDY) && defined(RCC_CFGR_SWS_PLL) && defined(FLASH_ACR_PRFTBE) && \
-defined(FLASH_ACR_HLFCYA)
+defined(RCC_CR_PLLRDY) && defined(RCC_CFGR_SWS_PLL) && defined(FLASH_ACR_PRFTBE) && defined(FLASH_ACR_HLFCYA)
 namespace detail {
 // RCC_CFGR PLL bits (PLLSRC, PLLXTPRE, PLLMULL) for 72 MHz from an HSE crystal
 // of hseHz, or std::nullopt if no PLL setting gives exactly 72 MHz.
@@ -2089,15 +2088,15 @@ inline std::optional<uint8_t> subghzTransfer(uint8_t value) {
    }
 
    PWR->SUBGHZSPICR &= ~PWR_SUBGHZSPICR_NSS; // assert NSS
-   delayuS(1000u); // fixed ~1 ms hold, see comment above
-   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS; // deassert NSS
+   delayuS(1000u);                           // fixed ~1 ms hold, see comment above
+   PWR->SUBGHZSPICR |= PWR_SUBGHZSPICR_NSS;  // deassert NSS
    return subghzWaitOnBusy();
 }
 
 namespace detail {
 // GetDeviceErrors (0x17): OpError(15:0) comes back in bytes 2-3.
 inline uint16_t subghzDeviceErrors() {
-   uint8_t buf[4] = {0x17u, 0x00u, 0x00u, 0x00u};
+   uint8_t buf[4] = { 0x17u, 0x00u, 0x00u, 0x00u };
    // Best-effort diagnostics: SPE is already enabled at every call site of
    // these detail:: helpers, so failure is not expected; on the rare timeout
    // buf keeps its zero-initialised bytes and the diagnostic reads as zero
@@ -2108,7 +2107,7 @@ inline uint16_t subghzDeviceErrors() {
 
 // GetStatus (0xC0): the status byte comes back in byte 1.
 inline uint8_t subghzStatus() {
-   uint8_t buf[2] = {0xC0u, 0x00u};
+   uint8_t buf[2] = { 0xC0u, 0x00u };
    (void)subghzCommand(buf);
    return buf[1];
 }
@@ -2117,7 +2116,7 @@ inline uint8_t subghzStatus() {
 // 0x1424. Data only starts at byte 4, after the opcode, the two address bytes
 // and one mandatory NOP (SX1261/2 Table 13-25).
 inline uint16_t subghzSyncWord() {
-   uint8_t buf[6] = {0x1Du, 0x07u, 0x40u, 0x00u, 0x00u, 0x00u};
+   uint8_t buf[6] = { 0x1Du, 0x07u, 0x40u, 0x00u, 0x00u, 0x00u };
    (void)subghzCommand(buf);
    return (uint16_t)(((uint16_t)buf[4] << 8) | buf[5]);
 }
@@ -2219,7 +2218,7 @@ namespace detail {
 // null, and the non-recording one takes an empty object it never touches.
 struct NoClockDiag {};
 
-template<bool Record>
+template <bool Record>
 inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoClockDiag> diag) {
 
    if constexpr(Record) {
@@ -2319,7 +2318,7 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    }
    // SetDIO3AsTCXOCtrl: opcode 0x97, tcxoVoltage 0x02 (DIO3 outputs 1.8 V),
    // delay 0x000140 (320 * 15.625 µs = 5 ms). SX1261/2 datasheet §13.3.6.
-   uint8_t tcxoCmd[] = {0x97u, 0x02u, 0x00u, 0x01u, 0x40u};
+   uint8_t tcxoCmd[] = { 0x97u, 0x02u, 0x00u, 0x01u, 0x40u };
    if constexpr(Record) {
       diag.tcxoResponseOkMask = 0u;
    }
@@ -2353,7 +2352,7 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    // command above, GetDeviceErrors reads 0x0020 (bit 5, XOSC_START_ERR), and
    // ClearDeviceErrors takes it back to 0x0000 -- where it stays once HSE32 is
    // running, so the TCXO really does start.
-   uint8_t clearErrCmd[] = {0x07u, 0x00u, 0x00u};
+   uint8_t clearErrCmd[] = { 0x07u, 0x00u, 0x00u };
    (void)subghzCommand(clearErrCmd);
 
    if constexpr(Record) {
@@ -2413,8 +2412,8 @@ inline bool setClock48MhzHseTcxoImpl(std::conditional_t<Record, ClockDiag &, NoC
    // intended ÷2 -- and SystemCoreClockUpdate()'s standard field+1 formula
    // read it as ÷1, computing 96 MHz instead of the real ~48 MHz. Setting
    // RCC_PLLCFGR_PLLR_0 (field value 1) makes ÷2 explicit and RM-compliant.
-   RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 |
-                   RCC_PLLCFGR_PLLR_0 | RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
+   RCC->PLLCFGR = RCC_PLLCFGR_PLLREN | (6u << RCC_PLLCFGR_PLLN_Pos) | RCC_PLLCFGR_PLLM_0 | RCC_PLLCFGR_PLLR_0 |
+                  RCC_PLLCFGR_PLLSRC_0 | RCC_PLLCFGR_PLLSRC_1;
    if constexpr(Record) {
       diag.rccPllCfgr = RCC->PLLCFGR;
    }

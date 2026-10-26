@@ -55,18 +55,16 @@ void delayCycles(uint32_t cycles) {
    if(cycles <= kOverheadCycles)
       return;
    cycles -= kOverheadCycles;
-   cycles /= 3;   // cycle count per iteration - should be 3 on Cortex M0+
+   cycles /= 3; // cycle count per iteration - should be 3 on Cortex M0+
 
    if(!cycles)
       return;
 
    // Delay loop for Cortex M0 thumb2
-   asm volatile(
-   " mov r3, %[loops]\n"
-   "1: sub r3, #1\n"
-   " bne 1b\n\n"
-   :
-   : [loops] "r"(cycles)
-   : "r3"
-   );
+   asm volatile(" mov r3, %[loops]\n"
+                "1: sub r3, #1\n"
+                " bne 1b\n\n"
+                :
+                : [loops] "r"(cycles)
+                : "r3");
 }

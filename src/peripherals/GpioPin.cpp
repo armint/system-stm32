@@ -49,10 +49,10 @@ void GpioPin::setPull(Pull pull) const {
 
 void GpioPin::setAlternateFunction(AlternateFunction af) const {
    // AFR[0] is for pins 0-7, AFR[1] is for pins 8-15
-   uint32_t regIndex = pin >> 3; 
+   uint32_t regIndex = pin >> 3;
    // 4 bits per pin
-   uint32_t pos = (pin & 0x07) * 4; 
-    
+   uint32_t pos = (pin & 0x07) * 4;
+
    uint32_t mask = 0xFUL << pos;
    uint32_t val = (static_cast<uint32_t>(af) & 0xFUL) << pos;
 

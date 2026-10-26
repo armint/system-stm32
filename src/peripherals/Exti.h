@@ -149,9 +149,9 @@ enum Line : uint8_t {
 
 #if defined(STM32WL)
 constexpr IRQn_Type gpioIRQs[16] = {
-   EXTI0_IRQn,     EXTI1_IRQn,     EXTI2_IRQn,     EXTI3_IRQn,     EXTI4_IRQn,
-   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,
-   EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn,
+   EXTI0_IRQn,     EXTI1_IRQn,     EXTI2_IRQn,     EXTI3_IRQn,     EXTI4_IRQn,     EXTI9_5_IRQn,
+   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI9_5_IRQn,   EXTI15_10_IRQn, EXTI15_10_IRQn,
+   EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn, EXTI15_10_IRQn,
 };
 #else
 constexpr IRQn_Type gpioIRQs[16] = {
@@ -396,4 +396,3 @@ constexpr IRQn_Type getExtiIRQnForGPIOLine(uint8_t line) {
 }
 
 } // namespace Exti
-

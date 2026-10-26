@@ -14,10 +14,7 @@
 namespace hw {
 
 struct I2c {
-   enum class Mode {
-      Standard,
-      Fast
-   };
+   enum class Mode { Standard, Fast };
 
    enum class StartCondition : uint32_t {
       None = 0,
@@ -25,15 +22,13 @@ struct I2c {
       GenerateStopAfter = I2C_CR2_START | I2C_CR2_AUTOEND
    };
 
-   enum class TransferDirection : uint32_t {
-      Tx = 0,
-      Rx = I2C_CR2_RD_WRN
-   };
+   enum class TransferDirection : uint32_t { Tx = 0, Rx = I2C_CR2_RD_WRN };
 
    I2C_TypeDef &i2c_;
 
    explicit I2c(I2C_TypeDef *i2cBase)
-      : i2c_(*i2cBase) {}
+      : i2c_(*i2cBase) {
+   }
 
    I2c(const I2c &) = default;
    I2c(I2c &&) = default;
@@ -47,10 +42,7 @@ struct I2c {
     * @param addressMode Address mode for slave addressing.
     * @param ownAddress Own 7-bit or 10-bit address.
     */
-   void configureMaster(uint32_t clockFrequency = 100000,
-                        Mode mode = Mode::Standard,
-                        bool addressMode = false,
-                        uint16_t ownAddress = 0) const;
+   void configureMaster(uint32_t clockFrequency = 100000, Mode mode = Mode::Standard, bool addressMode = false, uint16_t ownAddress = 0) const;
 
    /**
     * @brief Configures the I2C peripheral in slave mode.
@@ -388,10 +380,7 @@ struct I2c {
     * @param direction Transfer direction (Tx or Rx).
     * @param autoEnd If true, automatically generates STOP condition.
     */
-   void setTransferConfig(uint8_t address,
-                          uint8_t numberOfBytes,
-                          TransferDirection direction,
-                          bool autoEnd = false) const;
+   void setTransferConfig(uint8_t address, uint8_t numberOfBytes, TransferDirection direction, bool autoEnd = false) const;
 
    /**
     * @brief Starts a master transmission.
@@ -400,10 +389,7 @@ struct I2c {
     * @param length Number of bytes to transmit.
     * @param stopCondition If true, generates STOP after transfer.
     */
-   void transmit(uint8_t slaveAddress,
-                 const uint8_t *data,
-                 uint8_t length,
-                 bool stopCondition = true) const;
+   void transmit(uint8_t slaveAddress, const uint8_t *data, uint8_t length, bool stopCondition = true) const;
 
    /**
     * @brief Starts a master reception.
@@ -412,10 +398,7 @@ struct I2c {
     * @param length Number of bytes to receive.
     * @param stopCondition If true, generates STOP after transfer.
     */
-   void receive(uint8_t slaveAddress,
-                uint8_t *data,
-                uint8_t length,
-                bool stopCondition = true) const;
+   void receive(uint8_t slaveAddress, uint8_t *data, uint8_t length, bool stopCondition = true) const;
 
    /**
     * @brief Returns the clock frequency of the APB bus the I2C is connected to.

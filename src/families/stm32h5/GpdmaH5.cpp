@@ -14,18 +14,17 @@ constexpr uint32_t linkOffsetMask = DMA_CLLR_LA_Msk;
 
 LinkedListItem
 LinkedListItem::make(const Config &config, const void *source, void *destination, uint16_t bytes, const LinkedListItem *next) {
-   return {config.ctr1(),
-           config.ctr2(),
-           bytes,
-           static_cast<uint32_t>(reinterpret_cast<uintptr_t>(source)),
-           static_cast<uint32_t>(reinterpret_cast<uintptr_t>(destination)),
-           next == nullptr ? 0U : ((static_cast<uint32_t>(reinterpret_cast<uintptr_t>(next)) & linkOffsetMask) | updateAll)};
+   return { config.ctr1(),
+            config.ctr2(),
+            bytes,
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(source)),
+            static_cast<uint32_t>(reinterpret_cast<uintptr_t>(destination)),
+            next == nullptr ? 0U : ((static_cast<uint32_t>(reinterpret_cast<uintptr_t>(next)) & linkOffsetMask) | updateAll) };
 }
 
 Channel::Channel(DMA_TypeDef *dma, uint8_t channelNumber)
    : _dma(*dma)
-   , _channel(*reinterpret_cast<DMA_Channel_TypeDef *>(reinterpret_cast<uintptr_t>(dma) + channelOffset +
-                                                        channelNumber * channelStride))
+   , _channel(*reinterpret_cast<DMA_Channel_TypeDef *>(reinterpret_cast<uintptr_t>(dma) + channelOffset + channelNumber * channelStride))
    , _number(channelNumber) {
 }
 
