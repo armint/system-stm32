@@ -1,8 +1,8 @@
 #pragma once
 
+#include "UsbFsFamily.h"
 #include "peripherals/UsbDeviceTypes.h"
 #include "utils/Span.h"
-#include "UsbFsFamily.h"
 #include <cmsis_device.h>
 #include <cstdint>
 

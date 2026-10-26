@@ -136,7 +136,8 @@ bool upperHalvesUnused() {
    return true;
 }
 
-void onEvent(void *, const hw::usb::Event &) {}
+void onEvent(void *, const hw::usb::Event &) {
+}
 
 // Size in bytes of an RX buffer from its COUNTn_RX value (RM0367 32.6.2,
 // RM0008 23.5.3).
@@ -466,7 +467,7 @@ void testDoubleBufferedOutLayout() {
 
    const uint16_t first = btable + 128;
    CHECK(usb.openEndpoint(0x03, EndpointType::Bulk, 64, true));
-   CHECK(addrTx(3) == first); // buffer 0
+   CHECK(addrTx(3) == first);      // buffer 0
    CHECK(addrRx(3) == first + 64); // buffer 1
    CHECK(countTx(3) == UsbDevice::rxBufferSize(64).count);
    CHECK(countRx(3) == UsbDevice::rxBufferSize(64).count);
@@ -495,15 +496,15 @@ void testDoubleBufferedOutRejects() {
    UsbDevice usb{ 5 };
    usb.begin(&onEvent, nullptr);
 
-   CHECK(!usb.openEndpoint(0x81, EndpointType::Bulk, 64, true)); // IN
+   CHECK(!usb.openEndpoint(0x81, EndpointType::Bulk, 64, true));      // IN
    CHECK(!usb.openEndpoint(0x01, EndpointType::Interrupt, 64, true)); // not bulk
 
    CHECK(usb.openEndpoint(0x81, EndpointType::Bulk, 64));
    CHECK(!usb.openEndpoint(0x01, EndpointType::Bulk, 64, true)); // IN is open
 
    CHECK(usb.openEndpoint(0x02, EndpointType::Bulk, 64, true));
-   CHECK(!usb.openEndpoint(0x82, EndpointType::Bulk, 64)); // unidirectional
-   CHECK(!usb.openEndpoint(0x02, EndpointType::Bulk, 64)); // doubleBuffered differs
+   CHECK(!usb.openEndpoint(0x82, EndpointType::Bulk, 64));       // unidirectional
+   CHECK(!usb.openEndpoint(0x02, EndpointType::Bulk, 64));       // doubleBuffered differs
    CHECK(!usb.openEndpoint(0x02, EndpointType::Bulk, 32, true)); // size differs
 
    CHECK(blockingDepth == 0);
@@ -840,7 +841,8 @@ void connectHandler(IRQn_Type IRQn, AdvancedHandler_t, void *) {
    connectedIrq = IRQn;
 }
 
-void releaseHandler(IRQn_Type) {}
+void releaseHandler(IRQn_Type) {
+}
 } // namespace Interrupt
 
 extern "C" void delayuS(duration_t) {

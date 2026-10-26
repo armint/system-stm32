@@ -162,8 +162,7 @@ int main() {
    Rcc::enableUSART1Clock();
    const hw::Usart usart(USART1);
    usart.configure(115200);
-   static_cast<void>(usart.setFrameFormat(hw::Usart::DataBits::Seven, hw::Usart::Parity::Even,
-                                          hw::Usart::StopBits::StopBits_2));
+   static_cast<void>(usart.setFrameFormat(hw::Usart::DataBits::Seven, hw::Usart::Parity::Even, hw::Usart::StopBits::StopBits_2));
    usart.enableRx();
    usart.enableTx();
    usart.enableRxNotEmptyInterrupt();

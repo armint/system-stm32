@@ -40,8 +40,8 @@ enum class EventType : uint8_t {
 
 struct Event {
    EventType type;
-   uint8_t endpoint;           // Endpoint address with direction bit; 0 for bus events.
-   uint16_t size;              // Out: received byte count. Setup: 8.
+   uint8_t endpoint;             // Endpoint address with direction bit; 0 for bus events.
+   uint16_t size;                // Out: received byte count. Setup: 8.
    std::array<uint8_t, 8> setup; // Setup: the 8 bytes of the SETUP packet.
 };
 

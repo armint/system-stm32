@@ -61,6 +61,7 @@ inline void copyFromPma(uint16_t offset, uint8_t *data, uint16_t size) {
 }
 
 // The packet is complete in packet memory when CTR_RX is set.
-inline void waitForRxPacket() {}
+inline void waitForRxPacket() {
+}
 
 } // namespace hw::usbfs

@@ -311,8 +311,7 @@ uint16_t Adc::injectedValue(uint8_t rank) const {
 void Adc::setOffset(Offset unit, Channel channel, uint16_t value, bool add, bool saturate) const {
    volatile uint32_t *ofr = &_adc.OFR1 + static_cast<uint8_t>(unit);
    *ofr = ADC_OFR1_OFFSET1_EN | (static_cast<uint32_t>(channel & 0x1FU) << ADC_OFR1_OFFSET1_CH_Pos) |
-          (add ? ADC_OFR1_OFFSETPOS : 0U) | (saturate ? ADC_OFR1_SATEN : 0U) |
-          (static_cast<uint32_t>(value) & ADC_OFR1_OFFSET1);
+          (add ? ADC_OFR1_OFFSETPOS : 0U) | (saturate ? ADC_OFR1_SATEN : 0U) | (static_cast<uint32_t>(value) & ADC_OFR1_OFFSET1);
 }
 
 void Adc::disableOffset(Offset unit) const {
@@ -320,24 +319,20 @@ void Adc::disableOffset(Offset unit) const {
    *ofr &= ~ADC_OFR1_OFFSET1_EN;
 }
 
-void Adc::setOversampling(OversamplingRatio ratio, uint8_t shift, bool regular, bool injected, bool triggered,
-                          RegularOversamplingMode mode) const {
-   constexpr uint32_t mask =
-      ADC_CFGR2_ROVSE | ADC_CFGR2_JOVSE | ADC_CFGR2_OVSR | ADC_CFGR2_OVSS | ADC_CFGR2_TROVS | ADC_CFGR2_ROVSM;
+void Adc::setOversampling(OversamplingRatio ratio, uint8_t shift, bool regular, bool injected, bool triggered, RegularOversamplingMode mode) const {
+   constexpr uint32_t mask = ADC_CFGR2_ROVSE | ADC_CFGR2_JOVSE | ADC_CFGR2_OVSR | ADC_CFGR2_OVSS | ADC_CFGR2_TROVS | ADC_CFGR2_ROVSM;
    const uint32_t ovss = shift > 8 ? 8U : shift;
    _adc.CFGR2 = (_adc.CFGR2 & ~mask) | (regular ? ADC_CFGR2_ROVSE : 0U) | (injected ? ADC_CFGR2_JOVSE : 0U) |
                 (static_cast<uint32_t>(ratio) << ADC_CFGR2_OVSR_Pos) | (ovss << ADC_CFGR2_OVSS_Pos) |
                 (triggered ? ADC_CFGR2_TROVS : 0U) | static_cast<uint32_t>(mode);
 }
 
-void Adc::setWatchdog1(Channel channel, bool allChannels, bool regular, bool injected, uint16_t low, uint16_t high,
-                       uint8_t filter) const {
+void Adc::setWatchdog1(Channel channel, bool allChannels, bool regular, bool injected, uint16_t low, uint16_t high, uint8_t filter) const {
    _adc.TR1 = (static_cast<uint32_t>(low) & ADC_TR1_LT1) | ((static_cast<uint32_t>(filter) & 0x7U) << ADC_TR1_AWDFILT_Pos) |
               ((static_cast<uint32_t>(high) << ADC_TR1_HT1_Pos) & ADC_TR1_HT1);
    constexpr uint32_t mask = ADC_CFGR_AWD1CH | ADC_CFGR_AWD1SGL | ADC_CFGR_AWD1EN | ADC_CFGR_JAWD1EN;
    _adc.CFGR = (_adc.CFGR & ~mask) | (static_cast<uint32_t>(channel & 0x1FU) << ADC_CFGR_AWD1CH_Pos) |
-               (allChannels ? 0U : ADC_CFGR_AWD1SGL) | (regular ? ADC_CFGR_AWD1EN : 0U) |
-               (injected ? ADC_CFGR_JAWD1EN : 0U);
+               (allChannels ? 0U : ADC_CFGR_AWD1SGL) | (regular ? ADC_CFGR_AWD1EN : 0U) | (injected ? ADC_CFGR_JAWD1EN : 0U);
 }
 
 void Adc::setWatchdog23(Watchdog watchdog, uint32_t channelMask, uint8_t low, uint8_t high) const {

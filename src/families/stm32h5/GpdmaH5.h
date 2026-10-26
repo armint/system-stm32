@@ -145,7 +145,8 @@ struct alignas(4) LinkedListItem {
     * @param next Following item. nullptr ends the list; the item may point to
     *        itself or to an earlier item for a circular transfer.
     */
-   static LinkedListItem make(const Config &config, const void *source, void *destination, uint16_t bytes, const LinkedListItem *next);
+   static LinkedListItem
+   make(const Config &config, const void *source, void *destination, uint16_t bytes, const LinkedListItem *next);
 };
 
 struct Channel {

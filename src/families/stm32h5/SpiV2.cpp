@@ -1,10 +1,16 @@
-#include "peripherals/Spi.h"
 #include "peripherals/Rcc.h"
+#include "peripherals/Spi.h"
 
 namespace hw {
 
-void Spi::configure(BaudRatePrescaler prescaler, Mode mode, ClockPolarity cpol, ClockPhase cpha, DataSize dataSize,
-                    FirstBit firstBit, NssMode nss, Direction direction) const {
+void Spi::configure(BaudRatePrescaler prescaler,
+                    Mode mode,
+                    ClockPolarity cpol,
+                    ClockPhase cpha,
+                    DataSize dataSize,
+                    FirstBit firstBit,
+                    NssMode nss,
+                    Direction direction) const {
    const bool wasEnabled = isEnabled();
    disable();
 

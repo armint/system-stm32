@@ -85,7 +85,8 @@ struct Usart {
    USART_TypeDef &usart_;
 
    Usart(USART_TypeDef *uartBase)
-      : usart_(*uartBase) {}
+      : usart_(*uartBase) {
+   }
 
    Usart(const Usart &) = default;
    Usart(Usart &&) = default;
@@ -574,7 +575,7 @@ struct Usart {
       }
    }
 
- private:
+   private:
 #if defined(USART_CR1_FIFOEN)
    void setFifoEnable(bool on) const;
 #endif

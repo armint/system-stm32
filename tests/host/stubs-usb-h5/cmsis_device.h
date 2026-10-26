@@ -10,9 +10,12 @@
 enum IRQn_Type { USB_DRD_FS_IRQn = 74, TIM2_IRQn = 45 };
 
 // NVIC: the host tests do not check it.
-inline void NVIC_EnableIRQ(IRQn_Type) {}
-inline void NVIC_DisableIRQ(IRQn_Type) {}
-inline void NVIC_ClearPendingIRQ(IRQn_Type) {}
+inline void NVIC_EnableIRQ(IRQn_Type) {
+}
+inline void NVIC_DisableIRQ(IRQn_Type) {
+}
+inline void NVIC_ClearPendingIRQ(IRQn_Type) {
+}
 
 struct PWR_TypeDef {
    volatile uint32_t USBSCR;

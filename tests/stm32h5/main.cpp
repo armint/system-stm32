@@ -30,8 +30,8 @@
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/Crs.h>
-#include <peripherals/Dma.h>
 #include <peripherals/Dbg.h>
+#include <peripherals/Dma.h>
 #include <peripherals/FastPin.h>
 #include <peripherals/GpioPin.h>
 #include <peripherals/Iwdg.h>
@@ -107,7 +107,8 @@ void exerciseUsb() {
    for(uint8_t pin : { 11, 12 }) {
       const hw::GpioPin p(GPIOA, pin);
       p.setAlternateFunction(hw::GpioPin::AlternateFunction::AF10);
-      p.configure(hw::GpioPin::Mode::Alternate, hw::GpioPin::OutputType::PushPull, hw::GpioPin::Pull::None, hw::GpioPin::Speed::VeryHigh);
+      p.configure(hw::GpioPin::Mode::Alternate, hw::GpioPin::OutputType::PushPull, hw::GpioPin::Pull::None,
+                  hw::GpioPin::Speed::VeryHigh);
    }
    Rcc::enableUSBClock();
    usb.begin(&onUsbEvent, nullptr);

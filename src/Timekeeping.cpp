@@ -2,7 +2,7 @@
 #include <utils/Interrupt.h>
 #include <utils/Timekeeping.h>
 
-static inline volatile timestamp_t& systemTick() {
+static inline volatile timestamp_t &systemTick() {
    static volatile timestamp_t _systemTick = 0;
    return _systemTick;
 }

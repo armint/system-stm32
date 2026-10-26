@@ -82,7 +82,7 @@ __attribute__((section(".isr_vector"), used)) pHandler g_pfnVectors[] = {
    PendSV_Handler,     // -2   PendSV
    SysTick_Handler,    // -1   SysTick
 
-   // STM32F1 medium-density device-specific interrupts (IRQ 0–42)
+// STM32F1 medium-density device-specific interrupts (IRQ 0–42)
 
 #if defined(STM32F103xB)
 
@@ -139,7 +139,7 @@ void __attribute__((section(".after_vectors"))) Default_Handler(void) {
 #if defined(DEBUG)
    __DEBUG_BKPT();
 #endif
-   while (1) {
+   while(1) {
    }
 }
 

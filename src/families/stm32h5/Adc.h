@@ -59,8 +59,8 @@ struct Adc {
       PA3 = 15,
       PA4 = 18,
       PA5 = 19,
-      Vsense = 16,  // ADC1: temperature sensor, enableTemperatureSensor()
-      Vrefint = 17, // ADC1: internal reference, enableVrefint()
+      Vsense = 16,   // ADC1: temperature sensor, enableTemperatureSensor()
+      Vrefint = 17,  // ADC1: internal reference, enableVrefint()
       VbatDiv4 = 16, // ADC2: VBAT / 4, enableVbat()
       Vddcore = 17,  // ADC2: digital core supply, needs ADC2 ADC_OR.OP0
    };
@@ -90,7 +90,18 @@ struct Adc {
 
    /// ADC_CCR.PRESC, only with ClockMode::Async.
    enum class Prescaler : uint32_t {
-      Div1 = 0, Div2, Div4, Div6, Div8, Div10, Div12, Div16, Div32, Div64, Div128, Div256,
+      Div1 = 0,
+      Div2,
+      Div4,
+      Div6,
+      Div8,
+      Div10,
+      Div12,
+      Div16,
+      Div32,
+      Div64,
+      Div128,
+      Div256,
    };
 
    /// Highest ADC clock (fadc_ker_ck, DS14539 table 179), lowest ADC clock.
@@ -279,8 +290,8 @@ struct Adc {
    /// The ADC_CR bits of type rs (ADEN, ADDIS, ADSTART, JADSTART, ADSTP,
    /// JADSTP, ADCAL). A read-modify-write must write them as 0, or it starts
    /// a conversion that just ended again (ADC_CR_BITS_PROPERTY_RS in ST's HAL).
-   static constexpr uint32_t crCommandBits = ADC_CR_ADEN | ADC_CR_ADDIS | ADC_CR_ADSTART | ADC_CR_JADSTART |
-                                             ADC_CR_ADSTP | ADC_CR_JADSTP | ADC_CR_ADCAL;
+   static constexpr uint32_t crCommandBits =
+   ADC_CR_ADEN | ADC_CR_ADDIS | ADC_CR_ADSTART | ADC_CR_JADSTART | ADC_CR_ADSTP | ADC_CR_JADSTP | ADC_CR_ADCAL;
    /// Sets one rs bit of ADC_CR.
    void command(uint32_t bit) const {
       _adc.CR = (_adc.CR & ~crCommandBits) | bit;
@@ -291,7 +302,8 @@ struct Adc {
    }
 
    explicit Adc(ADC_TypeDef *adc)
-      : _adc(*adc) {}
+      : _adc(*adc) {
+   }
 
    Adc(const Adc &) = default;
    Adc(Adc &&) = default;
@@ -359,12 +371,10 @@ struct Adc {
 
    /// Dual mode. Both ADCs disabled. `delayCycles` (0..15): ADC_CCR.DELAY,
    /// the interleaved delay in ADC clock cycles minus one.
-   static void setDualMode(DualMode mode, DualDmaMode dma = DualDmaMode::Off, bool dmaCircular = false,
-                           uint8_t delayCycles = 0) {
-      ADC12_COMMON->CCR =
-         (ADC12_COMMON->CCR & ~(ADC_CCR_DUAL | ADC_CCR_DELAY | ADC_CCR_DMACFG | ADC_CCR_MDMA)) |
-         (static_cast<uint32_t>(mode) << ADC_CCR_DUAL_Pos) | ((delayCycles & 0xFU) << ADC_CCR_DELAY_Pos) |
-         (dmaCircular ? ADC_CCR_DMACFG : 0U) | (static_cast<uint32_t>(dma) << ADC_CCR_MDMA_Pos);
+   static void setDualMode(DualMode mode, DualDmaMode dma = DualDmaMode::Off, bool dmaCircular = false, uint8_t delayCycles = 0) {
+      ADC12_COMMON->CCR = (ADC12_COMMON->CCR & ~(ADC_CCR_DUAL | ADC_CCR_DELAY | ADC_CCR_DMACFG | ADC_CCR_MDMA)) |
+                          (static_cast<uint32_t>(mode) << ADC_CCR_DUAL_Pos) | ((delayCycles & 0xFU) << ADC_CCR_DELAY_Pos) |
+                          (dmaCircular ? ADC_CCR_DMACFG : 0U) | (static_cast<uint32_t>(dma) << ADC_CCR_MDMA_Pos);
    }
    /// Dual mode data: master (ADC1) in bits 15:0, slave (ADC2) in bits 31:16.
    static uint32_t dualValue() {
@@ -478,8 +488,7 @@ struct Adc {
    }
    /// TriggerEdge::Software: start() starts the conversion.
    void setRegularTrigger(RegularTrigger trigger, TriggerEdge edge) const {
-      _adc.CFGR = (_adc.CFGR & ~(ADC_CFGR_EXTSEL | ADC_CFGR_EXTEN)) |
-                  (static_cast<uint32_t>(trigger) << ADC_CFGR_EXTSEL_Pos) |
+      _adc.CFGR = (_adc.CFGR & ~(ADC_CFGR_EXTSEL | ADC_CFGR_EXTEN)) | (static_cast<uint32_t>(trigger) << ADC_CFGR_EXTSEL_Pos) |
                   (static_cast<uint32_t>(edge) << ADC_CFGR_EXTEN_Pos);
    }
    void setSoftwareTrigger() const {
@@ -556,14 +565,16 @@ struct Adc {
     * TriggerEdge::Software with the queue on: then JEXTEN = 00 also
     * disables the software trigger (RM0481 section 28.6.16).
     */
-   bool setInjectedSequence(const Channel *channels, uint8_t count, InjectedTrigger trigger = InjectedTrigger::Tim1Trgo,
+   bool setInjectedSequence(const Channel *channels,
+                            uint8_t count,
+                            InjectedTrigger trigger = InjectedTrigger::Tim1Trgo,
                             TriggerEdge edge = TriggerEdge::Software) const;
 
    /// queue = false: JQDIS = 1 (reset value), one context. emptyStops = JQM.
    /// With the queue on, the injected group needs a hardware trigger.
    void setInjectedQueue(bool queue, bool emptyStops = false) const {
-      _adc.CFGR = (_adc.CFGR & ~(ADC_CFGR_JQDIS | ADC_CFGR_JQM)) | (queue ? 0U : ADC_CFGR_JQDIS) |
-                  (emptyStops ? ADC_CFGR_JQM : 0U);
+      _adc.CFGR =
+      (_adc.CFGR & ~(ADC_CFGR_JQDIS | ADC_CFGR_JQM)) | (queue ? 0U : ADC_CFGR_JQDIS) | (emptyStops ? ADC_CFGR_JQM : 0U);
    }
    /// JAUTO: the injected group runs after each regular group.
    void setInjectedAuto(bool on) const {
@@ -604,7 +615,11 @@ struct Adc {
     * ratio and shift (0..8 bits) apply to both groups.
     * `triggered`: TROVS, each oversampled conversion needs its own trigger.
     */
-   void setOversampling(OversamplingRatio ratio, uint8_t shift, bool regular, bool injected, bool triggered = false,
+   void setOversampling(OversamplingRatio ratio,
+                        uint8_t shift,
+                        bool regular,
+                        bool injected,
+                        bool triggered = false,
                         RegularOversamplingMode mode = RegularOversamplingMode::Continued) const;
    void disableOversampling() const {
       _adc.CFGR2 &= ~(ADC_CFGR2_ROVSE | ADC_CFGR2_JOVSE);
@@ -618,8 +633,7 @@ struct Adc {
     * and/or injected group. Thresholds are 12 bit. `filter` 0..7: the number
     * of consecutive out-of-window results minus one before AWD1 is set.
     */
-   void setWatchdog1(Channel channel, bool allChannels, bool regular, bool injected, uint16_t low, uint16_t high,
-                     uint8_t filter = 0) const;
+   void setWatchdog1(Channel channel, bool allChannels, bool regular, bool injected, uint16_t low, uint16_t high, uint8_t filter = 0) const;
    void disableWatchdog1() const {
       _adc.CFGR &= ~(ADC_CFGR_AWD1EN | ADC_CFGR_JAWD1EN);
    }

@@ -43,9 +43,35 @@ struct Spi {
 
    // CFG1.DSIZE = bits - 1. Bits17 to Bits32: SPI1..SPI3 only.
    enum class DataSize : uint32_t {
-      Bits4 = 3, Bits5, Bits6, Bits7, Bits8, Bits9, Bits10, Bits11, Bits12, Bits13, Bits14, Bits15, Bits16,
-      Bits17, Bits18, Bits19, Bits20, Bits21, Bits22, Bits23, Bits24, Bits25, Bits26, Bits27, Bits28,
-      Bits29, Bits30, Bits31, Bits32,
+      Bits4 = 3,
+      Bits5,
+      Bits6,
+      Bits7,
+      Bits8,
+      Bits9,
+      Bits10,
+      Bits11,
+      Bits12,
+      Bits13,
+      Bits14,
+      Bits15,
+      Bits16,
+      Bits17,
+      Bits18,
+      Bits19,
+      Bits20,
+      Bits21,
+      Bits22,
+      Bits23,
+      Bits24,
+      Bits25,
+      Bits26,
+      Bits27,
+      Bits28,
+      Bits29,
+      Bits30,
+      Bits31,
+      Bits32,
    };
 
    enum class ClockPolarity : uint32_t { Low = 0, High = SPI_CFG2_CPOL };
@@ -76,7 +102,8 @@ struct Spi {
    SPI_TypeDef &spi_;
 
    explicit Spi(SPI_TypeDef *spiBase)
-      : spi_(*spiBase) {}
+      : spi_(*spiBase) {
+   }
 
    Spi(const Spi &) = default;
    Spi(Spi &&) = default;
@@ -223,7 +250,7 @@ struct Spi {
          *reinterpret_cast<__IO uint8_t *>(&spi_.TXDR) = static_cast<uint8_t>(data);
       } else if(dsize < 16) {
          *reinterpret_cast<__IO uint16_t *>(reinterpret_cast<uintptr_t>(&spi_) + offsetof(SPI_TypeDef, TXDR)) =
-            static_cast<uint16_t>(data);
+         static_cast<uint16_t>(data);
       } else {
          spi_.TXDR = data;
       }

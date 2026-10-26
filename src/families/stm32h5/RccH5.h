@@ -167,10 +167,9 @@ constexpr std::optional<Pll1Config> pll1For250Mhz(uint32_t inputHz) {
       return std::nullopt;
    }
    // PLL1RGE = 01: ref1_ck 2 to 4 MHz. PLL1VCOSEL = 0: wide VCO range.
-   return Pll1Config{ (m << RCC_PLL1CFGR_PLL1M_Pos) | RCC_PLL1CFGR_PLL1RGE_0 | RCC_PLL1CFGR_PLL1PEN |
-                         RCC_PLL1CFGR_PLL1QEN,
+   return Pll1Config{ (m << RCC_PLL1CFGR_PLL1M_Pos) | RCC_PLL1CFGR_PLL1RGE_0 | RCC_PLL1CFGR_PLL1PEN | RCC_PLL1CFGR_PLL1QEN,
                       ((n - 1) << RCC_PLL1DIVR_PLL1N_Pos) | ((p - 1) << RCC_PLL1DIVR_PLL1P_Pos) |
-                         ((q - 1) << RCC_PLL1DIVR_PLL1Q_Pos) | ((r - 1) << RCC_PLL1DIVR_PLL1R_Pos) };
+                      ((q - 1) << RCC_PLL1DIVR_PLL1Q_Pos) | ((r - 1) << RCC_PLL1DIVR_PLL1R_Pos) };
 }
 // NUCLEO-H533RE: HSE 24 MHz -> M = 12, N = 250, P = 2, Q = 4.
 static_assert(pll1For250Mhz(24000000UL)->cfgr == 0x00030C04UL);

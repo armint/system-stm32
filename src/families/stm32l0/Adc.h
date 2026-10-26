@@ -86,8 +86,12 @@ class Adc {
 
    struct TemperatureSensorCalibration {
       // Factory calibration data addresses (Vref+ = 3.0V)
-      static uint16_t cal1() { return *reinterpret_cast<const volatile uint16_t*>(0x1FF8007AUL); } // 30 °C
-      static uint16_t cal2() { return *reinterpret_cast<const volatile uint16_t*>(0x1FF8007EUL); } // 130 °C
+      static uint16_t cal1() {
+         return *reinterpret_cast<const volatile uint16_t *>(0x1FF8007AUL);
+      } // 30 °C
+      static uint16_t cal2() {
+         return *reinterpret_cast<const volatile uint16_t *>(0x1FF8007EUL);
+      } // 130 °C
       static constexpr int32_t temp1 = 30;
       static constexpr int32_t temp2 = 130;
       static constexpr uint32_t vrefAnalog = 3000; // mV

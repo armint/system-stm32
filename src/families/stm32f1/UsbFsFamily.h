@@ -32,8 +32,10 @@ constexpr uint16_t CntrLowPowerMode = USB_CNTR_LP_MODE;
 // pull-up through UsbDevice::setPullupCallback().
 constexpr bool HasInternalPullup = false;
 
-inline void beforePowerUp() {}
-inline void setInternalPullup(bool) {}
+inline void beforePowerUp() {
+}
+inline void setInternalPullup(bool) {
+}
 inline bool internalPullup() {
    return false;
 }

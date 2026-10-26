@@ -123,7 +123,8 @@ struct Adc {
    ADC_TypeDef &_adc;
 
    explicit Adc(ADC_TypeDef *adc)
-      : _adc(*adc) {}
+      : _adc(*adc) {
+   }
 
    Adc(const Adc &) = default;
    Adc(Adc &&) = default;
