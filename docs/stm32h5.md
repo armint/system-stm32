@@ -1,9 +1,9 @@
 # STM32H5
 
-The STM32H5 family is a skeleton today. It is the base of the port of
-versaloon-NG to the NUCLEO-H533RE (embedded-projects/versaloon-ng#89).
-The H5 peripherals are close to the L0, G0 and L4 peripherals, not to the
-F1 peripherals. The skeleton has these properties:
+The STM32H5 port covers start-up, GPIO, clocks, USART, SPI, ADC, GPDMA and
+USB device. EXTI and I2C are not ported yet. The H5 peripherals are close
+to the L0, G0 and L4 peripherals, not to the F1 peripherals. The port has
+these properties:
 
 - Device `STM32H533xx`. The STM32H523xx has the same reference manual
   (RM0481) and the same IRQ positions, so the vector table also fits it.
@@ -26,7 +26,7 @@ F1 peripherals. The skeleton has these properties:
   `MODER` field of the pin. See [FastPin direction switch](gpio.md#fastpin-direction-switch).
 - `Uid` reads the 96-bit unique ID at `UID_BASE` (0x08FFF800). It uses 32-bit
   loads on all families. On a NUCLEO-H533RE, an 8-bit load took a bus fault
-  (issue #44).
+  (issue #44 of this repository).
   `Dbg::freezeIwdgOnDebug()` and `Dbg::freezeWwdgOnDebug()` set the
   freeze bits in `DBGMCU_APB1FZR1`.
 - `Iwdg` has the two extra H5 prescalers `Div512` and `Div1024`. On the H5,
