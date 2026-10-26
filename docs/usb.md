@@ -1,0 +1,359 @@
+# USB
+
+## USB clock: HSI48 and CRS
+
+The USB full-speed peripheral needs a 48 MHz clock. The STM32L0 and the
+STM32G0B1/G0C1 have no crystal requirement for USB. They use the internal
+48 MHz RC oscillator (HSI48) for this clock. `Rcc` controls HSI48 and the
+USB clock selection:
+
+| Function | STM32L0 | STM32G0B1 / G0C1 |
+|---|---|---|
+| `Rcc::enableHSI48()` | Sets `SYSCFG_CFGR3.ENREF_HSI48` and `RCC_CRRCR.HSI48ON`, then waits for `HSI48RDY` | Sets `RCC_CR.HSI48ON`, then waits for `HSI48RDY` |
+| `Rcc::disableHSI48()` | Clears `HSI48ON` and `ENREF_HSI48` | Clears `HSI48ON` |
+| `Rcc::isHSI48Ready()` | Reads `RCC_CRRCR.HSI48RDY` | Reads `RCC_CR.HSI48RDY` |
+| `Rcc::setUSBClockSource()` | `RCC_CCIPR.HSI48SEL`: `PLL` or `HSI48` | `RCC_CCIPR2.USBSEL`: `HSI48`, `HSE` or `PLLQ` |
+| `Rcc::enableUSBClock()`, `Rcc::enableCRSClock()` | `RCC_APB1ENR` and the Sleep-mode bits in `RCC_APB1SMENR` | `RCC_APBENR1` |
+
+These functions exist only when the CMSIS device header defines the
+related register bits. STM32G071, STM32C0 and STM32WL have no HSI48, so
+the functions are not declared there.
+
+Family details:
+
+- **STM32L0:** HSI48 needs the VREFINT buffer for HSI48 (RM0367 section
+  7.2.4). `enableHSI48()` sets `ENREF_HSI48` and enables the SYSCFG clock
+  for this. If `SYSCFG_CFGR3.REF_LOCK` is set and `ENREF_HSI48` is
+  clear, `enableHSI48()` returns `false`.
+- **STM32L0:** `HSI48SEL` selects the 48 MHz clock for USB *and* RNG.
+- **STM32G0B1/G0C1:** the hardware sets `HSI48ON` by itself while HSI48
+  is the USB clock and the USB peripheral is enabled (RM0444 section
+  5.2.3).
+- HSI48 stops in Stop and Standby mode on both families.
+
+`enableHSI48()` returns `false` if `HSI48RDY` does not come within a
+bounded wait. The startup time is 6 µs maximum, so this only occurs if the
+oscillator does not start.
+
+### Clock Recovery System (CRS)
+
+The factory calibration of HSI48 is not accurate enough for USB (±4 % on
+the STM32L073 at 25 °C). USB full speed needs ±0.25 %. The CRS fixes
+this. It measures HSI48 against a synchronisation signal and trims HSI48
+by itself. For USB, the signal is the start-of-frame (SOF) packet. The
+host sends one SOF every 1 ms.
+
+`src/peripherals/Crs.h` (namespace `hw::Crs`) is one driver for STM32L0
+and STM32G0B1/G0C1, because the CRS registers are the same on both
+families. Only the `TRIM` field width differs: 6 bits on L0, 7 bits on
+G0. `hw::Crs::TrimMax` and `hw::Crs::TrimDefault` get the width from the
+CMSIS header. The driver exists only when the CMSIS header defines `CRS`.
+The driver is header-only. `Crs.cpp` only includes the header, so every
+library build and every CI job compiles it.
+
+| Function | Purpose |
+|---|---|
+| `configure(Config)` | Writes `CRS_CFGR`: sync source, divider, polarity, `RELOAD`, `FELIM`. The defaults are USB SOF, 48 MHz / 1 kHz. `FELIM` is 34 on L0 and G0, and 42 on H5 because the H5 trimming step is larger. Returns `false` while the counter runs, because the hardware then write-protects `CRS_CFGR`. |
+| `enable(autoTrim = true)` / `disable()` | Starts or stops the frequency error counter (`CEN`) and automatic trimming (`AUTOTRIMEN`). |
+| `getSyncStatus()` | Returns `None`, `Ok`, `Warning` or `Error` from the `CRS_ISR` flags. |
+| `isFlagSet(Flag)` / `clearFlags()` | Reads one `CRS_ISR` flag or clears all of them. |
+| `setTrim()` / `getTrim()` | Manual trimming. The hardware ignores writes while automatic trimming is on. |
+| `getFrequencyErrorCapture()` / `isFrequencyBelowTarget()` | `FECAP` and `FEDIR` of the last SYNC event. |
+
+Start-up sequence for USB from HSI48:
+
+```cpp
+#include "peripherals/Crs.h"
+#include "peripherals/Rcc.h"
+
+if(!Rcc::enableHSI48()) {
+   // HSI48 did not start, or SYSCFG_CFGR3 is locked (L0)
+}
+Rcc::setUSBClockSource(Rcc::USBClockSource::HSI48);
+Rcc::enableCRSClock();
+(void)hw::Crs::configure({}); // USB SOF, RELOAD = 47999, FELIM = 34 (42 on H5)
+hw::Crs::enable();             // counter and automatic trimming on
+Rcc::enableUSBClock();
+```
+
+The host sends SOF packets after the USB bus reset, and only while the
+bus is not suspended. Without SOF packets, HSI48 runs at its last trimming
+value.
+
+Without SOF packets, the CRS also reports an error. The frequency error
+counter reaches its OUTRANGE limit (128 × `FELIM`), and the hardware sets
+`SYNCMISS` and `ERRF` (RM0367 8.7.3, RM0444 6.7.3). Thus
+`getSyncStatus()` returns `SyncStatus::Error` with `Flag::SyncMissed`
+before the first SOF, during USB suspend and after an unplug. This is
+expected. It does not mean that HSI48 is broken.
+
+The flags stay set until `clearFlags()`. Call `clearFlags()` before you
+read a new status, for example after a USB reset or a resume.
+
+The CRS stops in Stop mode and loses its configuration in Standby mode.
+After Standby, run the sequence again.
+
+## USB device driver
+
+`hw::UsbDevice` drives the USB full-speed device peripheral. It is
+packet-level only. It knows nothing about descriptors, standard requests
+or USB classes. That logic lives above the driver (libArT `usb::Device`
+and the libart-stm32 controller). This library does not depend on
+libArT.
+
+### Family split
+
+| Family | Driver | Status |
+|---|---|---|
+| STM32L0 with USB (L052, L053, L062, L063, L072, L073, L082, L083) | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32l0/UsbFsFamily.h` | Available. On L0 devices without USB (for example L071), the files compile to nothing. |
+| STM32F102 / F103 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32f1/UsbFsFamily.h` | Available. Same peripheral as on STM32L0, with the differences in [Family differences](#family-differences). On F1 devices without USB (for example F101), the files compile to nothing. |
+| STM32H533 / H523 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32h5/UsbFsFamily.h` | Available. USB DRD peripheral, see [STM32H5 USB DRD](#stm32h5-usb-drd). |
+| STM32G0B1 / G0C1 | — | Not yet. The same USB DRD peripheral as on STM32H5. A `src/families/stm32g0/UsbFsFamily.h` is necessary: it includes `src/peripherals/usbfs/UsbFsDrdAccess.h` and adds the G0 IRQ, power-up and errata. |
+| STM32G071, STM32C0, STM32WL | — | No USB peripheral |
+
+The family-neutral types are in `src/peripherals/UsbDeviceTypes.h`
+(namespace `hw::usb`): `Event`, `EventType`, `EndpointType` and
+`EventCallback`. Every family driver uses these types and has the same
+public interface. Thus a new family driver needs no change above the
+driver.
+
+### Requirements
+
+- A 48 MHz USB clock. On STM32L0 and STM32H5, use HSI48 with the CRS on
+  USB SOF. See [USB clock: HSI48 and CRS](#usb-clock-hsi48-and-crs). On STM32F1, the
+  USB clock comes from the PLL: 72 MHz / 1.5 or 48 MHz / 1
+  (`RCC_CFGR.USBPRE`). Thus STM32F1 needs a crystal (HSE) for USB.
+  `Rcc::setClock72MhzHSE()` sets this clock (see
+  [STM32F1: 72 MHz from HSE](stm32f1.md#clock-72-mhz-from-hse)).
+- The USB bus clock enabled with `Rcc::enableUSBClock()` before `begin()`.
+- On STM32F1, call `Rcc::setClock72MhzHSE()` before `Rcc::enableUSBClock()`.
+  `USBPRE` must be valid before the USB clock is enabled. It cannot change
+  while the USB clock is enabled (RM0008 section 7.3.2).
+- On STM32L0, an APB clock of 10 MHz or more (RM0367 section 32.5.2,
+  errata ES0292 2.16.1). A lower APB clock causes packet memory overrun or
+  underrun. On STM32F1, an APB1 clock of more than 8 MHz (RM0008 section
+  23.4.2). On STM32H5, an APB2 clock of 12 MHz or more (RM0481 section
+  61.5.2).
+- On STM32L0 and STM32F1, PA11 (DM) and PA12 (DP) need no GPIO setup. The
+  transceiver uses them when the peripheral is powered up. On STM32H5, set
+  PA11 and PA12 to alternate function AF10. The datasheet of the STM32H533
+  lists `USB_DM` and `USB_DP` as AF10.
+
+### Use
+
+```cpp
+#include "UsbDevice.h"
+
+hw::UsbDevice usb;
+
+void onUsbEvent(void *context, const hw::usb::Event &event) {
+   // Called in the USB interrupt: copy the event into a queue.
+}
+
+usb.begin(&onUsbEvent, nullptr); // power-up, reset, IRQ on; still detached
+usb.connect();                   // D+ pull-up on: the host sees the device
+```
+
+| Function | Purpose |
+|---|---|
+| `begin(callback, context)` / `end()` | Power-up sequence (STM32L0: RM0367 32.5.2; STM32F1: RM0008 23.4.2; STM32H5: RM0481 61.5.2), interrupt connection through `Interrupt::connectMemberHandler()` (STM32L0: `USB_IRQn`; STM32F1: `USB_LP_CAN1_RX0_IRQn`; STM32H5: `USB_DRD_FS_IRQn`), and power-down. On STM32H5, `begin()` also sets `PWR_USBSCR.USB33SV` (VDDUSB valid). |
+| `connect()` / `disconnect()` | D+ pull-up on or off. STM32L0 and STM32H5: internal pull-up (`USB_BCDR.DPPU`). Then the board callback from `setPullupCallback()`, if set. |
+| `setPullupCallback(callback, context)` | Sets the board function that switches an external D+ pull-up. STM32F1 needs it, because it has no internal pull-up. STM32L0 and STM32H5 boards usually do not need it. |
+| `isConnected()` | STM32L0 and STM32H5: the state of `USB_BCDR.DPPU`. STM32F1: the state that the last `connect()` or `disconnect()` requested. |
+| `setAddress(address)` | Writes `USB_DADDR`. Call it after the status stage of SET_ADDRESS. |
+| `UsbDevice(endpointCount)` | `endpointCount` is the highest endpoint number of the device plus 1 (default 8). The buffer descriptor table then has `endpointCount * 8` bytes. |
+| `openEndpoint(address, type, maxPacketSize, doubleBuffered)` | Opens one direction and allocates its packet buffer. The endpoint starts at DATA0 and answers NAK. An open direction can open again only with the same `maxPacketSize` and `doubleBuffered`. `doubleBuffered` (default `false`) opens a double-buffered bulk OUT endpoint (see [Double-buffered bulk OUT](#double-buffered-bulk-out)). |
+| `closeAllEndpoints()` | Disables all endpoints except EP0 and frees their packet memory (for SET_CONFIGURATION). |
+| `startIn(address, data)` | Sends one packet (0 to `maxPacketSize` bytes). Returns `false` while the previous packet is not sent. |
+| `armOut(address)` / `readOut(address, buffer)` | Accepts the next OUT packet / copies the received packet. |
+| `setStall(address, stall)` / `isStalled(address)` / `setNak(address)` | Endpoint status. Clearing STALL also resets the data toggle to DATA0. |
+
+### Events
+
+The interrupt handler reports these events through the callback:
+
+| `EventType` | Meaning |
+|---|---|
+| `Reset` | USB bus reset. The driver opens EP0 again (64 bytes, OUT VALID) and sets the address to 0. Other endpoints are closed. |
+| `Setup` | SETUP packet. `Event::setup` holds the 8 bytes. Both directions of the endpoint are then NAK. |
+| `Out` | OUT packet with `Event::size` bytes. The endpoint answers NAK until the next `armOut()`. A double-buffered endpoint can receive one more packet before `armOut()`. `armOut()` then reports that packet. |
+| `InComplete` | The host acknowledged the IN packet. The endpoint answers NAK until the next `startIn()`. |
+| `Suspend` | No bus activity for 3 ms. This also occurs when the cable is pulled. The driver sets `FSUSP`. |
+| `Resume` | Bus activity after `Suspend`. |
+
+A control endpoint accepts the next SETUP packet even while it answers
+NAK. That SETUP overwrites the EP0 OUT buffer in packet memory. Thus the
+interrupt handler copies these packets before it clears the `CTR_RX` flag:
+
+- A SETUP packet goes into `Event::setup`.
+- An EP0 OUT packet goes into a 64-byte buffer in RAM. `readOut(0x00)`
+  reads from this copy.
+
+Bulk and interrupt OUT data stays in packet memory, because the endpoint
+answers NAK until the next `armOut()`. For every endpoint, `readOut()`
+can run in the callback or later in the main loop, until the next
+`armOut()` of that endpoint. EP0 is the only control endpoint.
+
+### Interrupt and main loop
+
+Every public function can run in the event callback (USB interrupt) or in
+the main loop. `begin()` and `end()` are the exception: call them from the
+main loop only. The endpoint functions mask the USB interrupt (`USB_IRQn`
+on STM32L0, `USB_LP_CAN1_RX0_IRQn` on STM32F1, `USB_DRD_FS_IRQn` on
+STM32H5) while they run. Thus
+a bus reset in the interrupt cannot interleave with `openEndpoint()` or
+`closeAllEndpoints()` in the main loop.
+
+The endpoint status bits in `USB_EPnR` are toggle bits. A status change is
+a read and an XOR write. If the hardware completes a transaction between
+the read and the write, the result is wrong. This can occur only on a VALID
+endpoint. Thus `setStall()` and `setNak()` are race-free only on an
+endpoint that is not VALID. Do not use them to cancel a pending `startIn()`
+or `armOut()`.
+
+### Packet memory
+
+The packet memory (1024 bytes on STM32L0, 512 bytes on STM32F1) holds
+the buffer descriptor table (64 bytes at offset 0) and the endpoint
+buffers. On STM32F1, the table has `endpointCount * 8` bytes (see the
+constructor). The driver allocates the
+buffers in sequence. An OUT buffer is rounded up to the `COUNTn_RX`
+block size: 2-byte blocks up to 62 bytes, 32-byte blocks above.
+
+The hardware also writes the CRC16 of a received packet into the OUT
+buffer, but never past the allocated size (`BL_SIZE` and `NUM_BLOCK`).
+On STM32L0, these CRC bytes are wrong (errata ES0292 2.16.3), but the
+driver never reads them: `readOut()` copies only the payload.
+
+### Limits
+
+- Endpoint numbers 0 to 7. Both directions of one number share one
+  register, so they have the same type.
+- No isochronous endpoints. No double-buffered IN endpoints.
+- No remote wakeup, no Link Power Management (LPM) and no Battery
+  Charging Detection (BCD). On STM32L0, two USB errata of ES0292 do not
+  apply: 2.16.2 (SUSP timing after resume signalling by the device) and
+  2.16.4 (BCD below -20 °C). A driver change that adds remote wakeup must mask
+  `SUSPM` for 3 ms after it signals resume (2.16.2 workaround).
+
+### Family differences
+
+STM32L0, STM32F1 and STM32H5 use one driver:
+`src/peripherals/usbfs/UsbDeviceCore`. The event model, the endpoint
+register toggle logic and the `COUNTn_RX` encoding are the same. A small
+access layer per family, `src/families/<family>/UsbFsFamily.h` (namespace
+`hw::usbfs`), holds the differences: the register and packet memory
+access, the packet memory size, the buffer alignment, the interrupt, the
+D+ pull-up and the power-up. The access layer defines
+`SYSTEM_STM32_USBFS` on a device with the peripheral. CMake compiles the
+driver only for a family with this file. A fix in the shared logic thus
+applies to all these families. STM32L0 and STM32F1 share the 16-bit access
+functions in `src/peripherals/usbfs/UsbFs16Access.h`. The access functions
+of the USB DRD block (STM32H5) are in
+`src/peripherals/usbfs/UsbFsDrdAccess.h`.
+
+On STM32L0, the packet memory has 1024 bytes at a 16-bit stride, the
+interrupt is `USB_IRQn`, and the D+ pull-up is internal (`USB_BCDR.DPPU`).
+On STM32F1, these items are different:
+
+- Packet memory: 512 bytes. The CPU sees each 16-bit word at a 32-bit
+  stride. USB offset `o` is at `USB_PMAADDR + o * 2`. The buffer
+  descriptor table and the endpoint buffer addresses stay USB offsets.
+  Only 16-bit access is possible.
+- D+ pull-up: STM32F1 has no `USB_BCDR` and no internal pull-up. The board
+  has a 1.5 kΩ pull-up on D+, switched by a GPIO or fixed. Give the switch
+  function to `setPullupCallback()` before `connect()`. Without a callback,
+  `connect()` and `disconnect()` only change `isConnected()`.
+- `isConnected()` reports the requested state, not the bus state. With a
+  fixed pull-up, the host sees the device from power-on, before `begin()`.
+  `isConnected()` is still `false` until `connect()`.
+- Interrupt: `USB_LP_CAN1_RX0_IRQn`. The hardware also sets
+  `USB_HP_CAN1_TX_IRQn` for isochronous and double-buffered endpoints.
+  The driver does not enable it: the low-priority interrupt also comes for
+  these transfers (RM0008 section 23.3.1).
+- bxCAN shares the packet memory. Do not use CAN together with USB.
+- No LPM and no BCD registers. `USB_CNTR_LPMODE` has the name
+  `USB_CNTR_LP_MODE` in the STM32F1 CMSIS header.
+
+The constructor argument `endpointCount` makes the buffer descriptor table
+smaller. This gives more packet memory to the endpoint buffers. This is
+important on STM32F1, with only 512 bytes.
+
+```cpp
+void usbPullup(void *, bool enable) {
+   board::usbPullup.write(enable); // for example PC13 or PA2
+}
+
+usb.setPullupCallback(&usbPullup, nullptr);
+usb.begin(&onUsbEvent, nullptr);
+usb.connect();
+```
+
+### STM32H5 USB DRD
+
+The STM32H5 has the USB DRD block (RM0481 section 61). The STM32G0B1 and
+the STM32U5 have the same block. The driver uses it in Device mode only.
+These items are different from STM32L0:
+
+- Packet memory: 2048 bytes. The CPU must use 32-bit access only (RM0481
+  section 61.7). Every packet buffer starts at a 4-byte boundary. The
+  driver copies the packets in 32-bit words.
+- The buffer descriptors are 32-bit words, `TXBD` and `RXBD`. Their low and
+  high halves have the layout of the 16-bit descriptor fields of STM32L0.
+  The driver changes one half with a read-modify-write of the word, only
+  while the hardware does not use the descriptor.
+- `USB_CHEPnR` is 32 bits wide. The low 16 bits are the same as
+  `USB_EPnR`. The upper bits are for Host mode. The driver writes them as
+  0.
+- No `USB_BTABLE` register. The descriptor table is at offset 0.
+- Some register bits have other CMSIS names, for example `USB_EP_VTRX`
+  for `USB_EP_CTR_RX` and `USB_CNTR_SUSPEN` for `USB_CNTR_FSUSP`. The bit
+  positions are the same. The core has its own constants for these bits,
+  with `static_assert` checks against CMSIS.
+- The transceiver has its own supply, VDDUSB. `begin()` enables the
+  VDDUSB monitor (`USB33DEN`), waits up to 100 µs for `USB33RDY`, and then
+  sets `USB33SV` (RM0481 section 10.4.6).
+- Errata ES0621 2.19.1: the hardware sets `CTR` for an OUT or SETUP packet
+  before its last packet memory writes. The interrupt handler waits 1 µs
+  before it reads the packet.
+- `SUSPEN` (the `FSUSP` bit on STM32L0) stops the USB clock. The hardware
+  clears it at wakeup.
+
+libart-stm32 enables its USB adapter with `defined(USB_BASE)`. The H5
+CMSIS header defines `USB_DRD_BASE` instead. Use `SYSTEM_STM32_USBFS` in
+the adapter for all families.
+
+### Double-buffered bulk OUT
+
+With a single buffer, an OUT endpoint answers NAK from the end of a packet
+until the next `armOut()`. The host then sends the next packet again
+later, so the transfer rate goes down. A double-buffered bulk OUT endpoint
+(RM0367 section 32.5.3, RM0008 section 23.4.3, RM0481 section 61.5.3) has
+two buffers. The hardware receives the next
+packet into one buffer while the software reads the other.
+
+`openEndpoint(address, EndpointType::Bulk, maxPacketSize, true)` opens it.
+The endpoint uses both buffer descriptors of its number. Thus the IN
+direction of that number stays closed. It uses two buffers of
+`maxPacketSize` bytes in packet memory.
+
+The interface does not change. The driver reports one `Out` event for each
+`armOut()`, and `readOut()` reads that packet. These are the steps:
+
+1. A packet arrives, and no packet is reported. The driver reports it at
+   once, and gives the other buffer to the hardware (it toggles `SW_BUF`).
+2. A second packet arrives before `armOut()`. The driver keeps it in the
+   other buffer and reports nothing. The hardware answers NAK, because
+   both buffers are full.
+3. `armOut()` frees the buffer of the reported packet. If a packet waits,
+   `armOut()` reports it before it returns. Thus the event callback can
+   run in the main loop, with the USB interrupt masked.
+
+`setStall(address, false)` and `openEndpoint()` start the buffers again at
+buffer 0. A packet that waits is then lost, as a clear of STALL drops the
+transfer.
+
+A double-buffered 64-byte endpoint uses 128 bytes. On STM32F1, with the
+default 64-byte table and EP0 (128 bytes), 192 bytes stay free for the other
+endpoints. With `hw::UsbDevice usb{ 5 };` (endpoint numbers 0 to 4), the
+table has 40 bytes, and 216 bytes stay free.

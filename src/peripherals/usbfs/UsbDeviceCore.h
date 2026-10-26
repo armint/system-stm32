@@ -57,7 +57,7 @@ namespace hw {
 // layer above then calls startIn(), armOut() or setStall() for the data
 // and status stages.
 //
-// Requirements (see README "USB device driver"):
+// Requirements (see docs/usb.md, "USB device driver"):
 //  - 48 MHz USB clock, and Rcc::enableUSBClock() before begin().
 //    STM32L0: Rcc::enableHSI48(), Rcc::setUSBClockSource(HSI48), CRS on
 //    USB SOF. STM32F1: from the PLL (72 MHz / 1.5 or 48 MHz / 1), e.g.
