@@ -91,7 +91,8 @@ For all options, see [Building and using system-stm32](docs/building.md).
 | [STM32F1](docs/stm32f1.md) | ADC, 72 MHz clock, backup registers |
 | [STM32H5](docs/stm32h5.md) | H5 port: GPDMA, clocks, USART, SPI v2, ADC |
 
-## Branches
+## Contributing
 
 All work goes to the `dev` branch through merge requests. The project has
-no releases yet. Use a commit of `dev` in your submodule.
+no releases yet. Use a commit of `dev` in your submodule. For the code
+format and the git blame setting, see [CONTRIBUTING.md](CONTRIBUTING.md).
