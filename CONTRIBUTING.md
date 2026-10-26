@@ -2,14 +2,15 @@
 
 ## Branches
 
-All work goes to the `dev` branch through merge requests. The project has
-no releases yet.
+All work goes to the `dev` branch through merge requests, bug fixes too.
+The project has no releases yet.
 
 ## Code format
 
 The repository uses clang-format with the rules in `.clang-format`. These
-are the rules of the libArT project. Format each C or C++ file before you
-commit it:
+are the rules of the libArT project. Use clang-format 20. The file has
+deprecated keys, and other major versions can give a different format.
+Format each C or C++ file before you commit it:
 
 ```sh
 clang-format -i <file>
