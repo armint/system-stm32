@@ -55,16 +55,21 @@ this code:
   the test maps a fake port at `GPIOA_BASE` with `mmap()` (Linux only).
 - STM32F1 GPIO: the `CNF`/`MODE` encoding, `GpioPin` on `CRL`/`CRH`, `toggle()`,
   and the address and store order of the `FastPin` direction switch.
-- USB device driver (the shared core in `src/peripherals/usbfs/`): the
-  `COUNTn_RX` encoding, the packet memory allocation and alignment, the
-  buffer descriptor table, the packet copy, double-buffered bulk OUT and
-  the D+ pull-up. The same test (`test_usb_fs.cpp`) runs once with each
-  family access layer: STM32F1 (32-bit CPU stride, stub `stubs/`), STM32L0
-  (16-bit stride and `USB_BCDR`, stub `stubs-usb-l0/`) and STM32H5 (USB DRD:
-  32-bit access, `USB_CHEPnR` and VDDUSB, stub `stubs-usb-h5/`). The tests also
-  check the `USB_EPnR` write encoding: `CTR` bits written as 1, `STAT`
-  written as `old ^ wanted`, `DTOG` written as 0, and the configuration
-  bits kept.
+- USB device driver (the shared core in `src/peripherals/usbfs/`). The
+  tests check these items:
+  - The `COUNTn_RX` encoding.
+  - The packet memory allocation and alignment.
+  - The buffer descriptor table and the packet copy.
+  - Double-buffered bulk OUT and the D+ pull-up.
+  - The `USB_EPnR` write encoding. `CTR` bits are written as 1, `STAT` as
+    `old ^ wanted` and `DTOG` as 0. The configuration bits stay the same.
+
+  The same test (`test_usb_fs.cpp`) runs once with each family access
+  layer:
+  - STM32F1: 32-bit CPU stride, stub `stubs/`.
+  - STM32L0: 16-bit stride and `USB_BCDR`, stub `stubs-usb-l0/`.
+  - STM32H5: USB DRD with 32-bit access, `USB_CHEPnR` and VDDUSB, stub
+    `stubs-usb-h5/`.
 - STM32H5 GPDMA driver: the `CTR1` and `CTR2` encoding, the linked-list
   items, and the register writes of `Channel::start()` and `startList()`.
 - `Uid`: the byte order of `read()` and its agreement with `word()`. The

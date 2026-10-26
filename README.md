@@ -13,8 +13,8 @@ It gives these projects one C++ interface to the hardware:
 - Small, direct drivers. Many functions are inline register accesses. The
   library uses no heap and no exceptions.
 - One code base for many STM32 families. CMake selects the family code at
-  configure time. Shared sources do not contain `#ifdef STM32xx` for
-  family differences.
+  configure time. Large family differences go into `src/families/`. Shared
+  sources use `#if` mainly to test for a register or a register bit.
 - Drivers that follow the hardware. When a family has a different
   peripheral (for example the STM32H5 SPI or ADC), its driver exposes the
   full function set of that peripheral. It does not copy the interface of
@@ -31,8 +31,8 @@ are the job of the firmware above it.
 | `STM32L0` | Cortex-M0+ | Supported. |
 | `STM32G0` | Cortex-M0+ | Supported. CI builds STM32G071 and STM32G0B1. |
 | `STM32WL` | Cortex-M4 | Supported. `GpioInterrupt` is not ported. |
-| `STM32F1` | Cortex-M3 | Supported (STM32F103). EXTI, I2C and RTC are not ported. |
-| `STM32H5` | Cortex-M33 | Supported (STM32H533). EXTI and I2C are not ported. See [STM32H5](docs/stm32h5.md). |
+| `STM32F1` | Cortex-M3 | Supported (STM32F103). EXTI, I2C, RTC and `GpioInterrupt` are not ported. |
+| `STM32H5` | Cortex-M33 | Supported (STM32H533). EXTI, I2C and `GpioInterrupt` are not ported. See [STM32H5](docs/stm32h5.md). |
 | `STM32C0` | Cortex-M0+ | Not complete. The CI job is known to fail. |
 
 ## Drivers
@@ -51,11 +51,34 @@ are the job of the firmware above it.
 Add the repository as a git submodule. Then add it to your CMake project:
 
 ```cmake
-set(STM32_FAMILY STM32G0)
-set(STM32_DEVICE STM32G0B1xx)
+cmake_minimum_required(VERSION 3.20)
+# Before project(): the toolchain file also reads STM32_FAMILY.
+set(STM32_FAMILY STM32G0 CACHE STRING "")
+set(STM32_DEVICE STM32G0B1xx CACHE STRING "")
+project(my-firmware C CXX ASM)
+
 add_subdirectory(dependencies/system-stm32)
+add_executable(my-firmware main.cpp)
 target_link_libraries(my-firmware PRIVATE system-stm32)
 ```
+
+Configure with the ARM toolchain file and a build type:
+
+```sh
+cmake -B build \
+    -D CMAKE_TOOLCHAIN_FILE=dependencies/system-stm32/cmake/gcc_arm.cmake \
+    -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain \
+    -D CMAKE_BUILD_TYPE=Release
+```
+
+The toolchain file puts the core flags (`-mcpu=...`) only into the flags
+of the `Debug`, `Release` and `RelWithDebInfo` build types. Without a build
+type, the compiler gets no core flags and the build fails.
+Set `STM32_FAMILY` and `STM32_DEVICE` as cache entries (`CACHE STRING`) or
+with `-D` on the command line. A plain `set()` has no effect on the first
+configure. The library has `cmake_minimum_required(VERSION 3.20)`, so policy
+CMP0126 is OLD. The `set(... CACHE ...)` call in the library then removes
+the plain variable, and the build uses the defaults (STM32L0).
 
 CMake gets the CMSIS headers for the family with `FetchContent`. You need
 CMake 3.20 or later, an `arm-none-eabi-gcc` toolchain and C++17 or later.
@@ -71,6 +94,8 @@ For all options, see [Building and using system-stm32](docs/building.md).
 | `src/bare-metal/` | The runtime start and the default exception handlers. `SYSTEM_STM32_EXCLUDE_STARTUP=ON` removes them for an RTOS. |
 | `src/cmsis-plus/` | Cortex-M exception-handler declarations. |
 | `src/delaybusywait*.cpp` | The delay functions. |
+| `src/startup-hooks.h`, `src/initialize-hardware.cpp` | The hardware start-up hooks. The build always compiles them. |
+| `src/syscalls.c`, `src/Timekeeping.cpp`, `src/cmsis_device.h` | Newlib system calls, time helpers, and the include of the CMSIS device header of the family. |
 | `src/utils/` | Interrupt binding (`Interrupt`), `GpioInterrupt`, `hw::span` and helpers. |
 | `ldscripts/` | Memory linker scripts for the parts that the test images use. |
 | `tests/host/` | Unit tests that run on the build machine with fake registers. |
@@ -93,6 +118,6 @@ For all options, see [Building and using system-stm32](docs/building.md).
 
 ## Contributing
 
-All work goes to the `dev` branch through merge requests. The project has
-no releases yet. Use a commit of `dev` in your submodule. For the code
+All work goes to the `dev` branch through merge requests, bug fixes too.
+The project has no releases yet. Use a commit of `dev` in your submodule. For the code
 format and the git blame setting, see [CONTRIBUTING.md](CONTRIBUTING.md).

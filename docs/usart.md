@@ -1,6 +1,6 @@
 # USART
 
-The shared driver is `src/peripherals/Usart.{h,cpp}` (USART v2: L0, G0, WL
+The shared driver is `src/peripherals/Usart.{h,cpp}` (USART v2: L0, C0, G0, WL
 and H5). The STM32F1 has USART v1. Its driver is in
 `src/families/stm32f1/UsartV1.{h,cpp}`. `peripherals/Usart.h` includes it
 when the CMSIS header defines `USART_SR_RXNE`. For the H5 additions, see

@@ -24,4 +24,4 @@ This library provides the Hardware Abstraction Layer (HAL), startup code, and pe
 - **Memory & Error Handling**: Heap memory usage is strictly not allowed. Avoid exceptions. Handle errors gracefully using boolean status codes for fallible initializations or `assert()` for unrecoverable state errors.
 
 ## Verification
-- To verify compilation, build the library using the standard CMake workflow targeting an ARM toolchain, or verify it compiles when linked against dependent projects (e.g., `universal-oven-controller`).
+- To verify compilation, build the library using the standard CMake workflow targeting an ARM toolchain, or in a downstream project that uses it.

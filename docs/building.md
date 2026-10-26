@@ -17,6 +17,7 @@ each family (see [Tests and CI](testing.md)):
 cmake -B build \
     -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake \
     -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain \
+    -D CMAKE_BUILD_TYPE=Release \
     -D STM32_FAMILY=STM32H5 \
     -D STM32_DEVICE=STM32H533xx
 cmake --build build --target system-stm32
@@ -57,7 +58,7 @@ is not set, CMake also uses span-compat.
 All translation units of one program must see the same span type. The
 firmware can build at C++23 and this library at C++17. Thus, when CMake
 fetches span-compat, it sets `SPAN_COMPAT_USE_STD_SPAN` to `OFF`. Then
-`span_compat::span` is the own implementation at every standard. A value
+`span_compat::span` is its own implementation at every standard. A value
 that the superproject sets before is kept.
 
 If the superproject already has the target `span-compat::span-compat`,
@@ -78,11 +79,34 @@ The library is the `system-stm32` CMake target (an `OBJECT` library). The
 installed package exports it as `art::system-stm32`.
 
 ```cmake
-set(STM32_FAMILY STM32G0)
-set(STM32_DEVICE STM32G0B1xx)
+cmake_minimum_required(VERSION 3.20)
+# Before project(): the toolchain file also reads STM32_FAMILY.
+set(STM32_FAMILY STM32G0 CACHE STRING "")
+set(STM32_DEVICE STM32G0B1xx CACHE STRING "")
+project(my-firmware C CXX ASM)
+
 add_subdirectory(dependencies/system-stm32)
+add_executable(my-firmware main.cpp)
 target_link_libraries(my-firmware PRIVATE system-stm32)
 ```
+
+Configure with the ARM toolchain file and a build type:
+
+```sh
+cmake -B build \
+    -D CMAKE_TOOLCHAIN_FILE=dependencies/system-stm32/cmake/gcc_arm.cmake \
+    -D GCC_TOOLCHAIN_PREFIX=/opt/arm-gnu-toolchain \
+    -D CMAKE_BUILD_TYPE=Release
+```
+
+The toolchain file puts the core flags (`-mcpu=...`) only into the flags
+of the `Debug`, `Release` and `RelWithDebInfo` build types. Without a build
+type, the compiler gets no core flags and the build fails.
+Set `STM32_FAMILY` and `STM32_DEVICE` as cache entries (`CACHE STRING`) or
+with `-D` on the command line. A plain `set()` has no effect on the first
+configure. The library has `cmake_minimum_required(VERSION 3.20)`, so policy
+CMP0126 is OLD. The `set(... CACHE ...)` call in the library then removes
+the plain variable, and the build uses the defaults (STM32L0).
 
 ## CMake variables
 
@@ -97,16 +121,18 @@ target_link_libraries(my-firmware PRIVATE system-stm32)
 CMake gives `SYSTEM_STM32_HSE_VALUE` to the target and to its consumers as
 the `HSE_VALUE` define. The CMSIS `SystemCoreClockUpdate()` and the `Rcc`
 clock recipes both use it. A wrong value gives a wrong `SystemCoreClock`
-after a switch to HSE or to the HSE PLL. If the variable is empty, the
-family default applies: 8 MHz on STM32F1, 25 MHz on STM32H5, and the CMSIS
-default on the other families.
+after a switch to HSE or to the HSE PLL. If the variable is empty, CMake
+sets 8 MHz on STM32F1 and 25 MHz on STM32H5. On the other families, CMake
+sets no `HSE_VALUE`. Then the CMSIS system file uses its own default, and
+`Rcc.h` uses 48 MHz. These two values are not the same. Set the variable
+on each board that uses HSE.
 
 ## Family selection
 
 CMake adds only `src/families/<family>/` of the active family to the
-include path. A family header in that directory replaces the shared header
-of the same name. Some shared sources do not match the registers of a
-family. `CMakeLists.txt` removes them from the build with these lists:
+include path. Thus a header that only the family directories have, for
+example `Adc.h`, resolves to the driver of the active family. Some shared
+sources do not match the registers of a family. `CMakeLists.txt` removes them from the build with these lists:
 
 | List | Family | Removed sources |
 |---|---|---|
@@ -114,8 +140,24 @@ family. `CMakeLists.txt` removes them from the build with these lists:
 | `_F1_EXCLUDE` | STM32F1 | `Exti`, `GpioPin.cpp` (the family has its own), `I2c`, `Rtc`, `Usart.cpp` (USART v1 is in the family directory), `GpioInterrupt` |
 | `_H5_EXCLUDE` | STM32H5 | `Dma.cpp`, `Rcc.cpp`, `Spi.cpp` (the family has its own), `Exti`, `I2c`, `GpioInterrupt` |
 
+`Rcc` and `I2c` stay in `src/peripherals/` on STM32WL. Their WL
+differences are small, so in-file `#if defined(...)` branches handle them.
+
 CMake compiles the USB device core only for a family with a
 `UsbFsFamily.h` in its directory.
+
+CMake gets these CMSIS device packages from the STMicroelectronics GitHub
+repositories. CMSIS core is `cmsis_core` v5.4.0, in the variant for the
+core of the family.
+
+| `STM32_FAMILY` | CMSIS device package |
+|---|---|
+| `STM32L0` | `cmsis_device_l0` v1.9.4 |
+| `STM32C0` | `cmsis_device_c0` v1.0.0 |
+| `STM32G0` | `cmsis_device_g0` v1.4.4 |
+| `STM32WL` | `cmsis_device_wl` v1.4.0 |
+| `STM32F1` | `cmsis_device_f1` v4.3.5 |
+| `STM32H5` | `cmsis_device_h5` v1.7.0 |
 
 The delay functions `delaymS()`, `delayuS()` and `delayCycles()` have two
 implementations:
@@ -137,9 +179,9 @@ script (for example `sections.ld`). It points the linker at this directory
 with `-L`.
 
 The first bytes of RAM stay free. `Interrupt::connectHandler()` copies the
-vector table to `SRAM_BASE`. VTOR needs that copy aligned to the next power
-of two of its size: 0x100 bytes on the F103 (59 entries) and 0x400 bytes
-on the H533 (149 entries).
+vector table to `SRAM_BASE`. VTOR needs this copy aligned to the next power
+of two of its size. On the F103, this is 0x100 bytes (59 entries). On the
+H533, it is 0x400 bytes (149 entries).
 
 The scripts start FLASH at 0x08000000. A consumer with a bootloader
 supplies its own script with a different FLASH origin. `install()` copies
