@@ -107,7 +107,7 @@ libArT.
 |---|---|---|
 | STM32L0 with USB (L052, L053, L062, L063, L072, L073, L082, L083) | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32l0/UsbFsFamily.h` | Available. On L0 devices without USB (for example L071), the files compile to nothing. |
 | STM32F102 / F103 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32f1/UsbFsFamily.h` | Available. Same peripheral as on STM32L0, with the differences in [Family differences](#family-differences). On F1 devices without USB (for example F101), the files compile to nothing. |
-| STM32H533 / H523 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32h5/UsbFsFamily.h` | Available, host tests only (not tested on hardware yet). USB DRD peripheral, see [STM32H5 USB DRD](#stm32h5-usb-drd). |
+| STM32H533 / H523 | `src/peripherals/usbfs/UsbDeviceCore.{h,cpp}` with the access layer `src/families/stm32h5/UsbFsFamily.h` | Available. USB DRD peripheral, see [STM32H5 USB DRD](#stm32h5-usb-drd). |
 | STM32G0B1 / G0C1 | — | Not yet. The same USB DRD peripheral as on STM32H5. A `src/families/stm32g0/UsbFsFamily.h` is necessary: it includes `src/peripherals/usbfs/UsbFsDrdAccess.h` and adds the G0 IRQ, power-up and errata. |
 | STM32G071, STM32C0, STM32WL | — | No USB peripheral |
 

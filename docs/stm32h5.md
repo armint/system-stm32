@@ -20,8 +20,7 @@ these properties:
   272 KB of SRAM1 to SRAM3 as one RAM region.
 - `GpioPin` (the shared `MODER` driver), `FastPin`, `Timer`, `Crs`, `Rtc`
   and the interrupt table code compile. `Rtc` sets the backup domain write
-  access in `PWR_DBPCR` on the H5. None of them is tested on H5 hardware
-  yet.
+  access in `PWR_DBPCR` on the H5.
 - `FastPin::setOutput()`, `setInput()` and `setMode<>()` change the
   `MODER` field of the pin. See [FastPin direction switch](gpio.md#fastpin-direction-switch).
 - `Uid` reads the 96-bit unique ID at `UID_BASE` (0x08FFF800). It uses 32-bit
@@ -81,8 +80,6 @@ on L0/G0: the H5 API does not match the DMA API of the other families.
   not used. The trigger inputs, the link step mode and the suspend mode
   are not used.
 - The test image runs a memory-to-memory transfer, single and with a list.
-  The transfer to a peripheral (the acceptance test of #35) is not yet
-  tested on the Nucleo board.
 
 ## STM32H5 clocks
 
