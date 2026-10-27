@@ -2474,6 +2474,26 @@ inline bool setClock48MhzHseTcxo(ClockDiag &diag) {
 // -----------------
 // Reset Cause & Flags
 // -----------------
+#if defined(RCC_CSR2_RMVF)
+// STM32C0 keeps the reset flags in RCC_CSR2 (RCC_CSR1 holds LSE and RTC).
+enum class ResetFlag : uint32_t {
+   LowPower = RCC_CSR2_LPWRRSTF,
+   WindowWatchdog = RCC_CSR2_WWDGRSTF,
+   IndependentWatchdog = RCC_CSR2_IWDGRSTF,
+   Software = RCC_CSR2_SFTRSTF,
+   Power = RCC_CSR2_PWRRSTF,
+   Pin = RCC_CSR2_PINRSTF,
+   OptionByteLoader = RCC_CSR2_OBLRSTF,
+};
+
+inline uint32_t getResetCause() {
+   return RCC->CSR2;
+}
+
+inline void clearResetFlags() {
+   RCC->CSR2 |= RCC_CSR2_RMVF;
+}
+#else
 enum class ResetFlag : uint32_t {
 #if defined(RCC_CSR_LPWRRSTF)
    LowPower = RCC_CSR_LPWRRSTF,
@@ -2509,6 +2529,7 @@ inline void clearResetFlags() {
    RCC->CSR |= RCC_CSR_RMVF;
 #endif
 }
+#endif
 
 inline bool hasResetFlag(uint32_t resetCause, ResetFlag flag) {
    return (resetCause & static_cast<uint32_t>(flag)) != 0u;

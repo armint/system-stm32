@@ -33,7 +33,7 @@ are the job of the firmware above it.
 | `STM32WL` | Cortex-M4 | Supported. `GpioInterrupt` is not ported. |
 | `STM32F1` | Cortex-M3 | Supported (STM32F103). EXTI, I2C, RTC and `GpioInterrupt` are not ported. |
 | `STM32H5` | Cortex-M33 | Supported (STM32H533). EXTI, I2C and `GpioInterrupt` are not ported. See [STM32H5](docs/stm32h5.md). |
-| `STM32C0` | Cortex-M0+ | Not complete. The CI job is known to fail. |
+| `STM32C0` | Cortex-M0+ | Library builds (STM32C031). No test image, no RTC Wakeup Timer and no test on hardware. |
 
 ## Drivers
 

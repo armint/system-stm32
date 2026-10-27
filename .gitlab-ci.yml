@@ -27,6 +27,8 @@ workflow:
 .family-matrix: &family-matrix
   - STM32_FAMILY: STM32L0
     STM32_DEVICE: STM32L073xx
+  - STM32_FAMILY: STM32C0
+    STM32_DEVICE: STM32C031xx
   - STM32_FAMILY: STM32G0
     STM32_DEVICE: STM32G071xx
   # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of
@@ -204,30 +206,3 @@ host-tests:
     - cmake -S tests/host -B build-host -G "Unix Makefiles"
     - cmake --build build-host -j$(nproc)
     - ctest --test-dir build-host --output-on-failure
-
-# STM32C0 is not yet a real target in this repo: GpioInterrupt.cpp has no C0
-# branch (#error), Rtc.cpp isn't guarded for C0's smaller RTC register set,
-# and VECTOR_TABLE_SIZE is only ever defined for STM32WL. Kept here
-# non-blocking so the gap stays visible instead of silently untracked, until
-# C0 support is actually implemented. It runs at C++23 and at C++17, so
-# both legs exist for C0 when it starts to build.
-build-c0-known-broken:
-  stage: build
-  allow_failure: true
-  variables:
-    GIT_DEPTH: 0
-    STM32_FAMILY: STM32C0
-    STM32_DEVICE: STM32C031xx
-  parallel:
-    matrix:
-      - CXX_STANDARD: ["23", "17"]
-  before_script: *span-compat-credentials
-  script:
-    - cmake -B build -G "Unix Makefiles"
-        -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
-        -D GCC_TOOLCHAIN_PREFIX=${GCC_TOOLCHAIN_PREFIX}
-        -D CMAKE_BUILD_TYPE=Release
-        -D CMAKE_CXX_STANDARD=${CXX_STANDARD}
-        -D STM32_FAMILY=${STM32_FAMILY}
-        -D STM32_DEVICE=${STM32_DEVICE}
-    - cmake --build build --target system-stm32 -j$(nproc)

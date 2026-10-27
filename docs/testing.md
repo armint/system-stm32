@@ -27,7 +27,6 @@ Other jobs:
 | `build-exclude-startup` | STM32WL with `SYSTEM_STM32_EXCLUDE_STARTUP=ON`. |
 | `build-f1-test-image`, `build-h5-test-image` | The test images, at C++23 and at C++17. |
 | `host-tests` | The host tests. |
-| `build-c0-known-broken` | STM32C0, at both standards. This job can fail and does not block the pipeline. The STM32C0 port is not complete. |
 
 The C++17 jobs clone span-compat with the CI job token. Thus span-compat
 must allow job tokens from this project.
