@@ -175,6 +175,7 @@ bool Rtc::initCalendar(ClockSource clockSource) const {
    return true;
 }
 
+#if defined(RTC_CR_WUTE)
 bool Rtc::armWakeup(uint32_t durationMs) const {
    unlockWriteProtection();
 
@@ -246,6 +247,7 @@ void Rtc::disarmWakeup() const {
    clearWakeupFlag();
    lockWriteProtection();
 }
+#endif
 
 bool Rtc::isWakeupFlagSet() const {
 #if defined(RTC_SR_WUTF)
@@ -330,6 +332,12 @@ Rtc::ClockSource Rtc::getClockSource() {
    return ClockSource::Lsi;
 #elif defined(RCC_CSR_RTCSEL)
    const uint32_t sel = (RCC->CSR & RCC_CSR_RTCSEL) >> RCC_CSR_RTCSEL_Pos;
+   if(sel == kRccRtcSelLse) {
+      return ClockSource::Lse;
+   }
+   return ClockSource::Lsi;
+#elif defined(RCC_CSR1_RTCSEL)
+   const uint32_t sel = (RCC->CSR1 & RCC_CSR1_RTCSEL) >> RCC_CSR1_RTCSEL_Pos; // STM32C0
    if(sel == kRccRtcSelLse) {
       return ClockSource::Lse;
    }

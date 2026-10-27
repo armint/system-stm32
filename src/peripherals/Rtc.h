@@ -45,6 +45,8 @@ class Rtc {
     */
    bool initCalendar(ClockSource clockSource) const;
 
+#if defined(RTC_CR_WUTE)
+   // STM32C0 has no Wakeup Timer, so it has no armWakeup()/disarmWakeup().
    /**
     * @brief Arms the RTC Wakeup Timer for the requested duration.
     *
@@ -62,6 +64,7 @@ class Rtc {
     * @brief Disarms and disables the Wakeup Timer and its interrupt.
     */
    void disarmWakeup() const;
+#endif
 
    /**
     * @brief Checks if the Wakeup Timer flag (WUTF) is set.
