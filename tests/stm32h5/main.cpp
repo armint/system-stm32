@@ -356,7 +356,7 @@ int main() {
    iwdg.reload();
 
    // Links Interrupt::connectHandler(): it copies the 149-entry vector table
-   // to SRAM_BASE and moves VTOR there.
+   // to RAM and moves VTOR there.
    Rcc::enableTIM2Clock();
    Interrupt::connectHandler(TIM2_IRQn, &onTim2);
    hw::Timer timer(TIM2);

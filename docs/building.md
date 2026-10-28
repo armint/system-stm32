@@ -178,10 +178,33 @@ parts that this repository supplies. Today these are `mem-F103x8.ld`,
 script (for example `sections.ld`). It points the linker at this directory
 with `-L`.
 
-The first bytes of RAM stay free. `Interrupt::connectHandler()` copies the
-vector table to `SRAM_BASE`. VTOR needs this copy aligned to the next power
-of two of its size. On the F103, this is 0x100 bytes (59 entries). On the
-H533, it is 0x400 bytes (149 entries).
+The scripts do not reserve RAM for the vector table.
+`Interrupt::connectHandler()` copies the vector table to RAM. The copy is a
+static array in the section `.bss.ramVectorTable`, so the sections script
+puts it in `.bss` with `*(.bss .bss.*)`. Compile with `-ffunction-sections`
+and link with `--gc-sections`: then the array uses RAM only if the firmware
+calls `connectHandler()`. VTOR needs the copy aligned to the next power of
+two of its size (minimum 128 bytes). On the F103, this is 256 bytes (59
+entries). On the H533, it is 1024 bytes (149 entries). In `.bss`, the
+alignment can add padding before the copy.
+
+To prevent this padding, put the section first in RAM. Add this rule to the
+sections script before `.data`, as in `tests/common/sections.ld`:
+
+```
+.ram_vector_table (NOLOAD) :
+{
+    *(.bss.ramVectorTable)
+} >RAM
+```
+
+If `ORIGIN(RAM)` is a multiple of the table alignment, the copy needs no
+padding there. If the firmware does not call `connectHandler()`, this
+section is empty.
+
+Call `connectHandler()` only after the start-up code clears `.bss`, thus in
+`os_startup_initialize_hardware()` or later. Without the rule above, the
+copy is in `.bss`, and an earlier call loses the table.
 
 The scripts start FLASH at 0x08000000. A consumer with a bootloader
 supplies its own script with a different FLASH origin. `install()` copies

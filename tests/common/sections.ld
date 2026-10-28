@@ -260,6 +260,17 @@ SECTIONS
        . = ALIGN(4) ;
     } > CCMRAM AT>FLASH
 
+    /*
+     * The RAM copy of the vector table (system-stm32 Interrupt.cpp) goes
+     * first in RAM: ORIGIN(RAM) is aligned for VTOR, so there is no padding.
+     * --gc-sections removes it, and this section is empty, if nothing calls
+     * Interrupt::connectHandler(). Without this rule it goes in .bss.
+     */
+    .ram_vector_table (NOLOAD) :
+    {
+        *(.bss.ramVectorTable)
+    } >RAM
+
 	/* 
      * This address is used by the startup code to 
      * initialise the .data section.

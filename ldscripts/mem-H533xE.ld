@@ -8,18 +8,13 @@
  * are used. Do not reset the backup domain (VSWRST) after start-up: it also
  * erases SRAM2 (ES0621 section 2.2.6).
  *
- * The first 0x400 bytes of RAM are kept free for the copy of the vector
- * table that Interrupt::connectHandler() makes at SRAM_BASE. The table has
- * 149 entries (596 bytes). VTOR needs the table aligned to the next power of
- * two of its size, which is 1024 bytes.
- *
  * The values below can be addressed in further linker scripts
  * using functions like 'ORIGIN(RAM)' or 'LENGTH(RAM)'.
  */
 
 MEMORY
 {
-  RAM (xrw) : ORIGIN = 0x20000400, LENGTH = 272K-0x400
+  RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 272K
   CCMRAM (xrw) : ORIGIN = 0x00000000, LENGTH = 0
   FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 512K
   EEPROM (rx) : ORIGIN = 0x00000000, LENGTH = 0

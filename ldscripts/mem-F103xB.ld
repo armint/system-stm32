@@ -3,18 +3,13 @@
  *
  * FLASH: 128K at 0x08000000. RAM: 20K at 0x20000000.
  *
- * The first 0x100 bytes of RAM are kept free for the copy of the vector
- * table that Interrupt::connectHandler() makes at SRAM_BASE. The table has
- * 59 entries (236 bytes). VTOR needs the table aligned to the next power of
- * two of its size, which is 256 bytes.
- *
  * The values below can be addressed in further linker scripts
  * using functions like 'ORIGIN(RAM)' or 'LENGTH(RAM)'.
  */
 
 MEMORY
 {
-  RAM (xrw) : ORIGIN = 0x20000100, LENGTH = 20K-0x100
+  RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 20K
   CCMRAM (xrw) : ORIGIN = 0x00000000, LENGTH = 0
   FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 128K
   EEPROM (rx) : ORIGIN = 0x00000000, LENGTH = 0

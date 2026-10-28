@@ -1,34 +1,36 @@
 
 #include "Interrupt.h"
 #include <cassert>
+#include <cstddef>
 #include <utility>
-
-#define VTOR_ADDRESS SRAM_BASE
-
-#if defined(STM32F1)
-// The F1 memory scripts (ldscripts/mem-F103*.ld) keep the first 0x100 bytes of
-// RAM free for the copy of the vector table. A larger table would overwrite
-// .data. VTOR also needs the table aligned to the next power of two of its size.
-static_assert(VECTOR_TABLE_SIZE * sizeof(uint32_t) <= 0x100, "vector table does not fit in the RAM reserved by ldscripts/mem-F103*.ld");
-#endif
-#if defined(STM32H5)
-// Same for ldscripts/mem-H5*.ld: 0x400 bytes, the VTOR alignment of 149 entries.
-static_assert(VECTOR_TABLE_SIZE * sizeof(uint32_t) <= 0x400, "vector table does not fit in the RAM reserved by ldscripts/mem-H5*.ld");
-#endif
 
 extern uintptr_t __vectors_start;
 
 namespace Interrupt {
+// VTOR needs the table aligned to the next power of two of its size, at least
+// 128 bytes (TBLOFF starts at bit 7).
+static constexpr size_t vectorTableAlignment(size_t size) {
+   size_t alignment = 128;
+   while(alignment < size) {
+      alignment *= 2;
+   }
+   return alignment;
+}
+
+// The RAM copy of the vector table. Its own .bss.* section lets the linker
+// place it with no linker script change, and --gc-sections removes it when
+// nothing calls connectHandler(). The alignment can cost padding in .bss.
+alignas(vectorTableAlignment(VECTOR_TABLE_SIZE * sizeof(Handler_t))) __attribute__((section(".bss.ramVectorTable")))
+   static Handler_t ramVectorTable[VECTOR_TABLE_SIZE];
+
 static inline void prepareVectorTable(void) {
-   auto *p = reinterpret_cast<uint32_t *>(VTOR_ADDRESS);
-   uint32_t *end = p + VECTOR_TABLE_SIZE;
-   uint32_t *from = reinterpret_cast<uint32_t *>(&__vectors_start);
-   while(p < end) {
-      *p++ = *from++;
+   auto *from = reinterpret_cast<Handler_t *>(&__vectors_start);
+   for(auto &vector : ramVectorTable) {
+      vector = *from++;
    }
    CriticalSection ics;
    __DSB();
-   SCB->VTOR = VTOR_ADDRESS;
+   SCB->VTOR = reinterpret_cast<uint32_t>(ramVectorTable);
 }
 
 struct AdvancedHandler {
@@ -57,11 +59,10 @@ void connectHandler(IRQn_Type IRQn, AdvancedHandler_t handler, void *arg) {
 
 
 void connectHandler(IRQn_Type IRQn, Handler_t handler) {
-   auto *vTable = reinterpret_cast<Handler_t *>(VTOR_ADDRESS);
-   if(SCB->VTOR != VTOR_ADDRESS) {
+   if(SCB->VTOR != reinterpret_cast<uint32_t>(ramVectorTable)) {
       prepareVectorTable();
    }
-   vTable[IRQn + 16] = handler;
+   ramVectorTable[IRQn + 16] = handler;
    __DSB();
 }
 
