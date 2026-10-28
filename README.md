@@ -121,3 +121,8 @@ For all options, see [Building and using system-stm32](docs/building.md).
 All work goes to the `dev` branch through merge requests, bug fixes too.
 The project has no releases yet. Use a commit of `dev` in your submodule. For the code
 format and the git blame setting, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+system-stm32 uses the MIT license. See [LICENSE](LICENSE).
+Third-party files, for example in `src/cmsis-plus/` and `svd/`, keep the license in their file headers.
