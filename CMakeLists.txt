@@ -350,7 +350,7 @@ if(NOT DEFINED CMAKE_CXX_STANDARD OR CMAKE_CXX_STANDARD LESS 20)
         endif()
         FetchContent_Declare(
                 span_compat
-                GIT_REPOSITORY https://gitlab.vandertogt.org/embedded-libraries/span-compat.git
+                GIT_REPOSITORY https://github.com/armint/span-compat.git
                 GIT_TAG 15b7f429d1ba45d1d5e092d8c0c4d97c0bc4968c
         )
         FetchContent_GetProperties(span_compat)

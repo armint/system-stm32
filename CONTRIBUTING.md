@@ -2,8 +2,8 @@
 
 ## Branches
 
-All work goes to the `dev` branch through merge requests, bug fixes too.
-The project has no releases yet.
+The repository has one branch: `main`. All work, bug fixes too, goes to
+`main` through a pull request. The project has no releases yet.
 
 ## Code format
 
@@ -25,9 +25,9 @@ to skip them in `git blame`:
 git config blame.ignoreRevsFile .git-blame-ignore-revs
 ```
 
-The GitLab blame view reads this file too.
+The GitHub and GitLab blame views read this file too.
 
 Put a pure formatting change into a commit of its own. Add its full SHA to
-`.git-blame-ignore-revs` in a later commit. Merge such a merge request with
+`.git-blame-ignore-revs` in a later commit. Merge such a pull request with
 a merge commit. A rebase or a squash changes the SHA, and the entry then
 has no effect.

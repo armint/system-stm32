@@ -118,8 +118,8 @@ For all options, see [Building and using system-stm32](docs/building.md).
 
 ## Contributing
 
-All work goes to the `dev` branch through merge requests, bug fixes too.
-The project has no releases yet. Use a commit of `dev` in your submodule. For the code
+All work goes to the `main` branch through pull requests, bug fixes too.
+The project has no releases yet. Use a commit of `main` in your submodule. For the code
 format and the git blame setting, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License

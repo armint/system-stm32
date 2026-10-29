@@ -48,7 +48,7 @@ The public interface uses one span type: `hw::span` (`src/utils/Span.h`).
 - At C++20 and later, `hw::span` is `std::span`. CMake adds no other
   library.
 - Below C++20, the standard library has no `std::span`. Then CMake gets
-  [span-compat](https://gitlab.vandertogt.org/embedded-libraries/span-compat)
+  [span-compat](https://github.com/armint/span-compat)
   with `FetchContent` and links it. It also defines
   `SYSTEM_STM32_USE_SPAN_COMPAT`. Then `hw::span` is `span_compat::span`.
 
