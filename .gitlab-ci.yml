@@ -14,15 +14,6 @@ workflow:
       when: never
     - if: "$CI_COMMIT_BRANCH"
 
-# Below C++20, CMake fetches the private span-compat repository over HTTPS.
-# Git gets the CI job token from this credential helper, so no token is part
-# of a URL or of a file in the repository. span-compat must allow job tokens
-# of this project (its CI/CD job token allowlist has the embedded-libraries
-# group).
-.span-compat-credentials: &span-compat-credentials
-  - git config --global credential.https://gitlab.vandertogt.org.helper
-      '!f() { echo username=gitlab-ci-token; echo "password=${CI_JOB_TOKEN}"; }; f'
-
 # The families that must build. The C++23 and the C++17 legs use the same list.
 .family-matrix: &family-matrix
   - STM32_FAMILY: STM32L0
@@ -91,7 +82,6 @@ build-cpp17:
     GIT_DEPTH: 0
   parallel:
     matrix: *family-matrix
-  before_script: *span-compat-credentials
   script:
     - cmake -B build-pedantic -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
@@ -159,7 +149,6 @@ build-f1-test-image:
   parallel:
     matrix:
       - CXX_STANDARD: ["23", "17"]
-  before_script: *span-compat-credentials
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
@@ -191,7 +180,6 @@ build-h5-test-image:
   parallel:
     matrix:
       - CXX_STANDARD: ["23", "17"]
-  before_script: *span-compat-credentials
   script:
     - cmake -B build -G "Unix Makefiles"
         -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake
