@@ -41,7 +41,6 @@ new driver of these families to the test image.
 |---|---|
 | `tests/stm32f1/` | A minimal `main()`. CI links it for the F103x8 and the F103xB. The image does not run on hardware. |
 | `tests/stm32h5/` | CI links it for the H533xE. On a NUCLEO-H533RE, it sets 250 MHz and blinks LD2 (PA5) with `FastPin`. The IWDG (about 2 s) resets the board if the main loop stops. For the self-tests on the virtual COM port, see [STM32H5 clocks](stm32h5.md#stm32h5-clocks). |
-| `tests/common/` | The linker scripts of the test images: a copy of the µOS++ `sections.ld` and `libs.ld`. |
 
 ## Host tests
 

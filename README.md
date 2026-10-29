@@ -97,7 +97,7 @@ For all options, see [Building and using system-stm32](docs/building.md).
 | `src/startup-hooks.h`, `src/initialize-hardware.cpp` | The hardware start-up hooks. The build always compiles them. |
 | `src/syscalls.c`, `src/Timekeeping.cpp`, `src/cmsis_device.h` | Newlib system calls, time helpers, and the include of the CMSIS device header of the family. |
 | `src/utils/` | Interrupt binding (`Interrupt`), `GpioInterrupt`, `hw::span` and helpers. |
-| `ldscripts/` | Memory linker scripts for the parts that the test images use. |
+| `ldscripts/` | Linker scripts for firmware and the test images: memory scripts per part, `sections.ld` and `libs.ld`. |
 | `tests/host/` | Unit tests that run on the build machine with fake registers. |
 | `tests/stm32f1/`, `tests/stm32h5/` | Test images for the STM32F1 and the STM32H5. |
 | `svd/` | SVD register descriptions, for reference and debug tools. |

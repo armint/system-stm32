@@ -172,11 +172,16 @@ Both implementations need a correct `SystemCoreClock`.
 
 ## Linker scripts
 
-`ldscripts/` holds memory linker scripts (`MEMORY` regions only) for the
-parts that this repository supplies. Today these are `mem-F103x8.ld`,
-`mem-F103xB.ld` and `mem-H533xE.ld`. The consumer adds its own sections
-script (for example `sections.ld`). It points the linker at this directory
-with `-L`.
+`ldscripts/` holds the linker scripts. The test images use them, and
+firmware can use them too:
+
+- Memory scripts (`MEMORY` regions only), one for each part. Today these
+  are `mem-F103x8.ld`, `mem-F103xB.ld` and `mem-H533xE.ld`.
+- `sections.ld`, the µOS++ default Cortex-M sections script.
+- `libs.ld`, an empty list of more libraries.
+
+Point the linker at this directory with `-L`. Then give the memory script
+first, for example `-Tmem-F103x8.ld -Tlibs.ld -Tsections.ld`.
 
 The scripts do not reserve RAM for the vector table.
 `Interrupt::connectHandler()` copies the vector table to RAM. The copy is a
@@ -189,7 +194,7 @@ entries). On the H533, it is 1024 bytes (149 entries). In `.bss`, the
 alignment can add padding before the copy.
 
 To prevent this padding, put the section first in RAM. Add this rule to the
-sections script before `.data`, as in `tests/common/sections.ld`:
+sections script before `.data`, as in `ldscripts/sections.ld`:
 
 ```
 .ram_vector_table (NOLOAD) :

@@ -12,7 +12,6 @@ target_link_options(${_name} PRIVATE
     -Wl,--no-warn-rwx-segments
     -Wl,-Map=${_name}.map
     -L${PROJECT_SOURCE_DIR}/ldscripts
-    -L${CMAKE_CURRENT_SOURCE_DIR}/../common
     -Tmem-H533xE.ld
     -Tlibs.ld
     -Tsections.ld)
