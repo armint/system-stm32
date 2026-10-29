@@ -200,9 +200,11 @@ first, for example `-Tmem-F103x8.ld -Tlibs.ld -Tsections.ld`.
 ### Linker script parameters
 
 The scripts have optional parameters. Set them with
-`-Wl,--defsym=<symbol>=<value>`. Put each `--defsym` before the `-T`
-options. ld reads a `--defsym` after the `-T` options too late. The script
-then uses the default, and the link does not show an error.
+`-Wl,--defsym=<symbol>=<value>`. Give the scripts with `-T`, not with
+`-Wl,-T` or `-Xlinker -T`. The gcc driver then passes all `-Wl` options to
+ld before the scripts, in any order of the options. ld reads a `--defsym`
+after a script too late. The script then uses the default, and the link
+does not show an error.
 
 | Symbol | Script | Default | Function |
 |---|---|---|---|

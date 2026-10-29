@@ -6,9 +6,10 @@
  * STM32L031 errata sheet DocID027842, no workaround). Later revisions can
  * use 8K, but this script keeps 4K for all revisions.
  *
- * FLASH parameters. Give them with -Wl,--defsym=<symbol>=<bytes> before the
- * -T options; ld reads a --defsym after them too late and silently uses the
- * default:
+ * FLASH parameters. Give them with -Wl,--defsym=<symbol>=<bytes>, and give
+ * the scripts with -T, not -Wl,-T. The gcc driver then passes the --defsym
+ * options to ld first. ld reads a --defsym after a script too late and
+ * silently uses the default:
  *   __flash_offset        Flash in front of the image, for example for a
  *                         bootloader. Default 0.
  *   __flash_reserved_end  Flash at the end that stays out of FLASH, for
