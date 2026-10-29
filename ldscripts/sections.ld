@@ -1,8 +1,11 @@
 /*
- * Copy of ldscripts/sections.ld from the universal-oven-controller-firmware
- * repository (commit 9111e7a), which is the µOS++ default Cortex-M script.
- * It may drift from the script that real firmware uses. Compare it with
- * the original when you update it.
+ * Sections script of system-stm32 for firmware and the test images. It is
+ * the µOS++ default Cortex-M script, as in ldscripts/sections.ld of the
+ * universal-oven-controller-firmware repository (commit 9111e7a).
+ * Changed: the stack sizes can be set with --defsym (see below), the link
+ * fails when the image has no vector table, _interrupt_vectors is an alias
+ * of the vector table, and .ram_vector_table puts the RAM copy of the
+ * vector table first in RAM.
  *
  * Original header follows.
  */
@@ -12,6 +15,14 @@
  * To make use of the multi-region initialisations, define
  * OS_INCLUDE_STARTUP_INIT_MULTIPLE_RAM_SECTIONS for the _startup.c file.
  */
+
+/*
+ * The vector table of system-stm32 (g_pfnVectors) must be in the image.
+ * system-stm32 is an OBJECT library: an image that does not link it
+ * directly has no vector table and no start-up code, but the link does not
+ * fail, because the handlers are weak.
+ */
+ASSERT(DEFINED(g_pfnVectors), "the image has no vector table: link system-stm32 directly to the executable")
 
 /*
  * The '__stack' definition is required by crt0, do not remove it.
@@ -26,7 +37,13 @@ _estack = __stack; 	/* STM specific definition */
  * for the different modes.
  */
 
-__Main_Stack_Size = 8192 ;
+/*
+ * Set the main stack with -Wl,--defsym=__main_stack_size=<bytes> before
+ * the -T options. The default is 8 KB. ld reads a --defsym after the -T
+ * options too late and silently uses the default; a script cannot detect
+ * this, because ld evaluates its ASSERT()s before that --defsym too.
+ */
+__Main_Stack_Size = DEFINED(__main_stack_size) ? __main_stack_size : 8192 ;
 
 PROVIDE ( _Main_Stack_Size = __Main_Stack_Size ) ;
 
@@ -40,7 +57,12 @@ PROVIDE ( _Main_Stack_Limit = __Main_Stack_Limit ) ;
  * There will be a link error if there is not this amount of 
  * RAM free at the end. 
  */
-_Minimum_Stack_Size = 256 ;
+/*
+ * Set it with -Wl,--defsym=__minimum_stack_size=<bytes> before the -T
+ * options. The default is 256 bytes. Use __main_stack_size for a check of
+ * the full main stack.
+ */
+_Minimum_Stack_Size = DEFINED(__minimum_stack_size) ? __minimum_stack_size : 256 ;
 
 /*
  * Default heap definitions.
@@ -71,6 +93,7 @@ SECTIONS
         
         __vectors_start = ABSOLUTE(.) ;
         __vectors_start__ = ABSOLUTE(.) ; /* STM specific definition */
+        PROVIDE ( _interrupt_vectors = . ) ; /* µOS++ IIIe name of the vector table */
         KEEP(*(.isr_vector))     	/* Interrupt vectors */
         
 		KEEP(*(.cfmconfig))			/* Freescale configuration words */   
