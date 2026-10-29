@@ -8,20 +8,29 @@
  * are used. Do not reset the backup domain (VSWRST) after start-up: it also
  * erases SRAM2 (ES0621 section 2.2.6).
  *
- * The first 0x400 bytes of RAM are kept free for the copy of the vector
- * table that Interrupt::connectHandler() makes at SRAM_BASE. The table has
- * 149 entries (596 bytes). VTOR needs the table aligned to the next power of
- * two of its size, which is 1024 bytes.
+ * FLASH parameters. Give them with -Wl,--defsym=<symbol>=<bytes> before the
+ * -T options; ld reads a --defsym after them too late and silently uses the
+ * default:
+ *   __flash_offset        Flash in front of the image, for example for a
+ *                         bootloader. Default 0.
+ *   __flash_reserved_end  Flash at the end that stays out of FLASH, for
+ *                         example for settings. Default 0.
+ *   __flash_length        Length of FLASH. Default: from the image start to
+ *                         the reserved flash at the end.
+ * __flash_reserved_start is the address of the reserved flash at the end.
  *
  * The values below can be addressed in further linker scripts
  * using functions like 'ORIGIN(RAM)' or 'LENGTH(RAM)'.
  */
 
+__flash_origin = 0x08000000 + (DEFINED(__flash_offset) ? __flash_offset : 0);
+__flash_reserved_start = 0x08000000 + 512K - (DEFINED(__flash_reserved_end) ? __flash_reserved_end : 0);
+
 MEMORY
 {
-  RAM (xrw) : ORIGIN = 0x20000400, LENGTH = 272K-0x400
+  RAM (xrw) : ORIGIN = 0x20000000, LENGTH = 272K
   CCMRAM (xrw) : ORIGIN = 0x00000000, LENGTH = 0
-  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 512K
+  FLASH (rx) : ORIGIN = __flash_origin, LENGTH = DEFINED(__flash_length) ? __flash_length : __flash_reserved_start - __flash_origin
   EEPROM (rx) : ORIGIN = 0x00000000, LENGTH = 0
   FLASHB1 (rx) : ORIGIN = 0x00000000, LENGTH = 0
   EXTMEMB0 (rx) : ORIGIN = 0x00000000, LENGTH = 0

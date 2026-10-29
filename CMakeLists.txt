@@ -283,19 +283,9 @@ elseif(STM32_FAMILY STREQUAL "STM32H5")
     target_compile_definitions(system-stm32 PUBLIC HSE_VALUE=25000000UL)
 endif()
 
-# STM32WL uses SRAM1_BASE (no generic SRAM_BASE alias) and has 78 vectors
-# (16 core exceptions + 62 device IRQs).
+# STM32WL has 78 vectors (16 core exceptions + 62 device IRQs).
 if(STM32_FAMILY STREQUAL "STM32WL")
-    target_compile_definitions(system-stm32 PRIVATE
-        SRAM_BASE=SRAM1_BASE
-        VECTOR_TABLE_SIZE=78
-    )
-endif()
-
-# STM32H5 has no generic SRAM_BASE alias either. Its vector table size is
-# in utils/Interrupt.h.
-if(STM32_FAMILY STREQUAL "STM32H5")
-    target_compile_definitions(system-stm32 PRIVATE SRAM_BASE=SRAM1_BASE)
+    target_compile_definitions(system-stm32 PRIVATE VECTOR_TABLE_SIZE=78)
 endif()
 
 target_include_directories(
