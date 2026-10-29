@@ -1,0 +1,190 @@
+name: CI
+
+# The same checks as .gitlab-ci.yml, in the public image of https://github.com/armint/firmware-build-image.
+# See docs/testing.md for what each job checks.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push cancels the old run of the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # One place for the toolchain location. A toolchain bump is a one-line change.
+  GCC_TOOLCHAIN_PREFIX: /opt/arm-gnu-toolchain-15.3.rel2-x86_64-arm-none-eabi
+
+jobs:
+  # Builds the system-stm32 OBJECT library standalone for each family, at C++23 and at C++17.
+  # C++23: hw::span must be std::span. The job fails if CMake fetched span-compat or defined
+  # SYSTEM_STM32_USE_SPAN_COMPAT.
+  # C++17: hw::span is span_compat::span. First a pedantic compile rejects C++20 constructs and GNU
+  # extensions, then the normal build runs with the flags of a consumer. The job fails if CMake did not
+  # take the span-compat path with SPAN_COMPAT_USE_STD_SPAN=0.
+  build:
+    name: build C++${{ matrix.cxx }} ${{ matrix.target.device }} ${{ matrix.target.hse }}
+    runs-on: ubuntu-latest
+    container: ghcr.io/armint/firmware-build-image:v1.15.0
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: ["23", "17"]
+        target:
+          - { family: STM32L0, device: STM32L073xx }
+          - { family: STM32C0, device: STM32C031xx }
+          - { family: STM32G0, device: STM32G071xx }
+          # G0B1 has HSI48, CRS and USB; G071 does not, so it compiles none of the HSI48/USB clock code in Rcc.
+          - { family: STM32G0, device: STM32G0B1xx }
+          - { family: STM32WL, device: STM32WLE5xx }
+          - { family: STM32F1, device: STM32F103xB }
+          # The Versaloon board: 12 MHz crystal instead of the 8 MHz default.
+          - { family: STM32F1, device: STM32F103xB, hse: "12000000" }
+          # NUCLEO-H533RE: 24 MHz crystal.
+          - { family: STM32H5, device: STM32H533xx, hse: "24000000" }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # cmake/generate_version.cmake runs git. The checkout belongs to another user than the container user.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: |
+          configure() {
+            cmake -B "$1" -G "Unix Makefiles" \
+              -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake \
+              -D GCC_TOOLCHAIN_PREFIX=$GCC_TOOLCHAIN_PREFIX \
+              -D CMAKE_BUILD_TYPE=Release \
+              -D CMAKE_CXX_STANDARD=${{ matrix.cxx }} \
+              -D STM32_FAMILY=${{ matrix.target.family }} \
+              -D STM32_DEVICE=${{ matrix.target.device }} \
+              -D SYSTEM_STM32_HSE_VALUE=${{ matrix.target.hse }} \
+              "${@:2}"
+          }
+          if [ "${{ matrix.cxx }}" = 23 ]; then
+            configure build
+            cmake --build build --target system-stm32 -j$(nproc)
+            flags=build/CMakeFiles/system-stm32.dir/flags.make
+            grep -q -- "-std=gnu++23" $flags
+            if grep -q "SYSTEM_STM32_USE_SPAN_COMPAT" $flags; then echo "C++23 leg defines SYSTEM_STM32_USE_SPAN_COMPAT"; exit 1; fi
+            if [ -e build/_deps/span_compat-src ]; then echo "C++23 leg fetched span-compat"; exit 1; fi
+          else
+            configure build-pedantic -D "CMAKE_CXX_FLAGS=-Wpedantic -Werror -fno-exceptions -fno-rtti"
+            cmake --build build-pedantic --target system-stm32 -j$(nproc)
+            configure build
+            cmake --build build --target system-stm32 -j$(nproc)
+            for dir in build-pedantic build; do
+              flags=${dir}/CMakeFiles/system-stm32.dir/flags.make
+              grep -q -- "-std=gnu++17" ${flags} || { echo "${dir}: not built at C++17"; exit 1; }
+              grep -q "SYSTEM_STM32_USE_SPAN_COMPAT" ${flags} || { echo "${dir}: span-compat path not taken"; exit 1; }
+              grep -q "SPAN_COMPAT_USE_STD_SPAN=0" ${flags} || { echo "${dir}: span-compat not set to its own span"; exit 1; }
+            done
+          fi
+
+  # Builds with SYSTEM_STM32_EXCLUDE_STARTUP=ON, the configuration of an RTOS consumer, for STM32WL.
+  build-exclude-startup:
+    runs-on: ubuntu-latest
+    container: ghcr.io/armint/firmware-build-image:v1.15.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: |
+          cmake -B build -G "Unix Makefiles" \
+            -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake \
+            -D GCC_TOOLCHAIN_PREFIX=$GCC_TOOLCHAIN_PREFIX \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D STM32_FAMILY=STM32WL \
+            -D STM32_DEVICE=STM32WLE5xx \
+            -D SYSTEM_STM32_EXCLUDE_STARTUP=ON
+          cmake --build build --target system-stm32 -j$(nproc)
+
+  # Links the STM32F1 test image (tests/stm32f1) for both memory scripts, and once with the --defsym
+  # parameters of the linker scripts.
+  build-f1-test-image:
+    name: build-f1-test-image C++${{ matrix.cxx }}
+    runs-on: ubuntu-latest
+    container: ghcr.io/armint/firmware-build-image:v1.15.0
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: ["23", "17"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: |
+          cmake -B build -G "Unix Makefiles" \
+            -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake \
+            -D GCC_TOOLCHAIN_PREFIX=$GCC_TOOLCHAIN_PREFIX \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D CMAKE_CXX_STANDARD=${{ matrix.cxx }} \
+            -D STM32_FAMILY=STM32F1 \
+            -D STM32_DEVICE=STM32F103xB \
+            -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON \
+            -D SYSTEM_STM32_HSE_VALUE=12000000
+          cmake --build build -j$(nproc)
+          for image in test-image-f103x8 test-image-f103xB; do
+            arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1
+          done
+          arm-none-eabi-nm build/tests/stm32f1/test-image-f103x8-app > app.nm
+          grep -q "^08002000 T g_pfnVectors$" app.nm
+          grep -q "^0800fc00 A __flash_reserved_start$" app.nm
+          grep -q "^00000800 A __Main_Stack_Size$" app.nm
+          grep -q "^00000800 A _Minimum_Stack_Size$" app.nm
+
+  # Links the STM32H5 test image (tests/stm32h5) with the memory script ldscripts/mem-H533xE.ld.
+  build-h5-test-image:
+    name: build-h5-test-image C++${{ matrix.cxx }}
+    runs-on: ubuntu-latest
+    container: ghcr.io/armint/firmware-build-image:v1.15.0
+    strategy:
+      fail-fast: false
+      matrix:
+        cxx: ["23", "17"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - run: |
+          cmake -B build -G "Unix Makefiles" \
+            -D CMAKE_TOOLCHAIN_FILE=cmake/gcc_arm.cmake \
+            -D GCC_TOOLCHAIN_PREFIX=$GCC_TOOLCHAIN_PREFIX \
+            -D CMAKE_BUILD_TYPE=Release \
+            -D CMAKE_CXX_STANDARD=${{ matrix.cxx }} \
+            -D STM32_FAMILY=STM32H5 \
+            -D STM32_DEVICE=STM32H533xx \
+            -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON \
+            -D SYSTEM_STM32_HSE_VALUE=24000000
+          cmake --build build -j$(nproc)
+          arm-none-eabi-nm build/tests/stm32h5/test-image-h533xE | grep -q "^08000000 T g_pfnVectors$"
+
+  # Links a stub image with each memory script and sections.ld (tests/link-memory-scripts.sh).
+  link-memory-scripts:
+    runs-on: ubuntu-latest
+    container: ghcr.io/armint/firmware-build-image:v1.15.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: tests/link-memory-scripts.sh $GCC_TOOLCHAIN_PREFIX/bin
+
+  # Host unit tests (tests/host): fake registers, no ARM toolchain needed.
+  host-tests:
+    runs-on: ubuntu-latest
+    container: ghcr.io/armint/firmware-build-image:v1.15.0
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cmake -S tests/host -B build-host -G "Unix Makefiles"
+          cmake --build build-host -j$(nproc)
+          ctest --test-dir build-host --output-on-failure

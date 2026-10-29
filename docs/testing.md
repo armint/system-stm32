@@ -8,8 +8,16 @@ The repository has three kinds of checks:
 
 ## CI
 
-CI (`.gitlab-ci.yml`) builds the `system-stm32` object library standalone
-for each family on each push. A change can compile for the family of one
+CI builds the `system-stm32` object library standalone for each family on
+each push. Two CI systems run the same jobs:
+
+| System | File | Image | Arm GCC |
+|---|---|---|---|
+| GitHub Actions (main) | `.github/workflows/ci.yml` | `ghcr.io/armint/firmware-build-image:v1.15.0` (public) | 15.3 |
+| GitLab CI (mirror) | `.gitlab-ci.yml` | `docker.vandertogt.org/firmware-builder:v1.14.0` | 14.3 |
+
+On GitHub, the `build` job is one matrix over the family and the standard.
+The table below uses the GitLab job names. A change can compile for the family of one
 downstream project and break another family. Only this build finds that
 problem.
 
@@ -26,10 +34,10 @@ Other jobs:
 |---|---|
 | `build-exclude-startup` | STM32WL with `SYSTEM_STM32_EXCLUDE_STARTUP=ON`. |
 | `build-f1-test-image`, `build-h5-test-image` | The test images, at C++23 and at C++17. |
+| `link-memory-scripts` | Links a stub image with each memory script in `ldscripts/`. |
 | `host-tests` | The host tests. |
 
-The C++17 jobs clone span-compat with the CI job token. Thus span-compat
-must allow job tokens from this project.
+The C++17 jobs clone span-compat from its public GitHub repository.
 
 ## Test images
 
