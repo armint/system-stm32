@@ -1,6 +1,6 @@
 # Commits that only change formatting. git blame skips them with
 #   git config blame.ignoreRevsFile .git-blame-ignore-revs
-# GitLab reads this file for its blame view.
+# GitHub and GitLab read this file for their blame views.
 
 # style: format all C and C++ sources with clang-format
 b49bbd6f1a73c902e0d634c9217909fede872d00
