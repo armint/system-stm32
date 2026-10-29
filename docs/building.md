@@ -175,8 +175,22 @@ Both implementations need a correct `SystemCoreClock`.
 `ldscripts/` holds the linker scripts. The test images use them, and
 firmware can use them too:
 
-- Memory scripts (`MEMORY` regions only), one for each part. Today these
-  are `mem-F103x8.ld`, `mem-F103xB.ld` and `mem-H533xE.ld`.
+- Memory scripts (`MEMORY` regions only), one for each part:
+
+  | Script | FLASH | RAM |
+  |---|---|---|
+  | `mem-L031x6.ld` | 32K | 4K (erratum 2.1.5 of revision A; the part has 8K) |
+  | `mem-L053x8.ld` | 64K | 8K |
+  | `mem-L073xZ.ld` | 192K | 20K |
+  | `mem-G071xB.ld` | 128K | 36K |
+  | `mem-G0B1xE.ld` | 512K | 144K |
+  | `mem-WLE5xC.ld` | 256K | 64K |
+  | `mem-F103x8.ld` | 64K | 20K |
+  | `mem-F103xB.ld` | 128K | 20K |
+  | `mem-H523xC.ld` | 256K | 272K |
+  | `mem-H533xE.ld` | 512K | 272K |
+
+  FLASH starts at 0x08000000 and RAM at 0x20000000.
 - `sections.ld`, the µOS++ default Cortex-M sections script.
 - `libs.ld`, an empty list of more libraries.
 
