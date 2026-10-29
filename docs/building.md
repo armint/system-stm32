@@ -208,7 +208,7 @@ does not show an error.
 
 | Symbol | Script | Default | Function |
 |---|---|---|---|
-| `__flash_offset` | memory | 0 | Flash in front of the image, for example for a bootloader. |
+| `__flash_offset` | memory | 0 | Flash in front of the image, for example for a bootloader. Use a multiple of 1 KB: VTOR needs the flash vector table aligned, and `sections.ld` stops the link otherwise. |
 | `__flash_reserved_end` | memory | 0 | Flash at the end of the part that stays out of FLASH, for example for settings or keys. |
 | `__flash_length` | memory | rest | Length of FLASH. The default is the flash from the image start to the reserved flash at the end. |
 | `__main_stack_size` | `sections.ld` | 8192 | Size of the main stack. |

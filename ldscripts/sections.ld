@@ -511,3 +511,11 @@ SECTIONS
     .debug_typenames 0 : { *(.debug_typenames) }
     .debug_varnames  0 : { *(.debug_varnames) }    
 }
+
+/*
+ * VTOR needs the flash vector table aligned to the next power of two of its
+ * size. 1 KB covers the largest table (STM32H5, 149 entries). A
+ * __flash_offset that is not a multiple of 1 KB fails here; on hardware,
+ * it sends interrupts to wrong handlers.
+ */
+ASSERT(__vectors_start % 0x400 == 0, "the vector table must start on a 1 KB boundary: check __flash_offset")
