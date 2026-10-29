@@ -239,9 +239,9 @@ static array in the section `.bss.ramVectorTable`, so the sections script
 puts it in `.bss` with `*(.bss .bss.*)`. Compile with `-ffunction-sections`
 and link with `--gc-sections`: then the array uses RAM only if the firmware
 calls `connectHandler()`. VTOR needs the copy aligned to the next power of
-two of its size (minimum 128 bytes). On the F103, this is 256 bytes (59
-entries). On the H533, it is 1024 bytes (149 entries). In `.bss`, the
-alignment can add padding before the copy.
+two of its size. The minimum is 256 bytes, for the Cortex-M0+. On the F103,
+this is 256 bytes (59 entries). On the H533, it is 1024 bytes (149
+entries). In `.bss`, the alignment can add padding before the copy.
 
 To prevent this padding, put the section first in RAM. Add this rule to the
 sections script before `.data`, as in `ldscripts/sections.ld`:
