@@ -146,7 +146,8 @@ build-exclude-startup:
         -D SYSTEM_STM32_EXCLUDE_STARTUP=ON
     - cmake --build build --target system-stm32 -j$(nproc)
 
-# Links the STM32F1 test image (tests/stm32f1) for both memory scripts. This
+# Links the STM32F1 test image (tests/stm32f1) for both memory scripts, and
+# once with the --defsym parameters of the linker scripts. This
 # catches link and layout errors that the library-only build cannot see:
 # missing symbols, a vector table that does not fit, a section overflow.
 # The image links GPIO, ADC, USART v1, USB, BKP and the delay code. The
@@ -173,6 +174,11 @@ build-f1-test-image:
     - for image in test-image-f103x8 test-image-f103xB; do
         ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1;
       done
+    - ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32f1/test-image-f103x8-app > app.nm
+    - grep -q "^08002000 T g_pfnVectors$" app.nm
+    - grep -q "^0800fc00 A __flash_reserved_start$" app.nm
+    - grep -q "^00000800 A __Main_Stack_Size$" app.nm
+    - grep -q "^00000800 A _Minimum_Stack_Size$" app.nm
 
 # Links the STM32H5 test image (tests/stm32h5): start-up, the 149-entry
 # vector table, the Armv8-M fault handlers, the interrupt table copy, the

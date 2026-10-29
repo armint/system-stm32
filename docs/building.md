@@ -183,6 +183,40 @@ firmware can use them too:
 Point the linker at this directory with `-L`. Then give the memory script
 first, for example `-Tmem-F103x8.ld -Tlibs.ld -Tsections.ld`.
 
+### Linker script parameters
+
+The scripts have optional parameters. Set them with
+`-Wl,--defsym=<symbol>=<value>`. Put each `--defsym` before the `-T`
+options. ld reads a `--defsym` after the `-T` options too late. The script
+then uses the default, and the link does not show an error.
+
+| Symbol | Script | Default | Function |
+|---|---|---|---|
+| `__flash_offset` | memory | 0 | Flash in front of the image, for example for a bootloader. |
+| `__flash_reserved_end` | memory | 0 | Flash at the end of the part that stays out of FLASH, for example for settings or keys. |
+| `__flash_length` | memory | rest | Length of FLASH. The default is the flash from the image start to the reserved flash at the end. |
+| `__main_stack_size` | `sections.ld` | 8192 | Size of the main stack. |
+| `__minimum_stack_size` | `sections.ld` | 256 | Free RAM for the stack. The link fails if less RAM is free. |
+
+The memory scripts define `__flash_reserved_start`. This is the address of
+the flash that `__flash_reserved_end` keeps free.
+
+This example links an image behind an 8 KB bootloader. It keeps the last
+1 KB page for settings, and makes sure that the full 2 KB stack fits:
+
+```cmake
+target_link_options(app PRIVATE
+    -Wl,--defsym=__flash_offset=0x2000
+    -Wl,--defsym=__flash_reserved_end=0x400
+    -Wl,--defsym=__main_stack_size=2048
+    -Wl,--defsym=__minimum_stack_size=2048
+    -L${system-stm32_SOURCE_DIR}/ldscripts
+    -Tmem-F103x8.ld -Tlibs.ld -Tsections.ld)
+```
+
+`__flash_length` sets the length directly. Use it for a bootloader that
+must fit in its area, or to let a large image link for a size report.
+
 The scripts do not reserve RAM for the vector table.
 `Interrupt::connectHandler()` copies the vector table to RAM. The copy is a
 static array in the section `.bss.ramVectorTable`, so the sections script
@@ -211,6 +245,5 @@ Call `connectHandler()` only after the start-up code clears `.bss`, thus in
 `os_startup_initialize_hardware()` or later. Without the rule above, the
 copy is in `.bss`, and an earlier call loses the table.
 
-The scripts start FLASH at 0x08000000. A consumer with a bootloader
-supplies its own script with a different FLASH origin. `install()` copies
-the scripts to `share/system-stm32/ldscripts` in the install prefix.
+By default, the scripts start FLASH at 0x08000000. `install()` copies the
+scripts to `share/system-stm32/ldscripts` in the install prefix.
