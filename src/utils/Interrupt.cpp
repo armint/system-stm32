@@ -8,9 +8,9 @@ extern uintptr_t __vectors_start;
 
 namespace Interrupt {
 // VTOR needs the table aligned to the next power of two of its size, at least
-// 128 bytes (TBLOFF starts at bit 7).
+// 256 bytes: TBLOFF starts at bit 8 on Cortex-M0+ (bit 7 on the other cores).
 static constexpr size_t vectorTableAlignment(size_t size) {
-   size_t alignment = 128;
+   size_t alignment = 256;
    while(alignment < size) {
       alignment *= 2;
    }

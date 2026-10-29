@@ -38,9 +38,10 @@ _estack = __stack; 	/* STM specific definition */
  */
 
 /*
- * Set the main stack with -Wl,--defsym=__main_stack_size=<bytes> before
- * the -T options. The default is 8 KB. ld reads a --defsym after the -T
- * options too late and silently uses the default; a script cannot detect
+ * Set the main stack with -Wl,--defsym=__main_stack_size=<bytes>. The
+ * default is 8 KB. Give the scripts with -T, not -Wl,-T: the gcc driver
+ * then passes the --defsym options to ld first. ld reads a --defsym after
+ * a script too late and silently uses the default; a script cannot detect
  * this, because ld evaluates its ASSERT()s before that --defsym too.
  */
 __Main_Stack_Size = DEFINED(__main_stack_size) ? __main_stack_size : 8192 ;
@@ -58,8 +59,8 @@ PROVIDE ( _Main_Stack_Limit = __Main_Stack_Limit ) ;
  * RAM free at the end. 
  */
 /*
- * Set it with -Wl,--defsym=__minimum_stack_size=<bytes> before the -T
- * options. The default is 256 bytes. Use __main_stack_size for a check of
+ * Set it with -Wl,--defsym=__minimum_stack_size=<bytes> (see above). The
+ * default is 256 bytes. Use __main_stack_size for a check of
  * the full main stack.
  */
 _Minimum_Stack_Size = DEFINED(__minimum_stack_size) ? __minimum_stack_size : 256 ;
@@ -510,3 +511,11 @@ SECTIONS
     .debug_typenames 0 : { *(.debug_typenames) }
     .debug_varnames  0 : { *(.debug_varnames) }    
 }
+
+/*
+ * VTOR needs the flash vector table aligned to the next power of two of its
+ * size. 1 KB covers the largest table (STM32H5, 149 entries). A
+ * __flash_offset that is not a multiple of 1 KB fails here; on hardware,
+ * it sends interrupts to wrong handlers.
+ */
+ASSERT(__vectors_start % 0x400 == 0, "the vector table must start on a 1 KB boundary: check __flash_offset")

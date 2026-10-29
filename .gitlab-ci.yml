@@ -205,6 +205,14 @@ build-h5-test-image:
     - cmake --build build -j$(nproc)
     - ${GCC_TOOLCHAIN_PREFIX}/bin/arm-none-eabi-nm build/tests/stm32h5/test-image-h533xE | grep -q "^08000000 T g_pfnVectors$"
 
+# Links a stub image with each memory script and sections.ld
+# (tests/link-memory-scripts.sh). No test image links most of the memory
+# scripts, but the firmware projects do.
+link-memory-scripts:
+  stage: build
+  script:
+    - tests/link-memory-scripts.sh ${GCC_TOOLCHAIN_PREFIX}/bin
+
 # Host unit tests (tests/host): fake registers, no ARM toolchain needed.
 host-tests:
   stage: build

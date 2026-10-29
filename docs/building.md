@@ -200,13 +200,15 @@ first, for example `-Tmem-F103x8.ld -Tlibs.ld -Tsections.ld`.
 ### Linker script parameters
 
 The scripts have optional parameters. Set them with
-`-Wl,--defsym=<symbol>=<value>`. Put each `--defsym` before the `-T`
-options. ld reads a `--defsym` after the `-T` options too late. The script
-then uses the default, and the link does not show an error.
+`-Wl,--defsym=<symbol>=<value>`. Give the scripts with `-T`, not with
+`-Wl,-T` or `-Xlinker -T`. The gcc driver then passes all `-Wl` options to
+ld before the scripts, in any order of the options. ld reads a `--defsym`
+after a script too late. The script then uses the default, and the link
+does not show an error.
 
 | Symbol | Script | Default | Function |
 |---|---|---|---|
-| `__flash_offset` | memory | 0 | Flash in front of the image, for example for a bootloader. |
+| `__flash_offset` | memory | 0 | Flash in front of the image, for example for a bootloader. Use a multiple of 1 KB: VTOR needs the flash vector table aligned, and `sections.ld` stops the link otherwise. |
 | `__flash_reserved_end` | memory | 0 | Flash at the end of the part that stays out of FLASH, for example for settings or keys. |
 | `__flash_length` | memory | rest | Length of FLASH. The default is the flash from the image start to the reserved flash at the end. |
 | `__main_stack_size` | `sections.ld` | 8192 | Size of the main stack. |
@@ -237,9 +239,9 @@ static array in the section `.bss.ramVectorTable`, so the sections script
 puts it in `.bss` with `*(.bss .bss.*)`. Compile with `-ffunction-sections`
 and link with `--gc-sections`: then the array uses RAM only if the firmware
 calls `connectHandler()`. VTOR needs the copy aligned to the next power of
-two of its size (minimum 128 bytes). On the F103, this is 256 bytes (59
-entries). On the H533, it is 1024 bytes (149 entries). In `.bss`, the
-alignment can add padding before the copy.
+two of its size. The minimum is 256 bytes, for the Cortex-M0+. On the F103,
+this is 256 bytes (59 entries). On the H533, it is 1024 bytes (149
+entries). In `.bss`, the alignment can add padding before the copy.
 
 To prevent this padding, put the section first in RAM. Add this rule to the
 sections script before `.data`, as in `ldscripts/sections.ld`:
