@@ -8,10 +8,10 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A new push cancels the old run of the same ref.
+# A new push to a pull request cancels its old run. Each commit on main keeps its run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -52,7 +52,7 @@ jobs:
           # NUCLEO-H533RE: 24 MHz crystal.
           - { family: STM32H5, device: STM32H533xx, hse: "24000000" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       # cmake/generate_version.cmake runs git. The checkout belongs to another user than the container user.
@@ -94,7 +94,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/armint/firmware-build-image:v1.15.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -119,7 +119,7 @@ jobs:
       matrix:
         cxx: ["23", "17"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -135,9 +135,9 @@ jobs:
             -D SYSTEM_STM32_HSE_VALUE=12000000
           cmake --build build -j$(nproc)
           for image in test-image-f103x8 test-image-f103xB; do
-            arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1
+            $GCC_TOOLCHAIN_PREFIX/bin/arm-none-eabi-nm build/tests/stm32f1/${image} | grep -q "^08000000 T g_pfnVectors$" || exit 1
           done
-          arm-none-eabi-nm build/tests/stm32f1/test-image-f103x8-app > app.nm
+          $GCC_TOOLCHAIN_PREFIX/bin/arm-none-eabi-nm build/tests/stm32f1/test-image-f103x8-app > app.nm
           grep -q "^08002000 T g_pfnVectors$" app.nm
           grep -q "^0800fc00 A __flash_reserved_start$" app.nm
           grep -q "^00000800 A __Main_Stack_Size$" app.nm
@@ -153,7 +153,7 @@ jobs:
       matrix:
         cxx: ["23", "17"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -168,14 +168,14 @@ jobs:
             -D SYSTEM_STM32_BUILD_TEST_IMAGE=ON \
             -D SYSTEM_STM32_HSE_VALUE=24000000
           cmake --build build -j$(nproc)
-          arm-none-eabi-nm build/tests/stm32h5/test-image-h533xE | grep -q "^08000000 T g_pfnVectors$"
+          $GCC_TOOLCHAIN_PREFIX/bin/arm-none-eabi-nm build/tests/stm32h5/test-image-h533xE | grep -q "^08000000 T g_pfnVectors$"
 
   # Links a stub image with each memory script and sections.ld (tests/link-memory-scripts.sh).
   link-memory-scripts:
     runs-on: ubuntu-latest
     container: ghcr.io/armint/firmware-build-image:v1.15.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: tests/link-memory-scripts.sh $GCC_TOOLCHAIN_PREFIX/bin
 
   # Host unit tests (tests/host): fake registers, no ARM toolchain needed.
@@ -183,7 +183,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/armint/firmware-build-image:v1.15.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: |
           cmake -S tests/host -B build-host -G "Unix Makefiles"
           cmake --build build-host -j$(nproc)

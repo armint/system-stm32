@@ -8,18 +8,19 @@ The repository has three kinds of checks:
 
 ## CI
 
-CI builds the `system-stm32` object library standalone for each family on
-each push. Two CI systems run the same jobs:
+CI builds the `system-stm32` object library standalone for each family. A
+change can compile for the family of one downstream project and break
+another family. Only this build finds that problem.
 
-| System | File | Image | Arm GCC |
-|---|---|---|---|
-| GitHub Actions (main) | `.github/workflows/ci.yml` | `ghcr.io/armint/firmware-build-image:v1.15.0` (public) | 15.3 |
-| GitLab CI (mirror) | `.gitlab-ci.yml` | `docker.vandertogt.org/firmware-builder:v1.14.0` | 14.3 |
+Two CI systems run the same jobs:
+
+| System | File | Runs on | Image | Arm GCC |
+|---|---|---|---|---|
+| GitHub Actions | `.github/workflows/ci.yml` | Each pull request and each push to `main` | `ghcr.io/armint/firmware-build-image:v1.15.0` (public) | 15.3 |
+| GitLab CI | `.gitlab-ci.yml` | The mirror of `main`, and branches that you push to GitLab | `docker.vandertogt.org/firmware-builder:v1.14.0` | 14.3 |
 
 On GitHub, the `build` job is one matrix over the family and the standard.
-The table below uses the GitLab job names. A change can compile for the family of one
-downstream project and break another family. Only this build finds that
-problem.
+The tables below use the GitLab job names.
 
 Each family builds in two jobs:
 
