@@ -6,6 +6,7 @@
 #include <UsbDevice.h>
 #include <cmsis_device.h>
 #include <delaybusywait.h>
+#include <peripherals/CycleCounter.h>
 #include <peripherals/FastPin.h>
 #include <peripherals/GpioPin.h>
 #include <peripherals/Rcc.h>
@@ -157,6 +158,9 @@ int main() {
    delayuS(10);
    delaymS(1);
    delayCycles(100);
+   // CoreDebug on the Cortex-M3
+   hw::CycleCounter::start();
+   sink = hw::CycleCounter::count() != 0;
 
    // USART v1: line coding as set by a USB CDC host
    Rcc::enableUSART1Clock();

@@ -1,9 +1,9 @@
 // Minimal STM32H5 test image. CI links it to prove that the H5 part of the
 // library builds, links and fits in memory: start-up, vector table, fault
-// handlers, the interrupt table copy, the DWT delay, the RCC with the 250 MHz
-// recipes, the ICACHE, HSI48, the CRS, GpioPin, FastPin, UID, DBG, IWDG, the
-// UCPD dead-battery disable, the USART, the SPI v2, the ADC, the GPDMA and
-// the USB device driver.
+// handlers, the interrupt table copy, the DWT delay, the cycle counter, the
+// RCC with the 250 MHz recipes, the ICACHE, HSI48, the CRS, GpioPin, FastPin,
+// UID, DBG, IWDG, the UCPD dead-battery disable, the USART, the SPI v2, the
+// ADC, the GPDMA and the USB device driver.
 //
 // After the clock setup it runs self-tests and prints the results on USART2
 // (PA2/PA3, the ST-LINK virtual COM port, 115200 8N1):
@@ -30,6 +30,7 @@
 #include <cmsis_device.h>
 #include <delaybusywait.h>
 #include <peripherals/Crs.h>
+#include <peripherals/CycleCounter.h>
 #include <peripherals/Dbg.h>
 #include <peripherals/Dma.h>
 #include <peripherals/FastPin.h>
@@ -346,6 +347,8 @@ int main() {
    exerciseUsb();
    sink = Rcc::getAPBClock() + Rcc::getAPB2Clock() + Rcc::getAPB3Clock() + Rcc::getPLL1QClock();
    sink = hw::Uid::hash();
+   hw::CycleCounter::start(); // DCB on the Cortex-M33
+   sink = hw::CycleCounter::count();
    selfTest();
 
    // Enable first: the H5 updates PR and RLR only while LSI runs.

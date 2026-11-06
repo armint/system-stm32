@@ -43,7 +43,7 @@ are the job of the firmware above it.
 | Clocks and power | `Rcc` (with clock recipes), `Crs`, `Pwr`, `SysTick`, `Iwdg`, `Dbg` |
 | GPIO | `GpioPin`, `FastPin`, `Exti`, `GpioInterrupt` |
 | Communication | `Usart`, `Spi`, `I2c`, USB full-speed device (`UsbDevice`) |
-| Analog and timing | `Adc`, `Timer`, `Rtc`, `delaymS()` / `delayuS()` |
+| Analog and timing | `Adc`, `Timer`, `Rtc`, `delaymS()` / `delayuS()`, `CycleCounter` (the DWT cycle counter, see [Cycle counter](docs/cycle-counter.md)) |
 | Other | `Dma` (GPDMA on STM32H5), `Uid`, `Interrupt` (C++ member functions as interrupt handlers) |
 
 ## Quick start
@@ -113,6 +113,7 @@ For all options, see [Building and using system-stm32](docs/building.md).
 | [GPIO and FastPin](docs/gpio.md) | STM32F1 GPIO, interrupt safety, fast direction switch |
 | [USART](docs/usart.md) | Frame format, STM32F1 USART v1 |
 | [USB](docs/usb.md) | HSI48 and CRS, the USB device driver |
+| [Cycle counter](docs/cycle-counter.md) | `hw::CycleCounter`: the DWT cycle counter, families without it |
 | [STM32F1](docs/stm32f1.md) | ADC, 72 MHz clock, backup registers |
 | [STM32H5](docs/stm32h5.md) | H5 port: GPDMA, clocks, USART, SPI v2, ADC |
 
